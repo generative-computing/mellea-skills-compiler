@@ -22,10 +22,12 @@ Run these steps in order. Each step has a dedicated sub-command with the full sp
     │   Sub-command: /mellea-fy-classify
     ▼
  Steps 1a + 1b: Inventory files → tag elements + assign C1-C9 categories
+    │   Step 1b Pass 1 (multi-file): [per-file section discovery — ║ parallel ║]
     │   → inventory.json
     │   Sub-command: /mellea-fy-inventory
     ▼
  Step 2: Map elements to Mellea primitives
+    │   Judgment calls: [all independent elements — ║ parallel ║]
     │   → element_mapping.json (TOOL_TEMPLATE entries provisional)
     │   Sub-command: /mellea-fy-map
     ▼
@@ -41,16 +43,22 @@ Run these steps in order. Each step has a dedicated sub-command with the full sp
     │   Sub-command: /mellea-fy-fixtures
     │   (uses Step 3 skeleton's run_pipeline signature as grounding source)
     ▼
- Step 5: Generate per-element code bodies
+ Step 5: Generate per-element code bodies (3-phase structure)
+    │   Phase A: [schemas.py, config.py, requirements.py, slots.py, tools.py/constrained_slots.py, mobjects.py, loader.py — ║ parallel ║]
+    │   Phase B: pipeline.py (after Phase A)
+    │   Phase C: main.py (after Phase B)
     │   → populated Python files (fixtures/ available as grounding context)
     │   Sub-command: /mellea-fy-generate  (covers Steps 3 + 5)
     ▼
  Step 6: Emit supporting artifacts
+    │   Narrative batching: [classification_narrative + deferred_feature_entry + judgment_call_explanation (≤3) — ║ parallel ║ where applicable]
     │   → mapping_report.md, melleafy.json, SETUP.md, README.md
     │   → SKILL.md (non-.md sources only — CLI compatibility shim, WIP)
     │   Sub-command: /mellea-fy-artifacts
     ▼
  Step 7: Static validation (14 formal lints)
+    │   Tier 1: [all .py files — ast.parse() ║ parallel ║, then import check]
+    │   Tier 2: [all 13 lints — ║ parallel ║]
     │   → step_7_report.json
     │   Sub-command: /mellea-fy-validate
     │
@@ -103,6 +111,13 @@ intermediate/
 **Autonomous execution — no confirmation pauses.** Run all 10 steps from start to finish without stopping to ask the user whether to proceed. Do not output phrases like "Ready to proceed?", "Shall I continue?", or "Proceed to Step N?" between steps. Each step completes and the next begins immediately. The only permitted halts are: (a) Step 2.5 `ask` mode disposition elicitation, (b) a `strict` mode disposition conflict, or (c) a repair-loop exhaustion at Step 7. In all other cases, proceed.
 
 **Deterministic workflow with scoped LLM invocations** — melleafy is not an LLM agent. LLM invocations occur at specific, scoped steps: Step 1b (element tagging), Step 2 (narrow judgement calls), Step 4 (fixture generation), Step 5 (body generation), Step 6 (narrative prose). Steps 0, 1a, 2.5, 3, and 7 are entirely deterministic.
+
+**Parallelism within steps** — where operations are independent, exploit tool-call parallelism to reduce wall-clock time. Within a single step:
+- **Step 1b Pass 1** (multi-file runtimes only): all per-file section discovery calls are dispatched in parallel.
+- **Step 2 judgment calls**: all judgment-call invocations for independent elements are batched and dispatched in parallel.
+- **Step 5 Phase A body generation**: schemas.py through loader.py (7 files) are generated in parallel; pipeline.py and main.py follow sequentially.
+- **Step 7 Tier 2**: all 13 lints are dispatched in parallel; Tier 1 parse checks also run in parallel.
+These parallelizations are expected behavior, not fallback optimizations — issue all independent operations at once in a single turn.
 
 **Source fidelity** — every significant line of the source spec becomes an inventory element (≥95% coverage). Nothing is silently skipped.
 

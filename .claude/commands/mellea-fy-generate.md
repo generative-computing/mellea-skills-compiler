@@ -276,6 +276,13 @@ Note: the `openai-agents` package is NOT added to dependencies for Agents SDK so
 
 Step 5 fills every skeleton placeholder with real code. For `config.py`, the model emits JSON and the writer renders Python source (invariant 1).
 
+**Parallelization strategy**: Step 5 is structured in **three phases** to maximize throughput:
+- **Phase A (parallel)**: Emit all 7 independent files in a single turn using parallel tool calls: schemas.py, config.py, requirements.py, slots.py, tools.py/constrained_slots.py, mobjects.py, loader.py. These files have no inter-file dependencies at generation time.
+- **Phase B (sequential, after A completes)**: Generate pipeline.py (references all Phase A symbols).
+- **Phase C (sequential, after B completes)**: Generate main.py (references pipeline.py).
+
+In repair mode, only re-generate the files listed in `intermediate/step_7_report.json` failure entries; unchanged files pass through without re-generation.
+
 ### Step 5 invariants
 
 Read once; apply throughout all file generation.
@@ -311,16 +318,27 @@ Before generating any body, include in the context:
 
 ### Per-file body generation order
 
-Generate bodies in this order (dependency order):
-1. `schemas.py` — Pydantic models first (all other files reference them)
-2. `config.py` — emit JSON conforming to `.claude/schemas/config_emission.schema.json`; the writer at `.claude/melleafy/writers/config_writer.py` renders the Python source (slots.py references `LOOP_BUDGET`, `PREFIX_TEXT`, etc.)
-3. `requirements.py` — requirement functions (pipeline.py references them)
-4. `slots.py` — `@generative` slot bodies
-5. `tools.py` / `constrained_slots.py` — tool implementations
-6. `mobjects.py` — mified object definitions
-7. `loader.py` — file loader functions
-8. `pipeline.py` — the orchestrating pipeline (references all above)
-9. `main.py` — CLI entry point
+**Phase A (parallel batch — single turn with parallel tool calls):**
+
+Generate all of these simultaneously in one turn. They are mutually independent at generation time:
+
+1. `schemas.py` — Pydantic models (referenced by Phase B)
+2. `config.py` — emit JSON conforming to `.claude/schemas/config_emission.schema.json`; the writer at `.claude/melleafy/writers/config_writer.py` renders the Python source
+3. `requirements.py` — requirement functions (referenced by Phase B)
+4. `slots.py` — `@generative` slot bodies (referenced by Phase B)
+5. `tools.py` / `constrained_slots.py` — tool implementations (referenced by Phase B)
+6. `mobjects.py` — mified object definitions (referenced by Phase B)
+7. `loader.py` — file loader functions (referenced by Phase B)
+
+**Phase B (sequential, after Phase A):**
+
+8. `pipeline.py` — the orchestrating pipeline (references all Phase A symbols)
+
+**Phase C (sequential, after Phase B):**
+
+9. `main.py` — CLI entry point (references pipeline.py)
+
+Within Phase A, each file should be generated with its own LLM invocation, dispatched in parallel using the tool-call parallelism available in your response. Do not wait for one file to complete before starting the next — issue all Phase A invocations in the same turn.
 
 ### Remediation loop bodies (when REMEDIATE elements exist)
 
