@@ -1,12 +1,12 @@
 # Exporting Compiled Skills to Other Agent Harnesses
 
-After [`FROM_STUBS_TO_RUNNING.md`](FROM_STUBS_TO_RUNNING.md), the next question is usually: *"Now that I have a working compiled skill, can I run it under a framework that isn't Mellea?"*
+After [`FROM_STUBS_TO_RUNNING.md`](FROM_STUBS_TO_RUNNING.md), the next question is usually: _"Now that I have a working compiled skill, can I run it under a framework that isn't Mellea?"_
 
 This page describes the current state of export support and what the experimental `mellea-skills export` command does today. Anything outside the three supported targets is not export — it's a hand-written wrapper, and the work involved scales with how different the target harness is from a Python function call.
 
 ---
 
-## 1. Current State 
+## 1. Current State
 
 This release is a **research preview**. There is an **experimental** `mellea-skills export` subcommand that targets three deployment harnesses: **LangGraph**, **Claude Code**, and **MCP** (Model Context Protocol). It lives on the [`export-pipeline`](../../../tree/export-pipeline) branch and is gated behind an `[EXPERIMENTAL]` flag — output structure and CLI surface may change between releases without a deprecation period.
 
@@ -25,15 +25,15 @@ Out-of-the-box export in this research preview is limited to the three targets a
 
 Every compiled `<name>_mellea/` package presents the same surface, and the exporter consumes it:
 
-| Artifact | Role |
-|---|---|
-| `pipeline.py` | Defines `run_pipeline(...)` — the typed entry point. Signature varies by skill modality. |
-| `schemas.py` | Pydantic models for inputs and outputs. `run_pipeline` returns a typed result. |
-| `config.py` | `BACKEND`, `MODEL_ID`, persona text, loop budgets, and other constants. |
-| `fixtures/` | Factory functions returning `(inputs, fixture_id, description)` — sample inputs and expected behaviour. |
-| `melleafy.json` | Manifest with `manifest_version`, `entry_signature`, `package_name`, `source_runtime`, `modality`, `categories_resolved`, `pipeline_parameters`, and `declared_env_vars`. The contract the exporter consumes. |
-| `mapping_report.md` | Element-to-primitive mapping (which spec sections produced which pipeline components). |
-| `SETUP.md` | Backend setup and any external dependencies (env vars, services, stubs). |
+| Artifact            | Role                                                                                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pipeline.py`       | Defines `run_pipeline(...)` — the typed entry point. Signature varies by skill modality.                                                                                                                      |
+| `schemas.py`        | Pydantic models for inputs and outputs. `run_pipeline` returns a typed result.                                                                                                                                |
+| `config.py`         | `BACKEND`, `MODEL_ID`, persona text, loop budgets, and other constants.                                                                                                                                       |
+| `fixtures/`         | Factory functions returning `(inputs, fixture_id, description)` — sample inputs and expected behaviour.                                                                                                       |
+| `melleafy.json`     | Manifest with `manifest_version`, `entry_signature`, `package_name`, `source_runtime`, `modality`, `categories_resolved`, `pipeline_parameters`, and `declared_env_vars`. The contract the exporter consumes. |
+| `mapping_report.md` | Element-to-primitive mapping (which spec sections produced which pipeline components).                                                                                                                        |
+| `SETUP.md`          | Backend setup and any external dependencies (env vars, services, stubs).                                                                                                                                      |
 
 The two contractually load-bearing pieces for export are `pipeline.py:run_pipeline` (the callable) and `melleafy.json` (the typed metadata).
 
@@ -122,13 +122,13 @@ The exporter runs five stages: **validate** (read `melleafy.json`, check `manife
 
 Generated artifacts:
 
-| File | Purpose |
-|---|---|
-| `graph.py` | LangGraph `StateGraph` with one async node wrapping `run_pipeline` via `asyncio.to_thread`. |
-| `state.py` | TypedDict state schema derived from the entry signature and return type. |
-| `langgraph.json` | LangGraph platform manifest (graph entry, env vars, optional schedules block). |
-| `pyproject.toml` | Adapter package with the bundled compiled skill as a dependency. |
-| `README.md` | Per-target deployment guidance. |
+| File             | Purpose                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------- |
+| `graph.py`       | LangGraph `StateGraph` with one async node wrapping `run_pipeline` via `asyncio.to_thread`. |
+| `state.py`       | TypedDict state schema derived from the entry signature and return type.                    |
+| `langgraph.json` | LangGraph platform manifest (graph entry, env vars, optional schedules block).              |
+| `pyproject.toml` | Adapter package with the bundled compiled skill as a dependency.                            |
+| `README.md`      | Per-target deployment guidance.                                                             |
 
 Modalities supported: `synchronous_oneshot`, `streaming`, `conversational_session`, `scheduled`, `event_triggered`, `heartbeat`. `streaming` uses `get_stream_writer()` and `graph.astream_events()`; `conversational_session` adds `MemorySaver` checkpointing keyed on `thread_id`; `heartbeat` emits a cron-driven schedule.
 
@@ -139,12 +139,12 @@ What's lost: phase-level node decomposition (the whole Mellea pipeline runs insi
 
 Generated artifacts:
 
-| File | Purpose |
-|---|---|
-| `SKILL.md` | Skill description with input/output contract derived from `melleafy.json`. |
+| File             | Purpose                                                                                                   |
+| ---------------- | --------------------------------------------------------------------------------------------------------- |
+| `SKILL.md`       | Skill description with input/output contract derived from `melleafy.json`.                                |
 | `scripts/run.sh` | Bash entry point that invokes the bundled Python pipeline with arguments forwarded as JSON or positional. |
-| `pyproject.toml` | Installable package so `run.sh` can resolve the bundled module. |
-| `README.md` | Installation and invocation instructions. |
+| `pyproject.toml` | Installable package so `run.sh` can resolve the bundled module.                                           |
+| `README.md`      | Installation and invocation instructions.                                                                 |
 
 Modalities supported: `synchronous_oneshot`, `streaming` (unbuffered async streaming via `run.sh`), `conversational_session` (session carry-forward via a `--session` JSON arg).
 
@@ -155,12 +155,12 @@ What's lost: typed contract at the Claude Code surface (Claude dispatches via pr
 
 Generated artifacts:
 
-| File | Purpose |
-|---|---|
-| `server.py` | `FastMCP` server with one `@mcp.tool()` per pipeline entry. Sync for most modalities; async for `streaming`. |
-| `mcp.json` | MCP manifest with tool name, description, env-var declarations. |
-| `pyproject.toml` | Installable adapter package. |
-| `README.md` | Server invocation, env-var setup, transport notes. |
+| File             | Purpose                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| `server.py`      | `FastMCP` server with one `@mcp.tool()` per pipeline entry. Sync for most modalities; async for `streaming`. |
+| `mcp.json`       | MCP manifest with tool name, description, env-var declarations.                                              |
+| `pyproject.toml` | Installable adapter package.                                                                                 |
+| `README.md`      | Server invocation, env-var setup, transport notes.                                                           |
 
 Modalities supported: `synchronous_oneshot`, `conversational_session`, `scheduled`, `event_triggered`, `heartbeat` (all sync), and `streaming` (async tool body that joins the async-generator output).
 
@@ -171,7 +171,7 @@ What's lost: token-by-token streaming to MCP clients (would require `streamable-
 
 ## 5. Harnesses We Do Not Export To
 
-To set expectations clearly: **this research preview does not currently export to OpenClaw, NanoClaw, CrewAI, Letta, AutoGen, OpenAI Agents SDK, smolagents, or any harness outside the three above.** The compiler can *detect* several of these as input dialects (see [`mellea-fy-inventory.md`](../src/mellea_skills_compiler/compile/claude/commands/mellea-fy-inventory.md) for the dialect detection table) — that lets you compile a skill *from* one of those formats, but it does not produce an export *to* it.
+To set expectations clearly: **this research preview does not currently export to OpenClaw, NanoClaw, CrewAI, Letta, AutoGen, OpenAI Agents SDK, smolagents, or any harness outside the three above.** The compiler can _detect_ several of these as input dialects (see [`mellea-fy-inventory.md`](../src/mellea_skills_compiler/compile/claude/commands/mellea-fy-inventory.md) for the dialect detection table) — that lets you compile a skill _from_ one of those formats, but it does not produce an export _to_ it.
 
 If you need to run a compiled skill under one of these harnesses, you write the wrapper yourself. The §3 patterns are the starting point; the typed contract in `melleafy.json` tells you what shape the wrapper has to bridge. More native export targets are on the roadmap, not in this preview.
 
@@ -186,7 +186,7 @@ If you're writing your own integration (manual or via your own exporter), the fo
 - **`melleafy.json` is versioned.** `manifest_version` ≥ 1.0.0 is required by the exporter; the current emitted version is `1.1.0`.
 - **Fixtures in `fixtures/` follow the `ALL_FIXTURES = [factory, ...]` contract.** Each factory returns `(inputs_dict, fixture_id, description)` — runnable input examples for any wrapper that needs them.
 
-What's *not* stable yet:
+What's _not_ stable yet:
 
 - **`mellea-skills export` output layout.** File names, adapter conventions, and warning text may change across releases while the command is experimental.
 - **`intermediate/` JSON shapes.** Several intermediate files (`fixtures_emission.json`, `runtime_directive.json`, etc.) are tied to the deterministic writer pipeline and may change as that architecture evolves.

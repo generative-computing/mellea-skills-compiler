@@ -12,7 +12,7 @@ index aaaaaaa..bbbbbbb 100644
 +from django.http import JsonResponse
 +from django.views import View
  from django.contrib.auth.decorators import login_required
- 
+
  @csrf_exempt
  def stripe_webhook(request):
      # Stripe sends its own signature header for verification

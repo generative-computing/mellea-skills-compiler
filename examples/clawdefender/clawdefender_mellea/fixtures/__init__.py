@@ -7,13 +7,14 @@ Fixture coverage:
 """
 from typing import Callable
 
-from .prompt_injection_critical import make_prompt_injection_critical
 from .clean_text import make_clean_text
-from .ssrf_metadata_url import make_ssrf_metadata_url
 from .command_injection_text import make_command_injection_text
-from .safe_allowlisted_url import make_safe_allowlisted_url
 from .credential_exfil_sanitize import make_credential_exfil_sanitize
 from .empty_input_edge import make_empty_input_edge
+from .prompt_injection_critical import make_prompt_injection_critical
+from .safe_allowlisted_url import make_safe_allowlisted_url
+from .ssrf_metadata_url import make_ssrf_metadata_url
+
 
 ALL_FIXTURES: list[Callable] = [
     make_prompt_injection_critical,

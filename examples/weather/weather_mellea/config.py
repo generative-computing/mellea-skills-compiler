@@ -1,5 +1,6 @@
 from typing import Final
 
+
 # === C1: Identity & Behavioral Context ===
 SKILL_NAME: Final[str] = 'weather'
 # PROVENANCE: spec.md:2-3

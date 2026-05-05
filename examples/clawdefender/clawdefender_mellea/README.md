@@ -35,16 +35,16 @@ result: SecurityScanResult = run_pipeline(
 
 ### Check modes
 
-| `check_mode` | Operation | LLM required |
-|---|---|---|
-| `validate` | Full multi-category text scan (default) | No |
-| `check_url` | SSRF / exfiltration URL check | No |
-| `check_prompt` | Prompt injection stdin check | No |
-| `sanitize` | Sanitize external input; wrap flagged content | No |
-| `audit` | Workspace-wide skill and script audit | No |
-| `scan_skill` | Recursive directory scan | No |
-| `install` | Safe skill installation via `npx clawhub` + scan | No |
-| `auto` | LLM classifies intent + LLM formats output | Yes (Ollama `granite3.3:8b`) |
+| `check_mode`   | Operation                                        | LLM required                 |
+| -------------- | ------------------------------------------------ | ---------------------------- |
+| `validate`     | Full multi-category text scan (default)          | No                           |
+| `check_url`    | SSRF / exfiltration URL check                    | No                           |
+| `check_prompt` | Prompt injection stdin check                     | No                           |
+| `sanitize`     | Sanitize external input; wrap flagged content    | No                           |
+| `audit`        | Workspace-wide skill and script audit            | No                           |
+| `scan_skill`   | Recursive directory scan                         | No                           |
+| `install`      | Safe skill installation via `npx clawhub` + scan | No                           |
+| `auto`         | LLM classifies intent + LLM formats output       | Yes (Ollama `granite3.3:8b`) |
 
 All explicit modes are fully deterministic — they invoke the bundled bash scripts directly with no LLM involvement.
 
@@ -62,14 +62,14 @@ class SecurityScanResult(BaseModel):
 
 ## Detection categories
 
-| Category | Severity | Action |
-|---|---|---|
-| Prompt injection (critical patterns) | CRITICAL (score 90+) | block |
-| Command injection | CRITICAL (score 90+) | block |
-| Credential exfiltration | CRITICAL (score 90+) | block |
-| SSRF / metadata endpoint URLs | HIGH–CRITICAL | block |
-| Prompt injection (warning patterns) | WARNING (score 40–69) | warn |
-| Path traversal | HIGH (score 70+) | block |
+| Category                             | Severity              | Action |
+| ------------------------------------ | --------------------- | ------ |
+| Prompt injection (critical patterns) | CRITICAL (score 90+)  | block  |
+| Command injection                    | CRITICAL (score 90+)  | block  |
+| Credential exfiltration              | CRITICAL (score 90+)  | block  |
+| SSRF / metadata endpoint URLs        | HIGH–CRITICAL         | block  |
+| Prompt injection (warning patterns)  | WARNING (score 40–69) | warn   |
+| Path traversal                       | HIGH (score 70+)      | block  |
 
 ## Architecture
 

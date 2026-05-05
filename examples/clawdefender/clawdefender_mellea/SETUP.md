@@ -69,15 +69,15 @@ python -m pytest clawdefender_mellea/fixtures/ -v
 
 The fixture suite exercises 4 dependency categories (C1, C2, C6, C8) across 7 test cases:
 
-| Fixture | Mode | Expected outcome |
-|---|---|---|
-| `prompt_injection_critical` | `check_prompt` | `clean=False`, `severity=critical`, `action=block` |
-| `clean_text` | `validate` | `clean=True`, `severity=clean`, `action=allow` |
-| `ssrf_metadata_url` | `check_url` | `clean=False`, `severity≥warning`, `action=block` |
-| `command_injection_text` | `validate` | `clean=False`, `severity=critical`, `action=block` |
-| `safe_allowlisted_url` | `check_url` | `clean=True`, `severity=clean`, `action=allow` |
-| `credential_exfil_sanitize` | `sanitize` | Output contains `[FLAGGED]` markers or `clean=False` |
-| `empty_input_edge` | `validate` | No crash; `clean=True` or graceful non-zero result |
+| Fixture                     | Mode           | Expected outcome                                     |
+| --------------------------- | -------------- | ---------------------------------------------------- |
+| `prompt_injection_critical` | `check_prompt` | `clean=False`, `severity=critical`, `action=block`   |
+| `clean_text`                | `validate`     | `clean=True`, `severity=clean`, `action=allow`       |
+| `ssrf_metadata_url`         | `check_url`    | `clean=False`, `severity≥warning`, `action=block`    |
+| `command_injection_text`    | `validate`     | `clean=False`, `severity=critical`, `action=block`   |
+| `safe_allowlisted_url`      | `check_url`    | `clean=True`, `severity=clean`, `action=allow`       |
+| `credential_exfil_sanitize` | `sanitize`     | Output contains `[FLAGGED]` markers or `clean=False` |
+| `empty_input_edge`          | `validate`     | No crash; `clean=True` or graceful non-zero result   |
 
 Run a quick smoke test without pytest:
 

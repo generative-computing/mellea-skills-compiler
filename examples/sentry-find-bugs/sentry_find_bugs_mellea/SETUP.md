@@ -44,6 +44,7 @@ ollama list | grep granite3.3:8b
 ```
 
 These values are baked into `config.py`:
+
 - `BACKEND = 'ollama'`
 - `MODEL_ID = 'granite3.3:8b'`
 
@@ -121,15 +122,16 @@ python -m pytest sentry_find_bugs_mellea/fixtures/clean_secure_parameterized.py 
 
 **Available fixtures**:
 
-| Fixture ID | Expected behaviour |
-|---|---|
-| `positive_sql_injection` | Detects SQL injection (Critical) in api/views.py |
-| `positive_missing_authz` | Detects Authorization/IDOR (High) in api/admin_actions.py |
-| `clean_secure_parameterized` | Returns no issues — well-written parameterized code |
-| `edge_empty_diff` | Returns empty `FindingsReport` with no modified files |
-| `edge_comments_only` | Returns no issues — comment-only changes |
-| `mixed_partial_csrf_fix` | Detects CSRF (Medium) on new endpoint; notes webhook exemption is intentional |
+| Fixture ID                   | Expected behaviour                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `positive_sql_injection`     | Detects SQL injection (Critical) in api/views.py                              |
+| `positive_missing_authz`     | Detects Authorization/IDOR (High) in api/admin_actions.py                     |
+| `clean_secure_parameterized` | Returns no issues — well-written parameterized code                           |
+| `edge_empty_diff`            | Returns empty `FindingsReport` with no modified files                         |
+| `edge_comments_only`         | Returns no issues — comment-only changes                                      |
+| `mixed_partial_csrf_fix`     | Detects CSRF (Medium) on new endpoint; notes webhook exemption is intentional |
 
 **Prerequisites for fixtures**:
+
 - ollama running with `granite3.3:8b` loaded
 - `constrained_slots.py` stubs may raise `NotImplementedError` — the pipeline handles this gracefully, so fixtures run without implementing stubs

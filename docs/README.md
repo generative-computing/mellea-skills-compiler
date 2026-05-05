@@ -1,14 +1,14 @@
 # Tutorial — Four Skills, Five Minutes Each
 
 This tutorial assumes you have already followed [`README.md`](../README.md) §
-*Install*: `pip install -e .` succeeds in your virtual environment, an Ollama
+_Install_: `pip install -e .` succeeds in your virtual environment, an Ollama
 backend is running on the host given by `OLLAMA_API_URL`, and the
 `granite3.3:8b` model has been pulled.
 
 The goal: from a fresh checkout to (1) seeing a compiled skill produce
 a real result, (2) recognising the four archetypes (fetch, structured
 analysis, constrained reasoning, adversarial classification), and (3)
-knowing the next step when *your* compile produces stubs.
+knowing the next step when _your_ compile produces stubs.
 
 Each fixture makes between two and ten `m.instruct(...)` calls. On a
 modern laptop running `granite3.3:8b`, weather completes in **30–90
@@ -61,20 +61,20 @@ Compiled packages are classified on three dimensions: number of
 `NotImplementedError` stubs, number of environment variables read, and
 number of external binaries or HTTP services required.
 
-| Tier | Friction | Meaning |
-|------|----------|---------|
-| T1 | None | Runs end-to-end with only Ollama on the host. No stubs, no env vars, no extra binaries. |
-| T2 | One artefact | One stub or one missing reference file blocks one branch of the pipeline. Other branches run unchanged. |
-| T3 | External integration | Requires an external service (HTTP API, CLI tool, secret store) or a non-stdlib runtime helper before the pipeline can execute. |
+| Tier | Friction             | Meaning                                                                                                                         |
+| ---- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| T1   | None                 | Runs end-to-end with only Ollama on the host. No stubs, no env vars, no extra binaries.                                         |
+| T2   | One artefact         | One stub or one missing reference file blocks one branch of the pipeline. Other branches run unchanged.                         |
+| T3   | External integration | Requires an external service (HTTP API, CLI tool, secret store) or a non-stdlib runtime helper before the pipeline can execute. |
 
 The four skills featured in this tutorial:
 
-| Skill | Tier | Archetype |
-|-------|------|-----------|
-| `weather` | T1 | Fetch + summarise |
-| `sentry-find-bugs` | T1 / T2 | Structured analysis (multi-phase checklist); two stub-gated branches |
-| `superpowers-systematic-debugging` | T1 | Constrained reasoning + hypothesis test |
-| `clawdefender` | T3 | Adversarial input classification; subprocess-backed scripts require `chmod +x` on Unix |
+| Skill                              | Tier    | Archetype                                                                              |
+| ---------------------------------- | ------- | -------------------------------------------------------------------------------------- |
+| `weather`                          | T1      | Fetch + summarise                                                                      |
+| `sentry-find-bugs`                 | T1 / T2 | Structured analysis (multi-phase checklist); two stub-gated branches                   |
+| `superpowers-systematic-debugging` | T1      | Constrained reasoning + hypothesis test                                                |
+| `clawdefender`                     | T3      | Adversarial input classification; subprocess-backed scripts require `chmod +x` on Unix |
 
 The next three sections walk one skill per archetype. None require code
 edits to produce the documented output.
@@ -223,7 +223,7 @@ SecurityScanResult(
 )
 ```
 
-What to notice: this is *adversarial-input classification*, not
+What to notice: this is _adversarial-input classification_, not
 generation. The pipeline's job is to refuse the payload and label it.
 Three other bundled fixtures (`clean_text`, `safe_allowlisted_url`,
 `empty_input_edge`) run on the `check_prompt`/`validate`/`check_url`
@@ -236,7 +236,7 @@ and will fail at the `subprocess.run(...)` call without them.
 ## 6. What Happens When YOUR Compile Produces Stubs
 
 Every skill above runs because its stubs are filled, gracefully
-wrapped, or unused by the chosen fixture. When you compile a *new*
+wrapped, or unused by the chosen fixture. When you compile a _new_
 skill, the compiler emits `NotImplementedError` stubs for every C6 tool
 the spec did not pin down. The smoke check will either raise outright
 or — for wrapped call sites like `sentry-find-bugs` — degrade silently
@@ -249,7 +249,7 @@ worked against `sentry-find-bugs` (`search_fn`, `read_file_fn`).
 
 ## 7. Compiling Your Own Skill
 
-The compile path is unchanged from the README's *Quick Start*:
+The compile path is unchanged from the README's _Quick Start_:
 
 ```bash
 mellea-skills compile skills/weather/spec.md

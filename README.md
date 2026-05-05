@@ -20,6 +20,7 @@
 > **Research preview (v0.1)** — This is an early-stage research project from IBM Research. The APIs, CLI, and artifact formats are subject to change. We welcome feedback via [Issues](../../issues).
 
 > **Coming soon** (active development):
+>
 > - Interactive dependency resolution during compile
 > - Export for additional agent harnesses — MCP, LangGraph, and Claude Code available today, all experimental
 > - Support for compiling non-`.md` agent skills
@@ -31,11 +32,11 @@ Mellea Skills Compiler is a certification pipeline for AI agent skills. It takes
 
 The pipeline composes three IBM Research technologies:
 
-| Component | Role | Source |
-|-----------|------|--------|
-| **[Mellea](https://github.com/generative-computing/mellea)** | Structured generative programs with typed schemas, validation, and hooks | Apache 2.0 |
-| **[Granite Guardian](https://huggingface.co/ibm-granite/granite-guardian-3.3-8b)** | Runtime risk detection integrated via Mellea's hook system | Apache 2.0 |
-| **[AI Atlas Nexus](https://github.com/IBM/ai-atlas-nexus)** | Governance knowledge graph mapping use cases to risks across taxonomies | Apache 2.0 |
+| Component                                                                          | Role                                                                     | Source     |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------- |
+| **[Mellea](https://github.com/generative-computing/mellea)**                       | Structured generative programs with typed schemas, validation, and hooks | Apache 2.0 |
+| **[Granite Guardian](https://huggingface.co/ibm-granite/granite-guardian-3.3-8b)** | Runtime risk detection integrated via Mellea's hook system               | Apache 2.0 |
+| **[AI Atlas Nexus](https://github.com/IBM/ai-atlas-nexus)**                        | Governance knowledge graph mapping use cases to risks across taxonomies  | Apache 2.0 |
 
 ## Why
 
@@ -69,28 +70,32 @@ agent specification        spec → typed pipeline                   Guardian ho
 
 1. Claude Code is required to compile a Mellea skill. Please ensure that the Claude Code is installed by following the guide here: https://code.claude.com/docs/en/quickstart
 
-
 2. Set relevant platform-specific environment variables to communicate with your Claude platform.
 
-    For example, Claude via LiteLLM Gateway requires following env variables:
-    ```
-    export ANTHROPIC_BASE_URL = ""
-    export ANTHROPIC_AUTH_TOKEN = ""
-    ```
-    or if you have an ANTHROPIC_API_KEY
-    ```
-    export ANTHROPIC_API_KEY = ""
-    export ANTHROPIC_BASE_URL = ""
-    ```
+   For example, Claude via LiteLLM Gateway requires following env variables:
+
+   ```
+   export ANTHROPIC_BASE_URL = ""
+   export ANTHROPIC_AUTH_TOKEN = ""
+   ```
+
+   or if you have an ANTHROPIC_API_KEY
+
+   ```
+   export ANTHROPIC_API_KEY = ""
+   export ANTHROPIC_BASE_URL = ""
+   ```
 
 ### Project Code
 
 Clone code repository
+
 ```
 git clone https://github.com/generative-computing/mellea-skills-compiler
 ```
 
 Create Python environment and install library
+
 ```bash
 # Requires Python >=3.11, <3.14.4
 python3 -m venv .venv
@@ -116,11 +121,13 @@ Example skills: https://github.com/generative-computing/mellea-skills-compiler/t
 We recommend downloading the Ollama models `granite3.3:8b` and `ibm/granite3.3-guardian:8b` beforehand, as they are set as defaults.
 
 For Risk Identification
+
 ```
 ollama pull granite3.3:8b
 ```
 
 For Risk Assessment
+
 ```
 ollama pull ibm/granite3.3-guardian:8b
 ```
@@ -128,6 +135,7 @@ ollama pull ibm/granite3.3-guardian:8b
 ### Compile a skill specification
 
 #### Option 1: compile skill with CLI (Recommended)
+
 Compile a skill into a typed Mellea pipeline via the CLI:
 
 ```bash
@@ -136,17 +144,20 @@ mellea-skills compile <Your-local-path>/skills/weather          # if skill is a 
 ```
 
 Compile uses Sonnet as the default claude model. To use different claude model,
+
 ```bash
 mellea-skills compile <Your-local-path>/skills/weather/spec.md --model aws/claude-opus-4-5
 mellea-skills compile <Your-local-path>/skills/weather --model aws/claude-opus-4-5
 ```
 
 Melleafy Repair: Identify and correct any errors effectively in Mellea skill compilation
+
 ```bash
 mellea-skills compile --repair-mode <Your-local-path>/skills/weather --model aws/claude-opus-4-5
 ```
 
-#### Option 2: compile skill with Claude code 
+#### Option 2: compile skill with Claude code
+
 Run `/mellea-fy` directly inside Claude Code:
 
 ```bash
@@ -187,7 +198,6 @@ mellea-skills export --target mcp <Your-local-path>/skills/weather/weather_melle
 mellea-skills export --target mcp --force <Your-local-path>/skills/weather/weather_mellea # '--force' overwrites output directory if it already exists.
 ```
 
-
 ### Certification artifacts
 
 All outputs are written to `audit/` adjacent to the compiled directory:
@@ -205,12 +215,12 @@ skills/weather/audit/
 
 The [`src/mellea_skills_compiler/examples/`](src/mellea_skills_compiler/examples/) directory contains pre-compiled, validated Mellea pipeline packages — runnable end-to-end against the project's Ollama + `granite3.3:8b` baseline. Each is a curated reference snapshot of what `mellea-skills compile` produces under the current architecture.
 
-| Skill | Tier | Archetype | Description |
-|-------|------|-----------|-------------|
-| [weather](examples/weather/) | T1 | Fetch + summarise | Public no-auth HTTP to `wttr.in`; intent classification dispatches to one of seven URL templates |
-| [sentry-find-bugs](examples/sentry-find-bugs/) | T1 / T2 | Structured analysis | Multi-phase OWASP review producing severity-classified findings; two stub helpers (`search_fn`, `read_file_fn`) for codebase-scanning fixtures |
-| [superpowers-systematic-debugging](examples/superpowers-systematic-debugging/) | T1 | Constrained reasoning | Four-phase debugging walk with hypothesis testing; `fix_attempts_count >= 3` triggers architectural-issue branch |
-| [clawdefender](examples/clawdefender/) | T3 | Adversarial classification | Prompt injection / SSRF / command injection / credential exfiltration detection; bundled scripts need `chmod +x` on Unix |
+| Skill                                                                          | Tier    | Archetype                  | Description                                                                                                                                    |
+| ------------------------------------------------------------------------------ | ------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| [weather](examples/weather/)                                                   | T1      | Fetch + summarise          | Public no-auth HTTP to `wttr.in`; intent classification dispatches to one of seven URL templates                                               |
+| [sentry-find-bugs](examples/sentry-find-bugs/)                                 | T1 / T2 | Structured analysis        | Multi-phase OWASP review producing severity-classified findings; two stub helpers (`search_fn`, `read_file_fn`) for codebase-scanning fixtures |
+| [superpowers-systematic-debugging](examples/superpowers-systematic-debugging/) | T1      | Constrained reasoning      | Four-phase debugging walk with hypothesis testing; `fix_attempts_count >= 3` triggers architectural-issue branch                               |
+| [clawdefender](examples/clawdefender/)                                         | T3      | Adversarial classification | Prompt injection / SSRF / command injection / credential exfiltration detection; bundled scripts need `chmod +x` on Unix                       |
 
 Each example includes the original `spec.md` (or `SKILL.md`), generated pipeline code, factory-shape fixtures, intermediate IR (`config_emission.json`, `fixtures_emission.json`, etc.), `mapping_report.md`, and `melleafy.json` manifest. See [`docs/README.md`](docs/README.md) for the runnable tutorial that walks through each one and [`docs/FROM_STUBS_TO_RUNNING.md`](docs/FROM_STUBS_TO_RUNNING.md) for the stub-implementation walkthrough.
 

@@ -83,10 +83,10 @@ if echo "$RESULT" | grep -q "CRITICAL\|WARNING"; then
     # Injection detected
     SEVERITY="WARNING"
     echo "$RESULT" | grep -q "CRITICAL" && SEVERITY="CRITICAL"
-    
+
     # Extract pattern matches
     PATTERNS=$(echo "$RESULT" | grep -oE "Pattern: [^(]+" | head -3 | tr '\n' ', ' | sed 's/, $//')
-    
+
     if $REPORT_ONLY; then
         echo "⚠️ INJECTION DETECTED [$SEVERITY]"
         echo "Patterns: $PATTERNS"
@@ -95,7 +95,7 @@ if echo "$RESULT" | grep -q "CRITICAL\|WARNING"; then
         echo "$RESULT"
         exit 0
     fi
-    
+
     if $STRICT; then
         if ! $SILENT; then
             echo -e "${RED}⛔ BLOCKED: Prompt injection detected [$SEVERITY]${NC}" >&2
@@ -103,13 +103,13 @@ if echo "$RESULT" | grep -q "CRITICAL\|WARNING"; then
         fi
         exit 1
     fi
-    
+
     if ! $SILENT; then
         echo -e "${YELLOW}⚠️  SUSPICIOUS CONTENT DETECTED [$SEVERITY]${NC}" >&2
         echo -e "${YELLOW}Patterns: $PATTERNS${NC}" >&2
         echo -e "${YELLOW}--- Content follows (review carefully) ---${NC}" >&2
     fi
-    
+
     # Output with visible warning marker
     echo "⚠️ [FLAGGED - Potential prompt injection detected]"
     echo "$INPUT"
@@ -120,10 +120,10 @@ else
         echo "✅ Clean - no injection patterns detected"
         exit 0
     fi
-    
+
     if ! $SILENT; then
         : # Could add "✅ Clean" to stderr but that's noisy
     fi
-    
+
     echo "$INPUT"
 fi

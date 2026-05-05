@@ -12,45 +12,45 @@ Step 3 emits skeleton files (imports, signatures, docstring placeholders) from t
 
 ### File set determined by mapping + dependency plan
 
-| File | When generated |
-|---|---|
-| `pipeline.py` | Always |
-| `schemas.py` | Always (at minimum contains `Final[str]` placeholder if no schemas found) |
-| `config.py` | Always (persona text, model ID, loop budgets from `dependency_plan.json:bundle` entries) |
-| `requirements.py` | When any `VALIDATE_OUTPUT` elements exist |
-| `slots.py` | When any `EXTRACT` or `CLASSIFY` elements map to `@generative` |
-| `tools.py` | When any C6 element has disposition `real_impl` |
-| `constrained_slots.py` | When any C6 element has disposition `stub` or `delegate_to_runtime` |
-| `mobjects.py` | When any `TRANSFORM` or `QUERY` elements exist |
-| `loader.py` | When any C3 element has disposition `load_from_disk` |
-| `main.py` | Always (CLI entry point) |
-| `pyproject.toml` | Always |
-| `fixtures/` | Always (5–8 fixtures, generated in Step 4) |
-| `SETUP.md` | When any C4, C5, C9, non-bundled C6, C7, non-default C8, or host-needing modality |
-| `README.md` | Always |
-| `melleafy.json` | Always (skeleton in Step 3; finalised in Step 6) |
-| `dependencies.yaml` | When any C6/C7/C8 entry is non-bundle |
+| File                   | When generated                                                                           |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| `pipeline.py`          | Always                                                                                   |
+| `schemas.py`           | Always (at minimum contains `Final[str]` placeholder if no schemas found)                |
+| `config.py`            | Always (persona text, model ID, loop budgets from `dependency_plan.json:bundle` entries) |
+| `requirements.py`      | When any `VALIDATE_OUTPUT` elements exist                                                |
+| `slots.py`             | When any `EXTRACT` or `CLASSIFY` elements map to `@generative`                           |
+| `tools.py`             | When any C6 element has disposition `real_impl`                                          |
+| `constrained_slots.py` | When any C6 element has disposition `stub` or `delegate_to_runtime`                      |
+| `mobjects.py`          | When any `TRANSFORM` or `QUERY` elements exist                                           |
+| `loader.py`            | When any C3 element has disposition `load_from_disk`                                     |
+| `main.py`              | Always (CLI entry point)                                                                 |
+| `pyproject.toml`       | Always                                                                                   |
+| `fixtures/`            | Always (5–8 fixtures, generated in Step 4)                                               |
+| `SETUP.md`             | When any C4, C5, C9, non-bundled C6, C7, non-default C8, or host-needing modality        |
+| `README.md`            | Always                                                                                   |
+| `melleafy.json`        | Always (skeleton in Step 3; finalised in Step 6)                                         |
+| `dependencies.yaml`    | When any C6/C7/C8 entry is non-bundle                                                    |
 
 ### Modality-specific entry-point shape (R21)
 
 The `run_pipeline` function signature and `main.py` shape vary by modality from `classification.json`:
 
-| Modality | Entry point shape |
-|---|---|
-| `synchronous_oneshot` | `run_pipeline(*params) -> OutputSchema` — simple function call |
-| `streaming` | `run_pipeline(*params) -> Iterator[str]` — generator yielding tokens |
-| `conversational_session` | `run_pipeline(session_id: str, *params) -> OutputSchema` — session-keyed |
-| `review_gated` | `run_pipeline(*params) -> ReviewRequest` — returns for human approval |
-| `scheduled` | `run_pipeline() -> None` — no user-provided params; data fetched internally |
-| `event_triggered` | `run_pipeline(event: dict) -> None` — event payload as input |
-| `heartbeat` | `run_pipeline(state: dict) -> dict` — stateful loop, returns updated state |
-| `realtime_media` | `run_pipeline(stream: Iterator) -> Iterator` — streaming I/O |
+| Modality                 | Entry point shape                                                           |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `synchronous_oneshot`    | `run_pipeline(*params) -> OutputSchema` — simple function call              |
+| `streaming`              | `run_pipeline(*params) -> Iterator[str]` — generator yielding tokens        |
+| `conversational_session` | `run_pipeline(session_id: str, *params) -> OutputSchema` — session-keyed    |
+| `review_gated`           | `run_pipeline(*params) -> ReviewRequest` — returns for human approval       |
+| `scheduled`              | `run_pipeline() -> None` — no user-provided params; data fetched internally |
+| `event_triggered`        | `run_pipeline(event: dict) -> None` — event payload as input                |
+| `heartbeat`              | `run_pipeline(state: dict) -> dict` — stateful loop, returns updated state  |
+| `realtime_media`         | `run_pipeline(stream: Iterator) -> Iterator` — streaming I/O                |
 
 **Rule 3-1 — `run_pipeline` parameter type annotations**: Every parameter in the generated `run_pipeline` function signature MUST have an explicit Python type annotation. If the source spec declares a type for a parameter (e.g. from a typed function signature, a schema field, or an explicit type note in the spec text), use that type. If the source spec is untyped or ambiguous, default to `str`. Do not emit bare parameter names (e.g. `company_domain`) — emit `company_domain: str` instead. This applies to both required and optional (defaulted) parameters.
 
 ### Step 3a-pre: Bundled assets are already mirrored (Rule OUT-6)
 
-Companion directories from the skill root (`scripts/`, `references/`, `assets/`) are mirrored into `<package_name>/` **deterministically by the compile pipeline**, *before* mellea-fy runs. The model does not perform the copy — it is plumbing handled by `mellea_skills_compiler.compile.mellea_skills._mirror_companion_dirs`. By the time Step 3 begins, any companion directory that existed at the skill root is already present at `<package_name>/<dir>/` and can be referenced directly.
+Companion directories from the skill root (`scripts/`, `references/`, `assets/`) are mirrored into `<package_name>/` **deterministically by the compile pipeline**, _before_ mellea-fy runs. The model does not perform the copy — it is plumbing handled by `mellea_skills_compiler.compile.mellea_skills._mirror_companion_dirs`. By the time Step 3 begins, any companion directory that existed at the skill root is already present at `<package_name>/<dir>/` and can be referenced directly.
 
 The model's responsibility is **path-resolution discipline**: any code emitted in Step 5 that loads or invokes a bundled asset MUST resolve its path package-relatively via `Path(__file__).parent / "<dir>/<file>"`, **not** via a user-supplied `repo_root` argument or the process working directory. This invariant is what makes the generated package self-contained — a `pip install`-ed package, or one invoked from any cwd, finds its bundled assets via Python's own module-location machinery.
 
@@ -62,7 +62,7 @@ Step 7's `bundled-asset-path-resolution` lint catches violations at validation t
 
 > **C8 backend rule**: `BACKEND` and `MODEL_ID` values are injected via the system prompt by the compile pipeline (sourced from `.claude/data/runtime_defaults.json`, with optional `--backend` / `--model-id` CLI overrides). Emit them in `config.py` exactly as instructed in the system prompt; do not invent alternatives. The Step 7 `runtime-defaults-bound` lint enforces this — divergence from the injected values is a hard failure.
 
-*JSON the model emits:*
+_JSON the model emits:_
 
 ```json
 {
@@ -72,7 +72,7 @@ Step 7's `bundled-asset-path-resolution` lint catches violations at validation t
       "value": "<persona text from SOUL.md>",
       "type": "str",
       "category": "C1",
-      "provenance": {"source_file": "SOUL.md", "source_lines": "1-45"}
+      "provenance": { "source_file": "SOUL.md", "source_lines": "1-45" }
     },
     {
       "name": "BACKEND",
@@ -95,7 +95,7 @@ Step 7's `bundled-asset-path-resolution` lint catches violations at validation t
 }
 ```
 
-*Python source the writer renders from that JSON:*
+_Python source the writer renders from that JSON:_
 
 ```python
 from typing import Final
@@ -111,12 +111,12 @@ MODEL_ID: Final[str] = 'granite3.3:8b'
 LOOP_BUDGET: Final[int] = 3
 ```
 
-
 **schemas.py**: One Pydantic `BaseModel` per `SCHEMA` element. Field descriptions pulled from the spec's output format description. For two-step pattern: include both the simplified raw schema and the full schema.
 
 **requirements.py**: One `Requirement` object per `VALIDATE_OUTPUT` element. Group by spec section. Structural checks use `simple_validate()`; semantic checks use bare `Requirement(description=...)`. Include `check_only=True` for negative constraints.
 
 **slots.py**: One `@generative` function per `EXTRACT`/`CLASSIFY` element. Return types:
+
 - Classifications: `-> Literal[...]` — Ollama supports constrained decoding, so always use the typed return.
 - Simple list extractions: `-> str` with "Set `result` to a comma-separated string of..." docstring — never `-> list[str]`. Split in `pipeline.py`: `[p.strip() for p in raw.split(",") if p.strip()] if raw.strip() else []`
 - Structured extractions: Pydantic `BaseModel` (model fields provide the JSON structure; no bare-output risk)
@@ -139,18 +139,21 @@ def extract_sentiment(m, text: str) -> str:
 ```
 
 Calling convention in `pipeline.py` (unchanged — `m` passed as first positional arg):
+
 ```python
 with start_session(BACKEND, MODEL_ID) as m:
     sentiment = extract_sentiment(m, text=user_input)
 ```
 
 **tools.py** (when any C6 has disposition `real_impl`):
+
 - Domain/command allowlist — hard-coded `ALLOWED_DOMAINS` or `ALLOWED_COMMANDS`
 - Error handling with timeouts and HTTP error codes
 - Auth tokens read from environment variables
 - `build_api_params()` or equivalent mapping spec-level names to API parameter names
 - **Bundled-script invocation (Rule OUT-6)**: when the implementation invokes a script mirrored from the skill root (e.g. `scripts/bash/check-prerequisites.sh`), resolve the script path package-relatively. Use `Path(__file__).parent / "scripts/<...>"` — never `Path(repo_root) / "scripts/<...>"` and never rely on the process working directory. Example: `script_path = Path(__file__).parent / "scripts" / "bash" / "check-prerequisites.sh"`. The mirror is established by Step 3a-pre, so the path is guaranteed to resolve at runtime regardless of where the package is invoked from.
 - Example structure:
+
 ```python
 ALLOWED_DOMAINS = ["api.example.com"]
 HTTP_TIMEOUT = 10
@@ -171,14 +174,15 @@ def http_get(url: str) -> str:
 
 Apply this per-mode distinction at the call site in `pipeline.py` too: every branch calling the wrapper must forward the input correctly for that mode. A branch that omits `target=` for a stdin-consuming mode is a silent false-negative bug.
 
-
 **constrained_slots.py** (when any C6 has disposition `stub` or `delegate_to_runtime`):
+
 - Implements `ConstrainedGenerativeSlot`, `constrained` decorator, `filter_actions` locally
 - Implements `ReactTool` / `ReactToolbox` locally
 - Provides stub tool functions raising `NotImplementedError` with implementation instructions
 - Wraps dependent slots from `slots.py` with `constrained()` — does NOT duplicate them
 
 **pipeline.py** (standard structure):
+
 - One function per `ORCHESTRATE` workflow
 - `with start_session(BACKEND, MODEL_ID) as m:` context manager
 - Calls slots, requirements, and mobjects from other files
@@ -186,6 +190,7 @@ Apply this per-mode distinction at the call site in `pipeline.py` too: every bra
 - MUST convert all non-string `grounding_context` values to `str()`
 - MUST use `format=PydanticModel` for every `m.instruct()` that produces structured output
 - MUST parse the thunk after every `m.instruct(format=Model)` before accessing any field or calling any Pydantic method. `m.instruct()` returns a `ComputedModelOutputThunk` — NOT a Pydantic model. Direct field access (`thunk.field_name`) or `.model_dump()` raises `AttributeError`. Always include `_parse_instruct_result` and `_safe_parse_with_fallback` helpers in `pipeline.py` and call them immediately after every `m.instruct(format=Model)` call:
+
   ```python
   def _parse_instruct_result(thunk, model_class):
       return model_class.model_validate_json(thunk.value)
@@ -196,10 +201,12 @@ Apply this per-mode distinction at the call site in `pipeline.py` too: every bra
       except Exception:
           return model_class(**fallback_kwargs)
   ```
+
 - MUST use `model_options={ModelOption.SYSTEM_PROMPT: PREFIX_TEXT}` to establish persona on `m.instruct()` calls (KB7 — `prefix=` is an output prefix, not a system prompt)
 - SHOULD use `RepairTemplateStrategy(loop_budget=LOOP_BUDGET)` when requirements include structural `validation_fn`
 
 **Canonical Mellea import paths** — use these exact paths; do not guess or infer alternatives:
+
 ```python
 from mellea import start_session, generative
 from mellea.stdlib.sampling import RepairTemplateStrategy
@@ -216,11 +223,11 @@ from mellea.stdlib.requirements import req, check, simple_validate
 >
 > **Known signatures** (static fallback when `mellea_api_ref.json` is absent or `grounding_unavailable: true`):
 >
-> | Function | Module | Signature |
-> |---|---|---|
-> | `simple_validate` | `mellea.stdlib.requirements` | `simple_validate(fn)` — **1 positional argument only** |
-> | `req` | `mellea.stdlib.requirements` | `req(description, *, validation_fn=None)` — 1 required positional, 1 optional keyword |
-> | `check` | `mellea.stdlib.requirements` | `check(requirement, output)` — 2 positional arguments |
+> | Function          | Module                       | Signature                                                                             |
+> | ----------------- | ---------------------------- | ------------------------------------------------------------------------------------- |
+> | `simple_validate` | `mellea.stdlib.requirements` | `simple_validate(fn)` — **1 positional argument only**                                |
+> | `req`             | `mellea.stdlib.requirements` | `req(description, *, validation_fn=None)` — 1 required positional, 1 optional keyword |
+> | `check`           | `mellea.stdlib.requirements` | `check(requirement, output)` — 2 positional arguments                                 |
 >
 > **Common error pattern**: `simple_validate(_check_fn, "error message")` — the two-argument form is invalid. `simple_validate` wraps the validator function; the error message, if needed, is handled inside the validator function itself. The correct call is `simple_validate(_check_fn)`.
 >
@@ -228,22 +235,25 @@ from mellea.stdlib.requirements import req, check, simple_validate
 
 **Pipeline structure by tool involvement**:
 
-*P0 — No tools*: pure `pipeline.py` calling `slots.py` and `requirements.py`.
+_P0 — No tools_: pure `pipeline.py` calling `slots.py` and `requirements.py`.
 
-*P4 — Tools provide input*: `main.py` gathers pre-pipeline data, passes as parameters to `run_pipeline()`.
+_P4 — Tools provide input_: `main.py` gathers pre-pipeline data, passes as parameters to `run_pipeline()`.
 
-*P2 — Pipeline calls tools (deterministic)*:
+_P2 — Pipeline calls tools (deterministic)_:
+
 1. LLM classifies intent: `intent_thunk = m.instruct(format=IntentSchema, ...)` — result is a `ComputedModelOutputThunk`, NOT a Pydantic object; MUST parse immediately: `intent = _safe_parse_with_fallback(intent_thunk, IntentSchema, query_type="out_of_scope", ...)`
 2. Scope check: `if intent.query_type == "out_of_scope": return` (deterministic, no tool call — `intent` here is the parsed Pydantic object, not the thunk)
 3. Deterministic construction + tool execution: `TEMPLATES[intent.query_type].format(...)` → `tool_fn(url_or_params)`
 4. LLM formats response (optional): `response_thunk = m.instruct(format=ResponseSchema, ...)` → `response = _safe_parse_with_fallback(response_thunk, ResponseSchema, ...)` with raw tool output as grounding
-MUST use two separate `start_session()` calls for steps 1 and 4 (schema priming).
+   MUST use two separate `start_session()` calls for steps 1 and 4 (schema priming).
 
-*P3 — Pipeline calls tools (LLM-directed)*:
+_P3 — Pipeline calls tools (LLM-directed)_:
+
 - Uses `m.react()` with a toolbox, or `m.instruct()` with `ModelOption.TOOLS`
 - Mellea's `TOOL_PRE/POST_INVOKE` hooks fire automatically for governance
 
 **pyproject.toml** (always):
+
 ```toml
 [build-system]
 requires = ["setuptools>=68.0"]
@@ -285,6 +295,7 @@ Read once; apply throughout all file generation.
 **2. All other files output Python source.** Generate one file per LLM invocation (Rule 5-3). Wait for each file's body before starting the next.
 
 **3. Before generating any file, consult `intermediate/mellea_api_ref.json`:**
+
 - `.modules` — valid `mellea.*` paths for imports
 - `.modules.<module>.<symbol>.signature` — exact signature for any `mellea.stdlib.*` symbol (nested under `.modules`)
 - `.forbidden_param_names` — disallowed `@generative` parameter names
@@ -305,6 +316,7 @@ Each invocation uses a prompt template with all element-specific mapping entries
 ### KB defenses baked into every invocation
 
 Before generating any body, include in the context:
+
 - The specific Known Behaviours relevant to the primitive being generated
 - The element's source text and mapping rationale
 - The dependency plan entries affecting this element
@@ -312,6 +324,7 @@ Before generating any body, include in the context:
 ### Per-file body generation order
 
 Generate bodies in this order (dependency order):
+
 1. `schemas.py` — Pydantic models first (all other files reference them)
 2. `config.py` — emit JSON conforming to `.claude/schemas/config_emission.schema.json`; the writer at `.claude/melleafy/writers/config_writer.py` renders the Python source (slots.py references `LOOP_BUDGET`, `PREFIX_TEXT`, etc.)
 3. `requirements.py` — requirement functions (pipeline.py references them)
@@ -345,10 +358,10 @@ while not verdict.passed and remediation_count < MAX_REMEDIATION_ITERATIONS:
             strategy=RepairTemplateStrategy(loop_budget=LOOP_BUDGET),
         )
         fix_obj = _parse_instruct_result(fix, CodeFix)
-    
+
     patched_code = fix_obj.patched_code
     remediation_count += 1
-    
+
     # Re-evaluation step
     with start_session(BACKEND, MODEL_ID) as m_eval:
         verdict = _parse_instruct_result(
@@ -399,6 +412,7 @@ if raw_paths:
 ### CONVERSE realisation bodies
 
 For realisation (2) — pipeline parameter:
+
 ```python
 def run_pipeline(
     user_query: str,                    # from CONVERSE element
@@ -408,6 +422,7 @@ def run_pipeline(
 ```
 
 For realisation (3) — stub:
+
 ```python
 def _get_user_approval(draft: str) -> str:
     """Interactive approval step — requires host adapter. See SETUP.md §7."""

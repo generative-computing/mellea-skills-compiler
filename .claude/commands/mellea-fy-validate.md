@@ -23,20 +23,23 @@ If this lint fails, Step 7 halts. Tier 2 and Tier 3 don't run. The failure repor
 Run in parallel. Each is independent. All tier-2 lints run to completion even if one fails; results are collected then the tier verdict is determined.
 
 **`cross-reference`**: every `element_mapping.json` target symbol exists in the generated package; every external call in `pipeline.py` / `tools.py` has a corresponding `dependency_plan.json` entry. Sub-checks:
+
 - Sub-check A: every `target_symbol` in `element_mapping.json` resolves to a real function/class in the target file
 - Sub-check B (intra-package): every relative import and every `from .<module>` import in the generated files resolves to a file within the package. Note: external library imports (e.g. `from mellea.stdlib.sampling import ...`) are validated by the `parseable` importable check, not here.
 - Sub-check C: every C6 tool called in `pipeline.py` appears in `tools.py` or `constrained_slots.py`
 - Sub-check D: no dead `@generative` slots (defined but never called)
 - Sub-check E: no dead requirements lists (defined in `requirements.py` but never attached)
-- Sub-check F *(Rule 3-1)*: every parameter in `pipeline.py:run_pipeline` has an explicit Python type annotation. Detection: parse `pipeline.py` with `ast`; for each `arg` in `run_pipeline`'s `arguments`, assert `arg.annotation is not None`. Hard failure — bare parameter names produce untyped CLI interfaces and break downstream validation.
+- Sub-check F _(Rule 3-1)_: every parameter in `pipeline.py:run_pipeline` has an explicit Python type annotation. Detection: parse `pipeline.py` with `ast`; for each `arg` in `run_pipeline`'s `arguments`, assert `arg.annotation is not None`. Hard failure — bare parameter names produce untyped CLI interfaces and break downstream validation.
 
 **`validator-soundness`**: scoped to `requirements.py` only. Two sub-checks:
+
 - Sub-check A (KB3): every `validation_fn=` uses `simple_validate()` or a function with signature `(ctx, result) -> ...`
 - Sub-check B (KB4): no vacuous lambda body (lambda that always returns `True` regardless of input)
 
 **`session-boundary`** (KB5): each `start_session()` block uses at most one distinct `BaseModel` format type across all `m.instruct(format=...)` calls within it. Note: `@generative` slots each create their own internal `<FunctionName>Response` model; multiple `@generative` slots with different return types in the same session are subject to the same schema-priming risk as `m.instruct(format=...)` with multiple models.
 
 **`variable-safety`**: two sub-checks:
+
 - Sub-check A: no uninitialised names in `except` / `finally` blocks. Detection: any name referenced in an `except` or `finally` block that has no assignment before the enclosing `try` statement is a failure. The correct pattern is to initialise the variable before the `try` block (e.g. `payload = None` before `try: payload = build_payload(...)`).
 - Sub-check B: no shadowing of Python builtins in function argument names
 
@@ -50,11 +53,11 @@ Run in parallel. Each is independent. All tier-2 lints run to completion even if
 
 The static table below is the primary enforcement mechanism. For functions in this table, the static definition always applies — `mellea_api_ref.json` is not consulted, since these signatures are stable across versions.
 
-| Function | Required positional | Optional keyword |
-|---|---|---|
-| `simple_validate` | 1 (`fn`) | none |
-| `req` | 1 (`description`) | `validation_fn` |
-| `check` | 2 (`requirement`, `output`) | none |
+| Function          | Required positional         | Optional keyword |
+| ----------------- | --------------------------- | ---------------- |
+| `simple_validate` | 1 (`fn`)                    | none             |
+| `req`             | 1 (`description`)           | `validation_fn`  |
+| `check`           | 2 (`requirement`, `output`) | none             |
 
 For `mellea.stdlib.*` calls to functions **not** in the table above: if `intermediate/mellea_api_ref.json` is present and `grounding_unavailable: false`, look up the signature at `.modules["<module>"]["<symbol>"]["signature"]` and apply the same positional/keyword check. If `mellea_api_ref.json` is absent or `grounding_unavailable: true`, emit a warning ("unknown stdlib function — verify signature manually") rather than a hard failure.
 
@@ -63,6 +66,7 @@ For `mellea.stdlib.*` calls to functions **not** in the table above: if `interme
 **`format-annotation`**: every `m.instruct(...)` call whose result is passed to `model_validate_json()` or assigned to a variable then used in a Pydantic parse must have a `format=` keyword argument. Detection: parse `pipeline.py` with `ast`; find `Call` nodes that are `m.instruct`; trace the result name; if it appears as the argument to `.model_validate_json(...)` and has no `format=` keyword, hard failure. This catches calls that produce untyped JSON strings when structured output was intended.
 
 **`known-behaviours`**: mechanical checks for KB1, KB2, KB3, KB4, KB6, KB7, KB11:
+
 - KB1 (3a): no `m.instruct(format=...)` result accessed as a Pydantic object without a prior parse call. Detection: parse `pipeline.py` with `ast`; identify variables assigned from `m.instruct(...)` calls with a `format=` keyword; flag any attribute access (`.field_name`) or method call (`.model_dump()`, `.model_dump_json()`, `.parsed_repr`) on those variables that does not appear as the argument to `_parse_instruct_result(`, `_safe_parse_with_fallback(`, or `.model_validate_json(`. Hard failure.
 - KB2 (3b): complex schemas (BaseModel with >4 fields or any field annotated as `list[...]`) used in `m.instruct(format=...)` must either use `RepairTemplateStrategy` in that call or have the result parsed with `_safe_parse_with_fallback`. Detection: parse `pipeline.py` and `schemas.py` with `ast`; for each `m.instruct(format=Model)` call, look up the model's field count and list annotations in `schemas.py`; if the model qualifies as complex, assert the call has `strategy=` keyword or the result variable is passed to `_safe_parse_with_fallback`. Hard failure.
 - KB3 (3c): validator signatures (also checked by `validator-soundness`)
@@ -73,7 +77,7 @@ For `mellea.stdlib.*` calls to functions **not** in the table above: if `interme
 
 **`doc-citation`**: every `**Verified:**` or `**Ref:**` annotation in `mellea-fy-behaviours.md` that references a `docs.mellea.ai` path must appear in `intermediate/mellea_doc_index.json:.doc_pages`. Detection: read `mellea-fy-behaviours.md`; find all occurrences of `**Verified:**` and `**Ref:**` followed by a URL containing `docs.mellea.ai`; extract the path component; check each path against `doc_pages`. If `doc_pages` is empty (fetch failed at Step 2.5f), emit warning ("doc index unavailable — citation check skipped") rather than failing. Hard failure if `doc_pages` is populated and a cited path is absent.
 
-**`bundled-asset-path-resolution`** (Rule OUT-6, Rule 2.5-2): every reference in the generated package to a path under `scripts/`, `references/`, or `assets/` must be resolved package-relatively via `Path(__file__).parent / ...`. Any code that joins a function-argument path (typically `repo_root`) — or any expression other than `Path(__file__).parent` — with one of those subdirectory names is a hard failure. Detection: parse all `.py` files in `<package_name>/` with `ast`; find `BinOp(left=…, op=Div)` chains and `Call(func=Path)` expressions whose right-hand side begins with a string literal `"scripts/…"`, `"references/…"`, or `"assets/…"` (or the bare component `"scripts"`, `"references"`, `"assets"` followed by another `/` join); for each, resolve the leftmost expression of the join. If it is anything other than `Call(func=Attribute(value=Name("__file__"))…)` rooted at `Path(__file__).parent`, fail with the precise message: *"Bundled asset path '<…>' is resolved via '<expr>'. Bundled assets at `<package_name>/<dir>/` MUST be resolved via `Path(__file__).parent / "<dir>/<file>"` (Rule OUT-6 in `mellea-fy.md`, Rule 2.5-2 in `mellea-fy-deps.md`). Common error: `Path(repo_root) / 'scripts/...'` — must be `Path(__file__).parent / 'scripts' / ...`."* Scope: generated `.py` files only; the path components are matched against the literal directory names declared in Rule OUT-6.
+**`bundled-asset-path-resolution`** (Rule OUT-6, Rule 2.5-2): every reference in the generated package to a path under `scripts/`, `references/`, or `assets/` must be resolved package-relatively via `Path(__file__).parent / ...`. Any code that joins a function-argument path (typically `repo_root`) — or any expression other than `Path(__file__).parent` — with one of those subdirectory names is a hard failure. Detection: parse all `.py` files in `<package_name>/` with `ast`; find `BinOp(left=…, op=Div)` chains and `Call(func=Path)` expressions whose right-hand side begins with a string literal `"scripts/…"`, `"references/…"`, or `"assets/…"` (or the bare component `"scripts"`, `"references"`, `"assets"` followed by another `/` join); for each, resolve the leftmost expression of the join. If it is anything other than `Call(func=Attribute(value=Name("__file__"))…)` rooted at `Path(__file__).parent`, fail with the precise message: _"Bundled asset path '<…>' is resolved via '<expr>'. Bundled assets at `<package_name>/<dir>/` MUST be resolved via `Path(__file__).parent / "<dir>/<file>"` (Rule OUT-6 in `mellea-fy.md`, Rule 2.5-2 in `mellea-fy-deps.md`). Common error: `Path(repo_root) / 'scripts/...'` — must be `Path(__file__).parent / 'scripts' / ...`."_ Scope: generated `.py` files only; the path components are matched against the literal directory names declared in Rule OUT-6.
 
 **`fixtures-loader-contract`** (R16, Rule 4-1): `<package_name>/fixtures/__init__.py` must export a module-level `ALL_FIXTURES` (or `FIXTURES`) list. Detection: AST-parse `fixtures/__init__.py`; require at least one module-level `Assign` (or `AnnAssign`) whose target name is `ALL_FIXTURES` or `FIXTURES`. Hard failure with a message naming both expected attribute names and pointing at `mellea-fy-fixtures.md` for the contract. This is a defence in depth — under the `fixtures_writer.py` architecture (Step 4), violations should be unreachable; the lint exists to catch hand-edited `fixtures/` directories or any future code path that bypasses the writer.
 
@@ -82,12 +86,14 @@ For `mellea.stdlib.*` calls to functions **not** in the table above: if `interme
 ### Tier 3 — Cross-artifact lints (run only when Tier 2 passes)
 
 **`category-specific`**: conditional per C-category detected in `dependency_plan.json`:
+
 - C1-A: scan `config.py:PREFIX_TEXT` for high-entropy strings (>4.5 bits/char, >20 chars) — likely secrets leaked into persona text
 - C1-B: scan `config.py` constants for high-entropy strings
 - C6: every MCP tool name in `tools.py` uses the qualified `mcp__server__tool` format
 - C7: scan all generated `.py` files for hardcoded credential patterns (private key headers, AWS access key patterns, connection string patterns)
 
 **`melleafy-json-consistency`**: 7 sub-checks verifying `melleafy.json` matches the other artifacts:
+
 - Sub-check A: `melleafy.json` contains the fields required by the export command (the authoritative consumer). Hard-required fields (`manifest_version`, `entry_signature`, `package_name`) — FAIL if absent or if `manifest_version` < 1.1.0. Completeness fields (`source_runtime`, `modality`, `categories_resolved`, `declared_env_vars`, `pipeline_parameters`) — WARN if absent. Extra fields are permitted; no schema file is consulted.
 - Sub-check B: `source_runtime` matches `classification.json:source_runtime`
 - Sub-check C: `modality` matches `classification.json:modality`
@@ -121,13 +127,15 @@ For `mellea.stdlib.*` calls to functions **not** in the table above: if `interme
 
   "tier_1": {
     "verdict": "pass",
-    "lints": [{"lint_id": "parseable", "verdict": "pass", "files_checked": 12}]
+    "lints": [
+      { "lint_id": "parseable", "verdict": "pass", "files_checked": 12 }
+    ]
   },
 
   "tier_2": {
     "verdict": "fail",
     "lints": [
-      {"lint_id": "cross-reference", "verdict": "pass"},
+      { "lint_id": "cross-reference", "verdict": "pass" },
       {
         "lint_id": "session-boundary",
         "verdict": "fail",
@@ -144,7 +152,7 @@ For `mellea.stdlib.*` calls to functions **not** in the table above: if `interme
     ]
   },
 
-  "tier_3": {"verdict": "skipped", "reason": "Tier 2 failed"}
+  "tier_3": { "verdict": "skipped", "reason": "Tier 2 failed" }
 }
 ```
 
@@ -195,11 +203,12 @@ The smoke check produces one of three verdicts:
 
 - **`passed`** — fixture executed to completion without exception. Exit code **0**. `step_7b_report.json` records the fixture id, duration, and output schema type.
 - **`failed`** — fixture raised an exception or violated an assertion the runner can detect. Exit code **12** (distinct from **11** for static lint failure). `step_7b_report.json` records the traceback and fixture context. Does **not** trigger the repair loop — a fixture failure requires human review, not automated re-generation.
-- **`skipped`** — LLM backend unreachable (e.g. Ollama not running, API endpoint timing out, missing API key). Exit code **0** with a stderr warning: *"Fixture smoke-check skipped — LLM backend unreachable: <reason>. Re-run `mellea-skills validate <pkg> --run` once the backend is up to verify runtime behaviour."* `step_7b_report.json` records the verdict as `skipped` with the underlying error. This keeps CI green for environments without an LLM while still nudging local users.
+- **`skipped`** — LLM backend unreachable (e.g. Ollama not running, API endpoint timing out, missing API key). Exit code **0** with a stderr warning: _"Fixture smoke-check skipped — LLM backend unreachable: <reason>. Re-run `mellea-skills validate <pkg> --run` once the backend is up to verify runtime behaviour."_ `step_7b_report.json` records the verdict as `skipped` with the underlying error. This keeps CI green for environments without an LLM while still nudging local users.
 
 Detection of "backend unreachable" vs "fixture genuinely failed":
+
 - `ConnectionError`, `TimeoutError`, `requests.exceptions.ConnectionError`, or any `httpx.ConnectError` thrown during `start_session()` → **skipped**
-- Authentication errors (401/403 from a remote API) → **skipped** with a more specific message: *"backend unreachable: authentication failed (check API key or env vars)"*
+- Authentication errors (401/403 from a remote API) → **skipped** with a more specific message: _"backend unreachable: authentication failed (check API key or env vars)"_
 - Any other exception (TypeError, ValueError, AssertionError, schema validation errors, `mellea` exceptions) → **failed**
 
-The `--run` mode is invoked automatically at the end of the `compile` command — a green compile output now means *the package compiled, passed all 16 static lints, and successfully executed at least one fixture*. The `compile` command exits 0 on a `skipped` verdict (matching the local-CI convention) so users without an LLM backend can still get a passing compile, but the skip warning is printed loudly.
+The `--run` mode is invoked automatically at the end of the `compile` command — a green compile output now means _the package compiled, passed all 16 static lints, and successfully executed at least one fixture_. The `compile` command exits 0 on a `skipped` verdict (matching the local-CI convention) so users without an LLM backend can still get a passing compile, but the skip warning is printed loudly.

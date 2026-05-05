@@ -7,12 +7,13 @@ Fixture coverage:
 """
 from typing import Callable
 
-from .positive_sql_injection import make_positive_sql_injection
-from .positive_missing_authz import make_positive_missing_authz
 from .clean_secure_parameterized import make_clean_secure_parameterized
-from .edge_empty_diff import make_edge_empty_diff
 from .edge_comments_only import make_edge_comments_only
+from .edge_empty_diff import make_edge_empty_diff
 from .mixed_partial_csrf_fix import make_mixed_partial_csrf_fix
+from .positive_missing_authz import make_positive_missing_authz
+from .positive_sql_injection import make_positive_sql_injection
+
 
 ALL_FIXTURES: list[Callable] = [
     make_positive_sql_injection,

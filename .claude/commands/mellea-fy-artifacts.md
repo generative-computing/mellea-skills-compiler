@@ -110,6 +110,7 @@ Before Step 6 declares done, verify `melleafy.json` contains the hard-required f
 When `dependency_plan.json:generation_mode == "auto"` AND plan contains any `stub` or `delegate_to_runtime` disposition:
 
 1. Print to stdout:
+
 ```
 Generated package at <output_path>.
 
@@ -138,13 +139,13 @@ Narrative pieces are batched to minimise LLM call count. KB5 schema priming conc
 
 Recipes:
 
-| Recipe | Generates | Context |
-|---|---|---|
-| `classification_narrative` | One-paragraph lede for Classification section | All five axes + element counts |
-| `judgment_call_explanation` | One paragraph per judgment call | Specific trace entry + element summary |
-| `runtime_specific_not_reproduced` | Short explanation per non-reproduced dialect row | Dialect-row identifier + rationale |
-| `deferred_feature_entry` | Short paragraph per deferred R10 feature | Detection record + spec.md entry name |
-| `setup_section_body` | Section body for SETUP.md §4–§7 | Dependency entries + known backend list |
+| Recipe                            | Generates                                        | Context                                 |
+| --------------------------------- | ------------------------------------------------ | --------------------------------------- |
+| `classification_narrative`        | One-paragraph lede for Classification section    | All five axes + element counts          |
+| `judgment_call_explanation`       | One paragraph per judgment call                  | Specific trace entry + element summary  |
+| `runtime_specific_not_reproduced` | Short explanation per non-reproduced dialect row | Dialect-row identifier + rationale      |
+| `deferred_feature_entry`          | Short paragraph per deferred R10 feature         | Detection record + spec.md entry name   |
+| `setup_section_body`              | Section body for SETUP.md §4–§7                  | Dependency entries + known backend list |
 
 ---
 
@@ -152,10 +153,10 @@ Recipes:
 
 ## Final action: Generate `SKILL.md` if absent (non-.md sources only)
 
-
 After all other Step 6 artifacts are written, check whether a `SKILL.md` exists inside `<package_name>/`.
 
 **Condition**: generate `SKILL.md` if **both** are true:
+
 - No `SKILL.md` exists inside `<package_name>/`
 - The source runtime is a non-.md dialect (CrewAI, LangGraph, Letta, or any dialect whose source files are not `.md`)
 
@@ -188,6 +189,7 @@ description: "<one-sentence description — double-quoted; no unescaped colons o
 ```
 
 **Derivation rules**:
+
 - `name`: skill directory name in kebab-case (must match the directory exactly)
 - `description`: first sentence of the README.md introduction, truncated to ≤120 chars; fall back to `melleafy.json:entry_signature` if README not yet written
 - `description` must be double-quoted if it contains `:`, `-`, or special chars

@@ -30,6 +30,7 @@ from mellea_skills_compiler.toolkit.file_utils import (
 )
 from mellea_skills_compiler.toolkit.logging import configure_logger
 
+
 LOGGER = configure_logger()
 
 

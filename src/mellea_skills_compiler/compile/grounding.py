@@ -28,6 +28,7 @@ from typing import Any
 
 from mellea_skills_compiler.toolkit.logging import configure_logger
 
+
 LOGGER = configure_logger()
 
 CACHE_DIR = Path.home() / ".cache" / "mellea-skills-compiler"

@@ -12,25 +12,25 @@ Step 2 reads `inventory.json` and produces `element_mapping.json` — the routin
 
 ## Tag-to-primitive table
 
-| Tag | Primary primitive | Target file | Notes |
-|---|---|---|---|
-| `EXTRACT` | `@generative` slot | `slots.py` | Two-step pattern when schema complexity warrants (§below) |
-| `CLASSIFY` | `@generative` slot | `slots.py` | Return type: `-> Literal[...]` — Ollama supports constrained decoding |
-| `GENERATE` | `m.instruct(format=Schema)` | inline in `pipeline.py` | `format=` always a concrete Pydantic model, never `dict` |
-| `VALIDATE_OUTPUT` | `Requirement` | `requirements.py` | Uses `validation_fn=simple_validate(...)` for structural checks; bare `description` for semantic checks |
-| `VALIDATE_DOMAIN` | `m.instruct(format=DomainSchema)` | inline in `pipeline.py` | Checks external artifacts; produces structured verdict, not pass/fail boolean |
-| `TRANSFORM` | `m.transform()` or `m.instruct(format=Schema)` | inline in `pipeline.py` | `m.transform()` when types are known; `m.instruct` when transformation needs prompted reasoning |
-| `QUERY` | `m.query()` | inline in `pipeline.py` | Read-only question against data already in scope |
-| `DECIDE` | `m.instruct(format=DecisionSchema)` | inline in `pipeline.py` | Gates remediation loops (see Remediate below) |
-| `ORCHESTRATE` | Plain Python control flow | `pipeline.py` | Not a Mellea primitive — describes flow (sequential phases, branches, loops) |
-| `CONVERSE` | `m.chat()`, pipeline parameter, or `NotImplementedError` stub | varies | Three realisations — see below |
-| `REMEDIATE` | Bounded `while` loop with `m.instruct(format=PatchSchema)` | `pipeline.py` | Three mapping entries: modification + evaluation + loop wrapper |
-| `SCHEMA` | Pydantic `BaseModel` class | `schemas.py` | One class per schema; no nested submodels buried in function defs |
-| `CONFIG` | `Final[T]` constant | `config.py` | Under `# === C<N> ... ===` section header |
-| `TOOL_TEMPLATE` | Python function | `tools.py` (provisional) | Amended by Step 2.5d based on disposition |
-| `DETERMINISTIC` | Plain Python function | `pipeline.py` or `tools.py` | `tools.py` when shared across branches or >15 lines |
-| `TOOL_INPUT` | Pipeline parameter or `loader.py` call | `main.py` or `loader.py` | Data a tool produces that feeds the pipeline |
-| `NO_DECOMPOSE` | No primitive | — | Recorded in `element_mapping.json` with `primitive: "none"` for invariant completeness |
+| Tag               | Primary primitive                                             | Target file                 | Notes                                                                                                   |
+| ----------------- | ------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `EXTRACT`         | `@generative` slot                                            | `slots.py`                  | Two-step pattern when schema complexity warrants (§below)                                               |
+| `CLASSIFY`        | `@generative` slot                                            | `slots.py`                  | Return type: `-> Literal[...]` — Ollama supports constrained decoding                                   |
+| `GENERATE`        | `m.instruct(format=Schema)`                                   | inline in `pipeline.py`     | `format=` always a concrete Pydantic model, never `dict`                                                |
+| `VALIDATE_OUTPUT` | `Requirement`                                                 | `requirements.py`           | Uses `validation_fn=simple_validate(...)` for structural checks; bare `description` for semantic checks |
+| `VALIDATE_DOMAIN` | `m.instruct(format=DomainSchema)`                             | inline in `pipeline.py`     | Checks external artifacts; produces structured verdict, not pass/fail boolean                           |
+| `TRANSFORM`       | `m.transform()` or `m.instruct(format=Schema)`                | inline in `pipeline.py`     | `m.transform()` when types are known; `m.instruct` when transformation needs prompted reasoning         |
+| `QUERY`           | `m.query()`                                                   | inline in `pipeline.py`     | Read-only question against data already in scope                                                        |
+| `DECIDE`          | `m.instruct(format=DecisionSchema)`                           | inline in `pipeline.py`     | Gates remediation loops (see Remediate below)                                                           |
+| `ORCHESTRATE`     | Plain Python control flow                                     | `pipeline.py`               | Not a Mellea primitive — describes flow (sequential phases, branches, loops)                            |
+| `CONVERSE`        | `m.chat()`, pipeline parameter, or `NotImplementedError` stub | varies                      | Three realisations — see below                                                                          |
+| `REMEDIATE`       | Bounded `while` loop with `m.instruct(format=PatchSchema)`    | `pipeline.py`               | Three mapping entries: modification + evaluation + loop wrapper                                         |
+| `SCHEMA`          | Pydantic `BaseModel` class                                    | `schemas.py`                | One class per schema; no nested submodels buried in function defs                                       |
+| `CONFIG`          | `Final[T]` constant                                           | `config.py`                 | Under `# === C<N> ... ===` section header                                                               |
+| `TOOL_TEMPLATE`   | Python function                                               | `tools.py` (provisional)    | Amended by Step 2.5d based on disposition                                                               |
+| `DETERMINISTIC`   | Plain Python function                                         | `pipeline.py` or `tools.py` | `tools.py` when shared across branches or >15 lines                                                     |
+| `TOOL_INPUT`      | Pipeline parameter or `loader.py` call                        | `main.py` or `loader.py`    | Data a tool produces that feeds the pipeline                                                            |
+| `NO_DECOMPOSE`    | No primitive                                                  | —                           | Recorded in `element_mapping.json` with `primitive: "none"` for invariant completeness                  |
 
 ---
 
@@ -41,12 +41,14 @@ Step 2 reads `inventory.json` and produces `element_mapping.json` — the routin
 Default: one `@generative` slot returning the target schema.
 
 **Two-step pattern applies when** any of:
+
 - Target schema has cross-reference fields (a field that references another field's value in the same document)
 - Target schema has more than 3 levels of nesting
 - Target schema has optional fields whose presence depends on earlier fields' values
 - Target schema has more than 4 fields OR contains `Literal` constraints OR has nested `BaseModel` objects OR lists of complex objects
 
 When two-step applies, produce **two** mapping entries sharing the same `element_id` (suffixed `-step1`, `-step2`):
+
 1. `@generative` slot returning a simplified flat structure (`slots.py:extract_X_raw`)
 2. `m.instruct(format=FullSchema, strategy=RepairTemplateStrategy(loop_budget=3))` inline in `pipeline.py`
 
@@ -71,6 +73,7 @@ Decision rule: pick (2) when `content_full` contains "ask the user" or "user pro
 ### REMEDIATE — loop structure
 
 Three mapping entries for one source element:
+
 1. **Modification step** — `m.instruct(format=PatchSchema)` producing a fix
 2. **Evaluation step** — `m.instruct(format=VerdictSchema)` checking whether the fix worked
 3. **Loop wrapper** — plain Python `while i < MAX_REMEDIATION_ITERATIONS` tying them together
@@ -80,6 +83,7 @@ All three route to `pipeline.py`. `MAX_REMEDIATION_ITERATIONS` is always a `conf
 ### TOOL_TEMPLATE — provisional file routing
 
 Step 2 always routes `TOOL_TEMPLATE` to `tools.py` initially. Step 2.5d amends based on disposition:
+
 - `real_impl` → stays in `tools.py`
 - `stub` or `delegate_to_runtime` → moved to `constrained_slots.py`
 - `mock` → moved to `fixtures/mock_tools.py`
@@ -93,6 +97,7 @@ Record `final_target_file: "pending_step_2.5"` in the mapping entry until Step 2
 The dialect mapping table in `melleafy-handoff/plans/dialects/<runtime>.md` takes precedence over the general table above.
 
 Precedence (highest first):
+
 1. Dialect doc's mapping table (source-signal-specific rows)
 2. Alternative rules above (tag-specific cases)
 3. General tag-to-primitive table (the default)
@@ -104,6 +109,7 @@ Record every dialect override with `dialect_override_applied: "<runtime>:<row>"`
 ## When LLM judgement is invoked
 
 Step 2 is mechanical wherever possible. LLM invocation is bounded to:
+
 - `VALIDATE_OUTPUT` semantic-vs-executable classification when phrase-match heuristic is inconclusive
 - `CONVERSE` realisation selection when element phrasing doesn't match the three rules
 - `DETERMINISTIC` placement when length is borderline and call graph is unclear
@@ -136,6 +142,7 @@ Each invocation is scoped to a single element. Output goes into `intermediate/el
 ```
 
 **Cross-checks before Step 2 declares done**:
+
 - Count of mapping entries equals count of inventory entries (plus expansions for two-step and remediation)
 - Every `NO_DECOMPOSE` element has a mapping entry with `primitive: "none"`
 - No mapping entry has empty `target_file` or `target_symbol` (except `NO_DECOMPOSE`)

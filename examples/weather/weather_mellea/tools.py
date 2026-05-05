@@ -4,6 +4,7 @@ import subprocess
 
 from weather_mellea.config import WTTR_BASE_URL
 
+
 HTTP_TIMEOUT: int = 10
 CURL_EXTRA_TIMEOUT: int = 5
 

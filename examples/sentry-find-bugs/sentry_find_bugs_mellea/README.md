@@ -48,13 +48,13 @@ Reviewed files:
 
 ## Pipeline phases
 
-| Phase | Description | Mellea primitive |
-|---|---|---|
-| 1 | Gather diff + list modified files | `main.py:gather_diff` + `@generative` slot |
-| 2 | Attack surface mapping | Two-step `@generative` + `m.instruct(format=AttackSurfaceMap)` |
-| 3 | 11-item security checklist per file | `m.instruct(format=SecurityChecklist)` |
-| 4 | Per-issue verification | `m.instruct(format=IssueVerdict)` |
-| 5 | Pre-conclusion audit + final report | `m.instruct(format=FindingsReport, requirements=[...])` |
+| Phase | Description                         | Mellea primitive                                               |
+| ----- | ----------------------------------- | -------------------------------------------------------------- |
+| 1     | Gather diff + list modified files   | `main.py:gather_diff` + `@generative` slot                     |
+| 2     | Attack surface mapping              | Two-step `@generative` + `m.instruct(format=AttackSurfaceMap)` |
+| 3     | 11-item security checklist per file | `m.instruct(format=SecurityChecklist)`                         |
+| 4     | Per-issue verification              | `m.instruct(format=IssueVerdict)`                              |
+| 5     | Pre-conclusion audit + final report | `m.instruct(format=FindingsReport, requirements=[...])`        |
 
 ## Security checklist categories
 
@@ -73,9 +73,9 @@ See `SETUP.md` for install and configuration instructions.
 
 The pipeline accepts two optional callable parameters for deeper analysis:
 
-| Parameter | Default | Purpose |
-|---|---|---|
-| `search_fn` | stub (NotImplementedError) | Searches repo for test files covering a scenario |
+| Parameter      | Default                    | Purpose                                               |
+| -------------- | -------------------------- | ----------------------------------------------------- |
+| `search_fn`    | stub (NotImplementedError) | Searches repo for test files covering a scenario      |
 | `read_file_fn` | stub (NotImplementedError) | Reads surrounding file context for issue confirmation |
 
 Both stubs are handled gracefully — the pipeline falls back to diff-only analysis when they raise `NotImplementedError`. See `SETUP.md §8` for recommended implementations.

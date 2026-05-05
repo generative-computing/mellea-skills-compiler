@@ -3,22 +3,30 @@ from __future__ import annotations
 from typing import Callable
 
 from mellea import start_session
-from mellea.stdlib.sampling import RepairTemplateStrategy
 from mellea.backends.model_options import ModelOption
+from mellea.stdlib.sampling import RepairTemplateStrategy
 from pydantic import BaseModel
 
-from .config import BACKEND, MODEL_ID, PREFIX_TEXT, LOOP_BUDGET, SKIP_STYLISTIC_ISSUES, READ_ONLY_MODE
+from .config import (
+    BACKEND,
+    LOOP_BUDGET,
+    MODEL_ID,
+    PREFIX_TEXT,
+    READ_ONLY_MODE,
+    SKIP_STYLISTIC_ISSUES,
+)
+from .constrained_slots import read_file_fn as _default_read_file_fn
+from .constrained_slots import search_fn as _default_search_fn
+from .requirements import audit_completeness_req, no_invented_issues_req
 from .schemas import (
     AttackSurfaceMap,
     FileAttackSurface,
-    SecurityChecklist,
-    IssueVerdict,
-    IssueReport,
     FindingsReport,
+    IssueReport,
+    IssueVerdict,
+    SecurityChecklist,
 )
-from .slots import extract_modified_files, extract_attack_surface_raw
-from .requirements import audit_completeness_req, no_invented_issues_req
-from .constrained_slots import search_fn as _default_search_fn, read_file_fn as _default_read_file_fn
+from .slots import extract_attack_surface_raw, extract_modified_files
 
 
 ALL_CHECKLIST_CATEGORIES = [

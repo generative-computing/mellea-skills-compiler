@@ -7,22 +7,26 @@
 This skill uses `curl` to fetch weather data from wttr.in. Ensure `curl` is installed and available on `PATH` in the execution environment.
 
 **macOS**:
+
 ```bash
 curl --version   # likely pre-installed
 brew install curl  # upgrade if needed
 ```
 
 **Debian/Ubuntu**:
+
 ```bash
 sudo apt-get install -y curl
 ```
 
 **Alpine (Docker)**:
+
 ```bash
 apk add --no-cache curl
 ```
 
 **Verify**:
+
 ```bash
 curl -s "wttr.in/London?format=3"
 # Expected: London: ⛅  +14°C
@@ -56,6 +60,7 @@ ollama pull granite3.3:8b
 ```
 
 Verify:
+
 ```bash
 ollama list | grep granite
 ```

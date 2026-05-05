@@ -13,7 +13,6 @@ Please make sure to include any potentially useful information in the issue, so 
 - What SHA of Mellea Skills Compiler are you running? If this is not the latest SHA on the main branch, please try if the problem persists with the latest version.
 - Python versions
 
-
 ## Contributing a change
 
 Contributions to this project are [released][released] to the public under the project's [opensource license](https://github.com/generative-computing/mellea-skills-compiler/blob/main/LICENSE).
@@ -42,10 +41,12 @@ To run the checks on-demand, run:
 
 This repository uses IBM's [detect-secrets](https://github.com/ibm/detect-secrets) to scan for secrets before the code is pushed to GitHub. Follow installation instructions in their repository: https://github.com/ibm/detect-secrets?tab=readme-ov-file#example-usage
 
-To update the secrets database manually, install optional secrets dependency 
+To update the secrets database manually, install optional secrets dependency
+
 ```
 pip install -e ".[secrets]"
 ```
+
 then run:
 
 ```
@@ -59,8 +60,6 @@ detect-secrets audit .secrets.baseline
 ```
 
 If the pre-commit hook raises an error but the audit command succeeds with just `Nothing to audit!` then run `detect-secrets scan --update .secrets.baseline` to perform a full scan and then repeat the audit command.
-
-
 
 ## Submitting a pull request
 

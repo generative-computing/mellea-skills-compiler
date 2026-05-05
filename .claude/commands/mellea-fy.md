@@ -68,17 +68,17 @@ Run these steps in order. Each step has a dedicated sub-command with the full sp
 
 ## Sub-command reference
 
-| Sub-command | Covers | Key outputs |
-|---|---|---|
-| `/mellea-fy-classify` | Step 0: 5-axis classification | `classification.json` |
-| `/mellea-fy-inventory` | Steps 1a+1b: file scan + element tagging | `inventory.json` |
-| `/mellea-fy-map` | Step 2: tag → Mellea primitive routing | `element_mapping.json` |
-| `/mellea-fy-deps` | Step 2.5: dependency audit + disposition commit | `dependency_plan.json` |
-| `/mellea-fy-fixtures` | Step 4: fixture generation (after skeleton, before bodies) | `fixtures/` subpackage |
-| `/mellea-fy-generate` | Steps 3+5: skeleton emit + body generation | All Python files |
-| `/mellea-fy-artifacts` | Step 6: mapping report + melleafy.json + SKILL.md (if absent, non-.md sources) | `mapping_report.md`, `melleafy.json`, `SKILL.md` |
-| `/mellea-fy-validate` | Step 7: 14 formal lints | `step_7_report.json` |
-| `/mellea-fy-behaviours` | Reference: KB3–KB9, KB11 workarounds | (reference only — read before Step 4) |
+| Sub-command             | Covers                                                                         | Key outputs                                      |
+| ----------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------ |
+| `/mellea-fy-classify`   | Step 0: 5-axis classification                                                  | `classification.json`                            |
+| `/mellea-fy-inventory`  | Steps 1a+1b: file scan + element tagging                                       | `inventory.json`                                 |
+| `/mellea-fy-map`        | Step 2: tag → Mellea primitive routing                                         | `element_mapping.json`                           |
+| `/mellea-fy-deps`       | Step 2.5: dependency audit + disposition commit                                | `dependency_plan.json`                           |
+| `/mellea-fy-fixtures`   | Step 4: fixture generation (after skeleton, before bodies)                     | `fixtures/` subpackage                           |
+| `/mellea-fy-generate`   | Steps 3+5: skeleton emit + body generation                                     | All Python files                                 |
+| `/mellea-fy-artifacts`  | Step 6: mapping report + melleafy.json + SKILL.md (if absent, non-.md sources) | `mapping_report.md`, `melleafy.json`, `SKILL.md` |
+| `/mellea-fy-validate`   | Step 7: 14 formal lints                                                        | `step_7_report.json`                             |
+| `/mellea-fy-behaviours` | Reference: KB3–KB9, KB11 workarounds                                           | (reference only — read before Step 4)            |
 
 ## Intermediate artifacts
 
@@ -198,7 +198,7 @@ Examples: `weather` → `weather_mellea` | `security-review` → `security_revie
 
 **Rule OUT-5 — `.melleafy-partial/` on failure.** When a run fails (Step 7 lint failure or earlier halt), in-progress artifacts are preserved at `<skill-root>/.melleafy-partial/` — a sibling of `<package_name>/` within the skill root. Inspect this directory to debug the failure; it is safe to delete once the issue is resolved. Re-running after fixing will overwrite it.
 
-**Rule OUT-6 — Companion-directory mirror.** Companion directories at the skill root (`scripts/`, `references/`, `assets/`) are mirrored into `<package_name>/` at Step 3 (skeleton emission), *before* any code body generation. The skill-root copy is the source of truth (untouched by melleafy on subsequent runs); the package copy is treated as compiled output (regenerated each run). The mirror makes the package self-contained: any code inside `<package_name>/` that needs to invoke a bundled script or load a bundled reference MUST resolve the path package-relatively via `Path(__file__).parent / "<dir>/<file>"` — never via a user-supplied `repo_root` argument or the process working directory. Companion directories that are absent at the skill root are not created in the package. The pyproject.toml `[tool.setuptools.package-data]` section (Step 3) declares these directories so they are included in the installed wheel.
+**Rule OUT-6 — Companion-directory mirror.** Companion directories at the skill root (`scripts/`, `references/`, `assets/`) are mirrored into `<package_name>/` at Step 3 (skeleton emission), _before_ any code body generation. The skill-root copy is the source of truth (untouched by melleafy on subsequent runs); the package copy is treated as compiled output (regenerated each run). The mirror makes the package self-contained: any code inside `<package_name>/` that needs to invoke a bundled script or load a bundled reference MUST resolve the path package-relatively via `Path(__file__).parent / "<dir>/<file>"` — never via a user-supplied `repo_root` argument or the process working directory. Companion directories that are absent at the skill root are not created in the package. The pyproject.toml `[tool.setuptools.package-data]` section (Step 3) declares these directories so they are included in the installed wheel.
 
 ---
 
@@ -206,11 +206,11 @@ Examples: `weather` → `weather_mellea` | `security-review` → `security_revie
 
 Pass `--dependencies=<mode>` to control disposition elicitation:
 
-| Mode | Behavior |
-|---|---|
-| `auto` | Apply category default dispositions; print recap if any stubs result |
-| `ask` | Interactive terminal UI — approve/override each dependency |
-| `config:<path>` | Read dispositions from a JSON config file |
-| `strict` | Halt before writing files if any disposition would produce a stub |
+| Mode            | Behavior                                                             |
+| --------------- | -------------------------------------------------------------------- |
+| `auto`          | Apply category default dispositions; print recap if any stubs result |
+| `ask`           | Interactive terminal UI — approve/override each dependency           |
+| `config:<path>` | Read dispositions from a JSON config file                            |
+| `strict`        | Halt before writing files if any disposition would produce a stub    |
 
 Default: `auto`.

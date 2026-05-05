@@ -11,8 +11,14 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
-    from mellea_skills_compiler.export.exporter import AdapterFile, LoadedContext, ParsedSignature, TranslationPlan
+    from mellea_skills_compiler.export.exporter import (
+        AdapterFile,
+        LoadedContext,
+        ParsedSignature,
+        TranslationPlan,
+    )
 
 SUPPORTED_MODALITIES = {
     "synchronous_oneshot",

@@ -7,13 +7,14 @@ Fixture coverage:
 """
 from typing import Callable
 
-from .current_weather_city import make_current_weather_city
-from .rain_check_city import make_rain_check_city
-from .week_forecast import make_week_forecast
 from .airport_code_lookup import make_airport_code_lookup
+from .current_weather_city import make_current_weather_city
+from .detailed_conditions_city import make_detailed_conditions_city
 from .out_of_scope_historical import make_out_of_scope_historical
 from .query_no_location import make_query_no_location
-from .detailed_conditions_city import make_detailed_conditions_city
+from .rain_check_city import make_rain_check_city
+from .week_forecast import make_week_forecast
+
 
 ALL_FIXTURES: list[Callable] = [
     make_current_weather_city,
