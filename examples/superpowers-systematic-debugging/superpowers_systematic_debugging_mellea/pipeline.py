@@ -1,10 +1,9 @@
 from typing import Optional
 
-from pydantic import BaseModel, Field
-
 from mellea import start_session
 from mellea.backends.model_options import ModelOption
 from mellea.stdlib.sampling import RepairTemplateStrategy
+from pydantic import BaseModel, Field
 
 from .config import BACKEND, LOOP_BUDGET, MAX_FIX_ATTEMPTS, MODEL_ID, PREFIX_TEXT
 from .requirements import (

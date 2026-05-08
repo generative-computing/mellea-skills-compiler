@@ -10,11 +10,11 @@ Generated pipelines MUST include these workarounds. Re-test after upgrading mell
 
 Every KB entry ends with a citation marker indicating how the claim was established. When upgrading mellea, re-verify entries marked `**Verified**:` or `**Status**: empirically observed` — these have no stable external anchor.
 
-| Marker | Meaning |
-|---|---|
-| `**Ref**: <url>` | Covered by official mellea docs. Verify by reading the linked page. |
+| Marker                                               | Meaning                                                                      |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `**Ref**: <url>`                                     | Covered by official mellea docs. Verify by reading the linked page.          |
 | `**Verified**: mellea X.Y.Z source — <file>:<lines>` | Established by reading mellea source. Version-pinned — re-verify on upgrade. |
-| `**Status**: empirically observed` | Observed at runtime, no doc or source anchor. Treat as fragile. |
+| `**Status**: empirically observed`                   | Observed at runtime, no doc or source anchor. Treat as fragile.              |
 
 ---
 
@@ -38,6 +38,7 @@ def _safe_parse_with_fallback(thunk, model_class: type[BaseModel], **fallback_kw
 ```
 
 **Correct pattern**:
+
 ```python
 intent_thunk = m.instruct(
     "Classify this query.",
@@ -49,6 +50,7 @@ intent = _safe_parse_with_fallback(intent_thunk, IntentSchema, query_type="out_o
 ```
 
 **Wrong patterns** (all raise `AttributeError` at runtime):
+
 ```python
 thunk = m.instruct(..., format=IntentSchema)
 thunk.query_type        # AttributeError
@@ -79,6 +81,7 @@ When the LLM generates JSON for a complex Pydantic schema with large `grounding_
 When passing a function directly to `validation_fn=`, the function receives a `Context` object, NOT a plain string. Calling `.lower()`, `.split()`, etc. directly on it fails with `AttributeError`.
 
 **Pattern A — RECOMMENDED**: Use `simple_validate()` wrapper:
+
 ```python
 from mellea.stdlib.requirements import simple_validate
 
@@ -88,6 +91,7 @@ req("Must mention security", validation_fn=simple_validate(
 ```
 
 **Pattern B — raw validator**: accept `Context` and result string explicitly:
+
 ```python
 def my_validator(ctx: Context, result: str) -> ValidationResult:
     if "security" not in result.lower():
@@ -108,12 +112,14 @@ Generated pipelines should prefer Pattern A for all structural validators in `re
 When `m.instruct(format=Model)` is used with `requirements=`, the `simple_validate()` lambda receives the **serialized JSON text** (e.g., `{"query_type": "current", "location": "Dublin"}`), not the parsed Pydantic model.
 
 **Anti-pattern checklist for `format=` validators**:
+
 1. **Field-name collision**: checking `"fix" in x` when the schema has a `fix: str` field always passes.
 2. **Length on whole string**: `len(x) > N` measures the entire JSON blob, not field content.
 3. **Line-splitting JSON**: `x.split("\n")` is unreliable — JSON may be compact or pretty-printed.
 4. **Substring matching for enum values**: `"approve" in x` also matches `"approve_with_suggestions"`.
 
 **Correct pattern** — parse the JSON and check actual fields:
+
 ```python
 import json as _json
 
@@ -134,6 +140,7 @@ finding_location_req = req(
 ```
 
 **Alternative** — validate after parsing in pipeline.py (preferred for complex checks):
+
 ```python
 report = _parse_instruct_result(report_thunk, SecurityReport)
 empty_fixes = [f for f in report.findings if not f.fix.strip()]
@@ -150,6 +157,7 @@ empty_fixes = [f for f in report.findings if not f.fix.strip()]
 After generating N objects with schema A in the same session, the LLM may be unable to switch to schema B. **MUST use separate `start_session()` calls** for each distinct BaseModel format type.
 
 **Self-check rules**:
+
 1. **One BaseModel type per session** — if the session uses `format=ModelA`, no other BaseModel type appears in the same session.
 2. `list[ModelA]` and `ModelA` are the same type for priming purposes.
 3. Multiple `@generative` slots returning the same type are safe in one session.
@@ -195,6 +203,7 @@ severity = classify_severity(m1, ...)             # ClassifySeverityResponse —
 Declaring any of these raises `ValueError: cannot create a generative slot with disallowed parameter names`. Use domain-specific names instead — for any forbidden name, choose a domain-specific alternative (e.g. `surrounding_context`, `finding_context`, `source_text`, `doc_context` in place of `context`; `run_args`, `run_kwargs` in place of `f_args`, `f_kwargs`).
 
 **Correct definition pattern** — domain-specific parameters only; body is `...`:
+
 ```python
 @generative
 def classify_check_mode(input_text: str, mode_hint: str = "auto") -> str:
@@ -203,6 +212,7 @@ def classify_check_mode(input_text: str, mode_hint: str = "auto") -> str:
 ```
 
 **Correct calling pattern** — `m` passed as first positional argument at call time, NOT declared:
+
 ```python
 with start_session(BACKEND, MODEL_ID) as m:
     result = classify_check_mode(m, input_text=text)
@@ -281,6 +291,7 @@ When a `m.instruct(format=IntentSchema)` call in a P2 pipeline includes `Optiona
 A `Field(description=...)` that merely names the field (e.g. `"Order number, if applicable."`) is insufficient — it describes what the field holds but does not instruct the model to extract it. The model is left free to ask instead.
 
 **Anti-pattern**:
+
 ```python
 class BookingIntent(BaseModel):
     destination: str
@@ -288,6 +299,7 @@ class BookingIntent(BaseModel):
 ```
 
 **Correct pattern** — extraction instruction with three elements: name the source, specify the action, prohibit re-asking:
+
 ```python
 from typing import Optional
 from pydantic import BaseModel, Field

@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 from .config import SCORE_CRITICAL, SCORE_HIGH, SCORE_WARNING
 from .schemas import SeverityLevel, ThreatFinding
 
+
 # === C2: Operating Rules — Detection Pattern Constants ===
 # These mirror the arrays in scripts/clawdefender.sh for reference.
 # Actual pattern matching is performed by the bundled bash scripts.

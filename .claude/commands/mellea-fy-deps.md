@@ -29,6 +29,7 @@ If generation mode is `ask`: display a terminal UI (using `rich`) for each depen
 If generation mode is `config:<path>`: read the JSON config file. The config format mirrors `dependency_plan.json:plan[]` — a list of `{entry_id, disposition, override_rationale}` objects. Apply overrides to the audit results.
 
 **Available override dispositions**:
+
 - `bundle` — embed the dependency value directly in generated code (as a `config.py` constant)
 - `real_impl` — generate real Python implementation (HTTP call, SDK usage, etc.)
 - `stub` — generate a `NotImplementedError` stub for the user to implement
@@ -76,6 +77,7 @@ Write `dependency_plan.json` combining audit results with any user overrides.
 ### 2.5d: Amend element_mapping.json
 
 For each entry in `dependency_plan.json` with a non-default disposition, amend the corresponding entries in `element_mapping.json`:
+
 - Update `final_target_file` from `"pending_step_2.5"` to the actual target (`tools.py`, `constrained_slots.py`, or `fixtures/mock_tools.py`)
 - Record the amendment in `intermediate/element_mapping_amendments.json` for audit
 
@@ -94,9 +96,13 @@ Expected JSON shape when grounding is available:
   "format_version": "1.0",
   "mellea_version": "<installed version>",
   "grounding_unavailable": false,
-  "modules": { "<module.name>": { "<symbol>": { "signature": "<symbol(...)>" } } },
+  "modules": {
+    "<module.name>": { "<symbol>": { "signature": "<symbol(...)>" } }
+  },
   "forbidden_param_names": ["f_args", "f_kwargs", "m", "..."],
-  "compatibility": [ /* entries from .claude/data/compatibility.yaml filtered to mellea_version */ ]
+  "compatibility": [
+    /* entries from .claude/data/compatibility.yaml filtered to mellea_version */
+  ]
 }
 ```
 
@@ -111,8 +117,15 @@ When `mellea` is not installed the compile pipeline writes the `grounding_unavai
   "grounding_unavailable": true,
   "modules": {},
   "forbidden_param_names": [
-    "f_args", "f_kwargs", "m", "context", "backend",
-    "model_options", "strategy", "precondition_requirements", "requirements"
+    "f_args",
+    "f_kwargs",
+    "m",
+    "context",
+    "backend",
+    "model_options",
+    "strategy",
+    "precondition_requirements",
+    "requirements"
   ],
   "compatibility": []
 }
@@ -180,20 +193,20 @@ The known doc pages from the navigation (as of 2026-04-28 — also imported by `
 
 ## Category default dispositions
 
-| Category | Default disposition | Rationale |
-|---|---|---|
-| C1 Identity | `bundle` | Persona text is always embedded in `config.py:PREFIX_TEXT` |
-| C2 Operating rules | `bundle` | Rules are embedded as docstring guidance or config constants |
-| C3 User facts (stable) | `bundle` | Stable facts go into config or grounding_context |
-| C3 User facts (overridable) | `external_input` | Overridable facts become CLI flags |
-| C4 Short-term state | `delegate_to_runtime` | Session state is provided by the host's session management |
-| C5 Long-term memory | `delegate_to_runtime` | Memory backends are runtime-specific (Letta, pgvector, Chroma) |
-| C6 Tools (HTTP/API with concrete endpoint) | `real_impl` | Concrete endpoints can be implemented immediately |
-| C6 Tools (abstract/capability-described) | `stub` | Abstract tools need user implementation |
-| C7 Credentials | `external_input` | Secrets always come from environment variables at runtime |
-| C8 Runtime environment | `bundle` | Model ID and backend go into config; packages into pyproject.toml. **`BACKEND` and `MODEL_ID` values are provided by the compile pipeline via the system prompt** (sourced from `.claude/data/runtime_defaults.json`, with optional `--backend` / `--model-id` CLI overrides). Use the values exactly as injected; do not invent alternatives. The Step 7 `runtime-defaults-bound` lint enforces consistency by comparing `config.py` against `<package_name>/intermediate/runtime_directive.json`. |
-| C9 Scheduling/triggers | `delegate_to_runtime` | Cron, webhooks, and event loops are host-provided |
-| Cross-reference elements | `remove` | Pure cross-reference artifacts produce no code |
+| Category                                   | Default disposition   | Rationale                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------ | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1 Identity                                | `bundle`              | Persona text is always embedded in `config.py:PREFIX_TEXT`                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| C2 Operating rules                         | `bundle`              | Rules are embedded as docstring guidance or config constants                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| C3 User facts (stable)                     | `bundle`              | Stable facts go into config or grounding_context                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| C3 User facts (overridable)                | `external_input`      | Overridable facts become CLI flags                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| C4 Short-term state                        | `delegate_to_runtime` | Session state is provided by the host's session management                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| C5 Long-term memory                        | `delegate_to_runtime` | Memory backends are runtime-specific (Letta, pgvector, Chroma)                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| C6 Tools (HTTP/API with concrete endpoint) | `real_impl`           | Concrete endpoints can be implemented immediately                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| C6 Tools (abstract/capability-described)   | `stub`                | Abstract tools need user implementation                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| C7 Credentials                             | `external_input`      | Secrets always come from environment variables at runtime                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| C8 Runtime environment                     | `bundle`              | Model ID and backend go into config; packages into pyproject.toml. **`BACKEND` and `MODEL_ID` values are provided by the compile pipeline via the system prompt** (sourced from `.claude/data/runtime_defaults.json`, with optional `--backend` / `--model-id` CLI overrides). Use the values exactly as injected; do not invent alternatives. The Step 7 `runtime-defaults-bound` lint enforces consistency by comparing `config.py` against `<package_name>/intermediate/runtime_directive.json`. |
+| C9 Scheduling/triggers                     | `delegate_to_runtime` | Cron, webhooks, and event loops are host-provided                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Cross-reference elements                   | `remove`              | Pure cross-reference artifacts produce no code                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 ---
 
@@ -217,6 +230,7 @@ Re-run with --dependencies=ask to review defaults interactively.
 ### `ask`
 
 Display a rich terminal UI for each dependency entry. For each entry:
+
 - Show the element's `content_summary` and `source_lines`
 - Show the default disposition with a one-line explanation of why
 - List available alternative dispositions
@@ -238,16 +252,16 @@ Exit code 10 is distinct from all generated package exit codes (0–4) and from 
 
 ## Disposition effects on generated code
 
-| Disposition | `tools.py` | `constrained_slots.py` | `config.py` / other | `SETUP.md` mention |
-|---|---|---|---|---|
-| `real_impl` | Full implementation | — | — | Only if prerequisites needed |
-| `stub` | — | `NotImplementedError` stub with instructions | — | Yes — §8 lists stubs to implement |
-| `mock` | — | — | `fixtures/mock_tools.py` (mock) | Only in fixture docs |
-| `delegate_to_runtime` | — | — | — | Yes — §4–§7 explains the backend |
-| `external_input` | — | — | — | Yes — §2 (C7) or §3 (C8) with env var setup |
-| `load_from_disk` | — | — | `loader.py` loads from `<package_dir>/references/` (Rule OUT-6 mirror) via `Path(__file__).parent / "references" / ...` | Yes — §1 with download commands |
-| `bundle` | — | — | Constant in `config.py` | No |
-| `remove` | — | — | — | No |
+| Disposition           | `tools.py`          | `constrained_slots.py`                       | `config.py` / other                                                                                                     | `SETUP.md` mention                          |
+| --------------------- | ------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `real_impl`           | Full implementation | —                                            | —                                                                                                                       | Only if prerequisites needed                |
+| `stub`                | —                   | `NotImplementedError` stub with instructions | —                                                                                                                       | Yes — §8 lists stubs to implement           |
+| `mock`                | —                   | —                                            | `fixtures/mock_tools.py` (mock)                                                                                         | Only in fixture docs                        |
+| `delegate_to_runtime` | —                   | —                                            | —                                                                                                                       | Yes — §4–§7 explains the backend            |
+| `external_input`      | —                   | —                                            | —                                                                                                                       | Yes — §2 (C7) or §3 (C8) with env var setup |
+| `load_from_disk`      | —                   | —                                            | `loader.py` loads from `<package_dir>/references/` (Rule OUT-6 mirror) via `Path(__file__).parent / "references" / ...` | Yes — §1 with download commands             |
+| `bundle`              | —                   | —                                            | Constant in `config.py`                                                                                                 | No                                          |
+| `remove`              | —                   | —                                            | —                                                                                                                       | No                                          |
 
 > **Rule 2.5-2 — Bundled-asset path resolution (Rule OUT-6 alignment)**: when a `real_impl` C6 implementation invokes a script or binary mirrored from the skill root into `<package_dir>/scripts/...`, or when a `load_from_disk` C3 implementation reads a mirrored reference under `<package_dir>/references/...`, the generated code MUST resolve the path package-relatively via `Path(__file__).parent / "<dir>/<file>"`. Never use `Path(repo_root) / ...`, never rely on the process working directory, and never accept the path via a function argument that the caller is expected to fill. The mirror at `<package_dir>/<dir>/` is established by Step 3a-pre (see `mellea-fy-generate.md`). This invariant is what lets `pip install`-ed packages and packages invoked from arbitrary directories find their bundled assets.
 

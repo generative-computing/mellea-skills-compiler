@@ -1,5 +1,6 @@
 from mellea.stdlib.requirements import check, req
 
+
 # C2 Operating Rules — Iron Law: root cause before fix
 # Applies to all output-generating calls that could propose fixes.
 require_root_cause_before_fix = req(

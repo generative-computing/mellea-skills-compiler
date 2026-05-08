@@ -22,7 +22,7 @@ No. This is a **research preview** (v0.1). The pipeline works end-to-end and pro
 
 ### What is Mellea named after?
 
-Mellea is named after the honey mushroom (*Armillaria mellea*) — a metaphor for the typed, structured generative programs the library produces.
+Mellea is named after the honey mushroom (_Armillaria mellea_) — a metaphor for the typed, structured generative programs the library produces.
 
 ---
 
@@ -95,13 +95,13 @@ See [`mellea-fy-inventory.md`](src/mellea_skills_compiler/compile/claude/command
 
 Skills fall into distinct patterns based on how they use LLM generation and tools:
 
-| Pattern | Description | Example skills |
-|---|---|---|
-| **Generative artifact** | Intent → structured output via multi-phase LLM generation | `checklist`, `anthropic-doc-coauthoring` |
-| **Deterministic tool dispatch** | LLM classifies intent, then deterministic code executes the action | `weather`, `slack` |
-| **Analytical pipeline** | Input → structured analysis via domain-specific extraction | `sentry-find-bugs`, `dstiliadis-security-review` |
-| **Constrained reasoning** | Hypothesis-driven multi-phase investigation with conditional branching | `superpowers-systematic-debugging` |
-| **Adversarial classification** | Refuse + label rather than generate | `clawdefender` |
+| Pattern                         | Description                                                            | Example skills                                   |
+| ------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------ |
+| **Generative artifact**         | Intent → structured output via multi-phase LLM generation              | `checklist`, `anthropic-doc-coauthoring`         |
+| **Deterministic tool dispatch** | LLM classifies intent, then deterministic code executes the action     | `weather`, `slack`                               |
+| **Analytical pipeline**         | Input → structured analysis via domain-specific extraction             | `sentry-find-bugs`, `dstiliadis-security-review` |
+| **Constrained reasoning**       | Hypothesis-driven multi-phase investigation with conditional branching | `superpowers-systematic-debugging`               |
+| **Adversarial classification**  | Refuse + label rather than generate                                    | `clawdefender`                                   |
 
 ### Does decomposition always help?
 
@@ -119,16 +119,16 @@ When a skill spec is decomposed into independent typed slots, contradictions tha
 
 During Step 2.5 of compilation (Dependency Audit), every external dependency the spec references — credentials, tools, runtime backends, scheduling triggers — is classified into one of nine categories (C1–C9) and assigned a **disposition** that decides how the compiler handles it:
 
-| Disposition | Meaning |
-|---|---|
-| `bundle` | Embed the value directly in `config.py` (e.g., persona text, model ID) |
-| `real_impl` | Generate a real Python implementation (e.g., HTTP call to a known endpoint) |
-| `stub` | Generate a `NotImplementedError` placeholder for the user to fill in |
-| `mock` | Generate a mock implementation in `fixtures/mock_tools.py` (test/demo only) |
-| `delegate_to_runtime` | The host runtime provides this (session state, memory backends) |
-| `external_input` | Supply at invocation time as a CLI flag or environment variable |
-| `load_from_disk` | Read from a local file at runtime (reference docs, config files) |
-| `remove` | Source element produces no code (cross-reference artifacts) |
+| Disposition           | Meaning                                                                     |
+| --------------------- | --------------------------------------------------------------------------- |
+| `bundle`              | Embed the value directly in `config.py` (e.g., persona text, model ID)      |
+| `real_impl`           | Generate a real Python implementation (e.g., HTTP call to a known endpoint) |
+| `stub`                | Generate a `NotImplementedError` placeholder for the user to fill in        |
+| `mock`                | Generate a mock implementation in `fixtures/mock_tools.py` (test/demo only) |
+| `delegate_to_runtime` | The host runtime provides this (session state, memory backends)             |
+| `external_input`      | Supply at invocation time as a CLI flag or environment variable             |
+| `load_from_disk`      | Read from a local file at runtime (reference docs, config files)            |
+| `remove`              | Source element produces no code (cross-reference artifacts)                 |
 
 In `auto` mode (the default), the compiler picks dispositions from a fixed table per category. In `ask` mode, the compiler walks the user through each dependency interactively at compile time.
 
@@ -193,11 +193,11 @@ Repair operates on the same skill directory as the original compile — point it
 
 Each NIST or Credo governance action is classified against the pipeline's runtime capabilities using a static YAML mapping under [`src/mellea_skills_compiler/certification/data/`](src/mellea_skills_compiler/certification/data/):
 
-| Classification | Meaning |
-|---|---|
-| **AUTOMATED** | 2+ implemented pipeline controls cover this requirement |
-| **PARTIAL** | 1 implemented control, but organisational process also needed |
-| **MANUAL** | Requires organisational process beyond technical instrumentation |
+| Classification | Meaning                                                          |
+| -------------- | ---------------------------------------------------------------- |
+| **AUTOMATED**  | 2+ implemented pipeline controls cover this requirement          |
+| **PARTIAL**    | 1 implemented control, but organisational process also needed    |
+| **MANUAL**     | Requires organisational process beyond technical instrumentation |
 
 ---
 
@@ -207,11 +207,11 @@ Each NIST or Credo governance action is classified against the pipeline's runtim
 
 Yes — there is an experimental `mellea-skills export <package_path> <target>` subcommand on the [`export-pipeline`](../../tree/export-pipeline) branch (landing on `main` shortly) targeting three harnesses:
 
-| Target | Status | Output |
-|---|---|---|
-| **LangGraph** | Experimental | `graph.py`, `state.py`, `langgraph.json`, `pyproject.toml`, `README.md`. Async node wraps `run_pipeline` via `asyncio.to_thread`; modality-aware (streaming, conversational session, scheduled, event-triggered, heartbeat). |
-| **Claude Code** | Experimental | `SKILL.md`, `scripts/run.sh`, `pyproject.toml`, `README.md`. Bash entry point shells out to the bundled Python pipeline. |
-| **MCP** (Model Context Protocol) | Experimental | `server.py` (FastMCP), `mcp.json`, `pyproject.toml`, `README.md`. One `@mcp.tool()` per pipeline entry; sync or async based on modality. |
+| Target                           | Status       | Output                                                                                                                                                                                                                       |
+| -------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **LangGraph**                    | Experimental | `graph.py`, `state.py`, `langgraph.json`, `pyproject.toml`, `README.md`. Async node wraps `run_pipeline` via `asyncio.to_thread`; modality-aware (streaming, conversational session, scheduled, event-triggered, heartbeat). |
+| **Claude Code**                  | Experimental | `SKILL.md`, `scripts/run.sh`, `pyproject.toml`, `README.md`. Bash entry point shells out to the bundled Python pipeline.                                                                                                     |
+| **MCP** (Model Context Protocol) | Experimental | `server.py` (FastMCP), `mcp.json`, `pyproject.toml`, `README.md`. One `@mcp.tool()` per pipeline entry; sync or async based on modality.                                                                                     |
 
 The compiled Mellea package is bundled inside each export so the result is self-contained.
 
@@ -223,7 +223,7 @@ The exporter runs end-to-end and is covered by tests, but output file layouts, a
 
 ### What about other harnesses (OpenClaw, NanoClaw, CrewAI, Letta, AutoGen, smolagents, OpenAI Agents SDK)?
 
-Not currently export targets. The compiler can detect some of these as input dialects (see [`mellea-fy-inventory.md`](src/mellea_skills_compiler/compile/claude/commands/mellea-fy-inventory.md)) — that lets you compile a skill *from* one of those formats, not export *to* it. If you need to run a compiled skill under one of these harnesses today, you write the wrapper yourself. Adding more native export targets is roadmap, not a current feature.
+Not currently export targets. The compiler can detect some of these as input dialects (see [`mellea-fy-inventory.md`](src/mellea_skills_compiler/compile/claude/commands/mellea-fy-inventory.md)) — that lets you compile a skill _from_ one of those formats, not export _to_ it. If you need to run a compiled skill under one of these harnesses today, you write the wrapper yourself. Adding more native export targets is roadmap, not a current feature.
 
 ---
 

@@ -12,12 +12,13 @@ Fixture coverage (R16 — exercises C1, C2, C3, C8 = 4 distinct C-categories):
 """
 from typing import Callable
 
-from .simple_type_error import make_simple_type_error
-from .test_failure_after_refactor import make_test_failure_after_refactor
-from .working_example_comparison import make_working_example_comparison
 from .architectural_issue_detected import make_architectural_issue_detected
 from .intermittent_import_failure import make_intermittent_import_failure
 from .minimal_description_only import make_minimal_description_only
+from .simple_type_error import make_simple_type_error
+from .test_failure_after_refactor import make_test_failure_after_refactor
+from .working_example_comparison import make_working_example_comparison
+
 
 ALL_FIXTURES: list[Callable] = [
     make_simple_type_error,

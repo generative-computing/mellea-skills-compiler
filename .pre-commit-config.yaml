@@ -1,17 +1,32 @@
 repos:
+  - repo: https://github.com/ibm/detect-secrets
+    # Running "pre-commit autoupdate" automatically updates rev to latest tag
+    rev: 0.13.1+ibm.64.dss
+    hooks:
+      - id: detect-secrets # pragma: whitelist secret
+        # Add options for detect-secrets-hook binary. You can run `detect-secrets-hook --help` to list out all possible options.
+        # You may also run `pre-commit run detect-secrets` to preview the scan result.
+        # when "--baseline" without "--use-all-plugins", pre-commit scan with just plugins in baseline file
+        # when "--baseline" with "--use-all-plugins", pre-commit scan with all available plugins
+        # add "--fail-on-unaudited" to fail pre-commit for unaudited potential secrets
+        args: [ --baseline, .secrets.baseline, --use-all-plugins]
+        additional_dependencies: [boxsdk<4]
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v3.2.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
+        exclude: ^(skills/|examples/)
       - id: end-of-file-fixer
+        exclude: ^(skills/|examples/)
   - repo: https://github.com/pycqa/isort
-    rev: 5.12.0
+    rev: 9.0.0a3
     hooks:
       - id: isort
         name: isort (python)
-        args: ["--profile", "black", "--filter-files"]
+        exclude: ^(skills/|examples/)
   - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0
+    rev: v4.0.0-alpha.8
     hooks:
       - id: prettier
         types_or: [markdown]
+        exclude: ^(skills/|examples/)

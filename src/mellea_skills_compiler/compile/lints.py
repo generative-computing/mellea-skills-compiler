@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
+
 _BUNDLED_DIRS = ("scripts", "references", "assets")
 
 

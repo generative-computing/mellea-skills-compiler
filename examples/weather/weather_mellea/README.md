@@ -45,21 +45,22 @@ print(result)
 
 ## Supported Query Types
 
-| Query type | Example | wttr.in endpoint |
-|---|---|---|
-| `current_summary` | "What's the weather in X?" | `?format=%l:+%c+%t+(feels+like+%f),+%w+wind,+%h+humidity` |
-| `current_detailed` | "Detailed conditions in X" | `?0` |
-| `forecast_3day` | "3-day forecast for X" | (default view) |
-| `forecast_week` | "Week forecast for X" | `?format=v2` |
-| `forecast_day0` | "Today's weather in X" | `?0` |
-| `forecast_day1` | "Tomorrow's weather in X" | `?1` |
-| `forecast_day2` | "Weather in X day after tomorrow" | `?2` |
-| `json_output` | "JSON weather data for X" | `?format=j1` |
-| `rain_check` | "Will it rain in X?" | `?format=%l:+%c+%p` |
+| Query type         | Example                           | wttr.in endpoint                                          |
+| ------------------ | --------------------------------- | --------------------------------------------------------- |
+| `current_summary`  | "What's the weather in X?"        | `?format=%l:+%c+%t+(feels+like+%f),+%w+wind,+%h+humidity` |
+| `current_detailed` | "Detailed conditions in X"        | `?0`                                                      |
+| `forecast_3day`    | "3-day forecast for X"            | (default view)                                            |
+| `forecast_week`    | "Week forecast for X"             | `?format=v2`                                              |
+| `forecast_day0`    | "Today's weather in X"            | `?0`                                                      |
+| `forecast_day1`    | "Tomorrow's weather in X"         | `?1`                                                      |
+| `forecast_day2`    | "Weather in X day after tomorrow" | `?2`                                                      |
+| `json_output`      | "JSON weather data for X"         | `?format=j1`                                              |
+| `rain_check`       | "Will it rain in X?"              | `?format=%l:+%c+%p`                                       |
 
 ## Out-of-scope queries
 
 The skill rejects and redirects:
+
 - Historical weather data
 - Climate analysis or trends
 - Hyper-local microclimate data

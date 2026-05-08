@@ -15,6 +15,7 @@ from typing import Any, Optional
 
 from packaging.version import Version
 
+
 EXPORT_VERSION = "0.1.0"
 MIN_MANIFEST_VERSION = Version("1.0.0")
 
@@ -275,7 +276,9 @@ def stage3_translate(loaded: LoadedContext) -> TranslationPlan:
         from mellea_skills_compiler.export.targets.langgraph import translate_langgraph
         return translate_langgraph(loaded)
     elif loaded.invocation.target == "claude-code":
-        from mellea_skills_compiler.export.targets.claude_code import translate_claude_code
+        from mellea_skills_compiler.export.targets.claude_code import (
+            translate_claude_code,
+        )
         return translate_claude_code(loaded)
     elif loaded.invocation.target == "mcp":
         from mellea_skills_compiler.export.targets.mcp import translate_mcp

@@ -12,9 +12,9 @@ The model emits JSON conforming to the schema; a deterministic Python writer rea
 JSON and renders the final artifact (Python source, multiple files, etc.). The schema
 prevents shape drift in the LLM's output before any rendering happens.
 
-| Schema | Writer | Renders |
-|---|---|---|
-| `config_emission.schema.json` | `.claude/melleafy/writers/config_writer.py` | `config.py` |
+| Schema                          | Writer                                        | Renders                                  |
+| ------------------------------- | --------------------------------------------- | ---------------------------------------- |
+| `config_emission.schema.json`   | `.claude/melleafy/writers/config_writer.py`   | `config.py`                              |
 | `fixtures_emission.schema.json` | `.claude/melleafy/writers/fixtures_writer.py` | `fixtures/*.py` + `fixtures/__init__.py` |
 
 ### Intermediate contracts
@@ -22,13 +22,13 @@ prevents shape drift in the LLM's output before any rendering happens.
 The model emits JSON conforming to the schema; the next melleafy step reads the JSON.
 These schemas formalise the contracts between Steps 0 → 1b → 2 → 2.5 → 6.
 
-| Schema | Source doc | Documents |
-|---|---|---|
-| `classification.schema.json` | `mellea-fy-classify.md` | `intermediate/classification.json` (Step 0) |
-| `inventory.schema.json` | `mellea-fy-inventory.md` | `intermediate/inventory.json` (Step 1b) |
-| `element_mapping.schema.json` | `mellea-fy-map.md` | `intermediate/element_mapping.json` (Step 2) |
-| `dependency_plan.schema.json` | `mellea-fy-deps.md` | `intermediate/dependency_plan.json` (Step 2.5c) |
-| `melleafy.schema.json` | `mellea-fy-artifacts.md` + `mellea-fy-generate.md` | `melleafy.json` (Step 3 skeleton + Step 6 finalisation) |
+| Schema                        | Source doc                                         | Documents                                               |
+| ----------------------------- | -------------------------------------------------- | ------------------------------------------------------- |
+| `classification.schema.json`  | `mellea-fy-classify.md`                            | `intermediate/classification.json` (Step 0)             |
+| `inventory.schema.json`       | `mellea-fy-inventory.md`                           | `intermediate/inventory.json` (Step 1b)                 |
+| `element_mapping.schema.json` | `mellea-fy-map.md`                                 | `intermediate/element_mapping.json` (Step 2)            |
+| `dependency_plan.schema.json` | `mellea-fy-deps.md`                                | `intermediate/dependency_plan.json` (Step 2.5c)         |
+| `melleafy.schema.json`        | `mellea-fy-artifacts.md` + `mellea-fy-generate.md` | `melleafy.json` (Step 3 skeleton + Step 6 finalisation) |
 
 ## Conventions
 

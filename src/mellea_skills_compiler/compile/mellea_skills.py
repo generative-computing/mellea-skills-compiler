@@ -37,6 +37,7 @@ from mellea_skills_compiler.enums import (
 from mellea_skills_compiler.toolkit.file_utils import parse_spec_file
 from mellea_skills_compiler.toolkit.logging import configure_logger
 
+
 LOGGER = configure_logger()
 console = Console(log_time=True)
 

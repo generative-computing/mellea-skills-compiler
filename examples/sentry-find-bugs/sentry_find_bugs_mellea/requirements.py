@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json as _json
 
-from mellea.stdlib.requirements import req, check, simple_validate
+from mellea.stdlib.requirements import check, req, simple_validate
 
 
 def _validate_audit_completeness(output: str) -> bool:

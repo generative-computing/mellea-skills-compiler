@@ -257,7 +257,7 @@ log_finding() {
     local module="$2"
     local message="$3"
     local score="$4"
-    
+
     case "$severity" in
         critical)
             echo -e "${RED}🔴 CRITICAL [$module]:${NC} $message (score: $score)"
@@ -279,7 +279,7 @@ check_patterns() {
     local -n patterns=$2
     local module="$3"
     local base_score="$4"
-    
+
     local found=0
     for pattern in "${patterns[@]}"; do
         if echo "$input" | grep -qiE -- "$pattern"; then
@@ -309,7 +309,7 @@ validate_prompt_injection() {
     local input="$1"
     local findings=""
     local max_score=0
-    
+
     # Check critical patterns
     for pattern in "${PROMPT_INJECTION_CRITICAL[@]}"; do
         if echo "$input" | grep -qiE -- "$pattern"; then
@@ -317,7 +317,7 @@ validate_prompt_injection() {
             max_score=$SCORE_CRITICAL
         fi
     done
-    
+
     # Check warning patterns
     for pattern in "${PROMPT_INJECTION_WARNING[@]}"; do
         if echo "$input" | grep -qiE -- "$pattern"; then
@@ -325,7 +325,7 @@ validate_prompt_injection() {
             [ $SCORE_WARNING -gt $max_score ] && max_score=$SCORE_WARNING
         fi
     done
-    
+
     echo -e "$findings"
     return $max_score
 }
@@ -334,14 +334,14 @@ validate_command_injection() {
     local input="$1"
     local findings=""
     local max_score=0
-    
+
     for pattern in "${COMMAND_INJECTION[@]}"; do
         if echo "$input" | grep -qiE -- "$pattern"; then
             findings+="command_injection|$pattern|critical|$SCORE_CRITICAL\n"
             max_score=$SCORE_CRITICAL
         fi
     done
-    
+
     echo -e "$findings"
     return $max_score
 }
@@ -350,14 +350,14 @@ validate_credential_exfil() {
     local input="$1"
     local findings=""
     local max_score=0
-    
+
     for pattern in "${CREDENTIAL_EXFIL[@]}"; do
         if echo "$input" | grep -qiE -- "$pattern"; then
             findings+="credential_exfil|$pattern|critical|$SCORE_CRITICAL\n"
             max_score=$SCORE_CRITICAL
         fi
     done
-    
+
     echo -e "$findings"
     return $max_score
 }
@@ -366,13 +366,13 @@ validate_url() {
     local url="$1"
     local findings=""
     local max_score=0
-    
+
     # Check if allowed domain
     if is_allowed_domain "$url"; then
         echo ""
         return 0
     fi
-    
+
     # Check SSRF patterns
     for pattern in "${SSRF_PATTERNS[@]}"; do
         if echo "$url" | grep -qiE -- "$pattern"; then
@@ -380,7 +380,7 @@ validate_url() {
             max_score=$SCORE_CRITICAL
         fi
     done
-    
+
     echo -e "$findings"
     return $max_score
 }
@@ -389,14 +389,14 @@ validate_path_traversal() {
     local input="$1"
     local findings=""
     local max_score=0
-    
+
     for pattern in "${PATH_TRAVERSAL[@]}"; do
         if echo "$input" | grep -qiE -- "$pattern"; then
             findings+="path_traversal|$pattern|high|$SCORE_HIGH\n"
             max_score=$SCORE_HIGH
         fi
     done
-    
+
     echo -e "$findings"
     return $max_score
 }
@@ -411,30 +411,30 @@ validate_input() {
     local all_findings=""
     local max_score=0
     local action="allow"
-    
+
     # Run all validation modules
     findings=$(validate_prompt_injection "$input")
     all_findings+="$findings"$'
 '
-    
+
     findings=$(validate_command_injection "$input")
     all_findings+="$findings"$'
 '
-    
+
     findings=$(validate_credential_exfil "$input")
     all_findings+="$findings"$'
 '
-    
+
     findings=$(validate_path_traversal "$input")
     all_findings+="$findings"$'
 '
-    
+
     # Calculate max score from findings
     while IFS='|' read -r module pattern severity score; do
         [ -z "$module" ] && continue
         [ "$score" -gt "$max_score" ] && max_score=$score
     done <<< "$all_findings"
-    
+
     # Determine action based on score
     if [ $max_score -ge $SCORE_CRITICAL ]; then
         action="block"
@@ -449,7 +449,7 @@ validate_input() {
         action="allow"
         severity="clean"
     fi
-    
+
     if [ "$json_output" = "true" ]; then
         # JSON output for automation
         echo "{"
@@ -473,7 +473,7 @@ validate_input() {
             echo -e "Action: $action"
         fi
     fi
-    
+
     [ "$action" = "allow" ] && return 0 || return 1
 }
 
@@ -485,19 +485,19 @@ scan_skill_files() {
     local skill_path="$1"
     local skill_name=$(basename "$skill_path")
     local findings_count=0
-    
+
     echo -e "${BLUE}Scanning skill:${NC} $skill_name"
-    
+
     # Find relevant files (skip node_modules, etc)
     while IFS= read -r -d '' file; do
         # Skip excluded paths
         [[ "$file" == *"node_modules"* ]] && continue
         [[ "$file" == *".git"* ]] && continue
         [[ "$file" == *".min.js"* ]] && continue
-        
+
         local content=$(cat "$file" 2>/dev/null || echo "")
         local basename=$(basename "$file")
-        
+
         # Run validation on file content
         local result=$(validate_input "$content" "false" 2>&1)
         if echo "$result" | grep -qE "CRITICAL|HIGH|WARNING"; then
@@ -506,11 +506,11 @@ scan_skill_files() {
             ((findings_count++))
         fi
     done < <(find "$skill_path" -type f \( -name "*.md" -o -name "*.sh" -o -name "*.js" -o -name "*.py" -o -name "*.ts" \) -print0 2>/dev/null)
-    
+
     if [ $findings_count -eq 0 ]; then
         echo -e "  ${GREEN}✓ Clean${NC}"
     fi
-    
+
     return $findings_count
 }
 
@@ -518,24 +518,24 @@ full_audit() {
     echo -e "${BLUE}=== ClawDefender - Full Audit ===${NC}"
     echo "Started: $(date)"
     echo ""
-    
+
     local total_findings=0
-    
+
     # Scan all skills
     echo -e "${BLUE}[1/3] Scanning installed skills...${NC}"
     for skill_dir in "$SKILLS_DIR"/*/; do
         [ -d "$skill_dir" ] || continue
         local skill_name=$(basename "$skill_dir")
-        
+
         # Skip security scanner itself
         [[ "$skill_name" == "security-scanner" ]] && continue
         [[ "$skill_name" == "clawdefender" ]] && continue
         [[ "$skill_name" == "proactive-agent" ]] && continue
-        
+
         scan_skill_files "$skill_dir"
         total_findings=$((total_findings + $?))
     done
-    
+
     # Scan scripts
     echo ""
     echo -e "${BLUE}[2/3] Scanning scripts...${NC}"
@@ -544,7 +544,7 @@ full_audit() {
         local basename=$(basename "$script")
         [[ "$basename" == "clawdefender.sh" ]] && continue
         [[ "$basename" == "security-scan.sh" ]] && continue
-        
+
         local content=$(cat "$script" 2>/dev/null || echo "")
         local result=$(validate_input "$content" "false" 2>&1)
         if echo "$result" | grep -qE "CRITICAL|HIGH|WARNING"; then
@@ -554,11 +554,11 @@ full_audit() {
         fi
     done
     [ $total_findings -eq 0 ] && echo -e "  ${GREEN}✓ All scripts clean${NC}"
-    
+
     # System checks
     echo ""
     echo -e "${BLUE}[3/3] System checks...${NC}"
-    
+
     # Check .env permissions
     if [ -f "$WORKSPACE/.env" ]; then
         local perms=$(stat -c %a "$WORKSPACE/.env" 2>/dev/null || echo "unknown")
@@ -568,7 +568,7 @@ full_audit() {
             echo -e "  ${GREEN}✓${NC} .env permissions OK"
         fi
     fi
-    
+
     # Summary
     echo ""
     echo "=== Summary ==="
@@ -577,23 +577,23 @@ full_audit() {
     else
         echo -e "${YELLOW}⚠️ Found $total_findings file(s) with potential issues${NC}"
     fi
-    
+
     # Log to file
     echo "" >> "$LOG_FILE"
     echo "### $(date '+%Y-%m-%d %H:%M') - Security Audit" >> "$LOG_FILE"
     echo "- Findings: $total_findings" >> "$LOG_FILE"
     [ $total_findings -eq 0 ] && echo "- Status: ✅ Clean" >> "$LOG_FILE" || echo "- Status: ⚠️ Review needed" >> "$LOG_FILE"
-    
+
     return $total_findings
 }
 
 safe_install() {
     local skill_name="$1"
-    
+
     echo -e "${BLUE}=== Safe Skill Installation ===${NC}"
     echo "Skill: $skill_name"
     echo ""
-    
+
     # Install
     echo -e "${BLUE}[1/2] Installing from ClawHub...${NC}"
     cd "$WORKSPACE"
@@ -602,16 +602,16 @@ safe_install() {
         return 1
     fi
     echo -e "${GREEN}✓${NC} Installed"
-    
+
     # Scan
     echo ""
     echo -e "${BLUE}[2/2] Security scan...${NC}"
     local installed_path="$SKILLS_DIR/$skill_name"
-    
+
     if [ -d "$installed_path" ]; then
         scan_skill_files "$installed_path"
         local findings=$?
-        
+
         if [ $findings -gt 0 ]; then
             echo ""
             echo -e "${YELLOW}⚠️ Security issues detected!${NC}"
@@ -624,7 +624,7 @@ safe_install() {
             fi
         fi
     fi
-    
+
     echo ""
     echo -e "${GREEN}✅ Installation complete${NC}"
     echo "Documentation: skills/$skill_name/SKILL.md"

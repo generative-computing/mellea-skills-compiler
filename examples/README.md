@@ -14,12 +14,12 @@ Each subdirectory shows the shape of a contract-correct compiled package:
 
 These four are confirmed runnable against the latest architecture (deny-rule + writer pipeline + 3 Python lints + smoke check):
 
-| Skill | Tier | Demo run |
-|---|---|---|
-| `weather/` | T1 — runs out of the box | `mellea-skills run skills/weather/weather_mellea --fixture rain_check_city` |
-| `sentry-find-bugs/` | T1 (clean fixture) and T2 (codebase-scanning fixtures) | `mellea-skills run skills/sentry-find-bugs/sentry_find_bugs_mellea --fixture clean_secure_parameterized` |
-| `superpowers-systematic-debugging/` | T1 — different archetype (constrained reasoning + hypothesis) | `mellea-skills run skills/superpowers-systematic-debugging/superpowers_systematic_debugging_mellea --fixture architectural_issue_detected` |
-| `clawdefender/` | T3 — adversarial input classification (requires `chmod +x scripts/*.sh` on Unix) | `mellea-skills run skills/clawdefender/clawdefender_mellea --fixture prompt_injection_critical` |
+| Skill                               | Tier                                                                             | Demo run                                                                                                                                   |
+| ----------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `weather/`                          | T1 — runs out of the box                                                         | `mellea-skills run skills/weather/weather_mellea --fixture rain_check_city`                                                                |
+| `sentry-find-bugs/`                 | T1 (clean fixture) and T2 (codebase-scanning fixtures)                           | `mellea-skills run skills/sentry-find-bugs/sentry_find_bugs_mellea --fixture clean_secure_parameterized`                                   |
+| `superpowers-systematic-debugging/` | T1 — different archetype (constrained reasoning + hypothesis)                    | `mellea-skills run skills/superpowers-systematic-debugging/superpowers_systematic_debugging_mellea --fixture architectural_issue_detected` |
+| `clawdefender/`                     | T3 — adversarial input classification (requires `chmod +x scripts/*.sh` on Unix) | `mellea-skills run skills/clawdefender/clawdefender_mellea --fixture prompt_injection_critical`                                            |
 
 `sentry-find-bugs` doubles as the canonical "fill the stub" walkthrough — `constrained_slots.py` ships two stub helpers (`grep_for_pattern`, `read_file_range`) used by the codebase-scanning fixtures. See `docs/FROM_STUBS_TO_RUNNING.md` for the implementation walkthrough.
 

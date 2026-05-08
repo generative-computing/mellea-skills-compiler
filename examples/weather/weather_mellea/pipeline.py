@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
-
 from mellea import start_session
-from mellea.stdlib.sampling import RepairTemplateStrategy
 from mellea.backends.model_options import ModelOption
-
+from mellea.stdlib.sampling import RepairTemplateStrategy
+from pydantic import BaseModel
 from weather_mellea.config import (
     BACKEND,
-    MODEL_ID,
     LOOP_BUDGET,
-    PREFIX_TEXT,
+    MODEL_ID,
     OUT_OF_SCOPE_CATEGORIES,
+    PREFIX_TEXT,
     WEATHER_PRESET_FULL_CONDITIONS,
     WEATHER_PRESET_RAIN_CHECK,
     WEATHER_PRESET_WEEK_FORECAST,

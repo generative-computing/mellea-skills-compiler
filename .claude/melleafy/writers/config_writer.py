@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+
 _HEADER = "from typing import Final"
 
 _CATEGORY_LABELS: dict[str, str] = {

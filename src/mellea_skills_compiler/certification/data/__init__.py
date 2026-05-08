@@ -8,4 +8,3 @@ PACKAGEDIR = Path(__file__).parent.absolute()
 
 def get_data_path():
     return os.path.join(PACKAGEDIR, "")
-

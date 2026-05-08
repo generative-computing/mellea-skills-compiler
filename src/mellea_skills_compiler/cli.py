@@ -8,6 +8,7 @@ import typer
 from mellea_skills_compiler.enums import InferenceEngineType
 from mellea_skills_compiler.toolkit.logging import configure_logger
 
+
 app = typer.Typer(no_args_is_help=True)
 LOGGER = configure_logger()
 

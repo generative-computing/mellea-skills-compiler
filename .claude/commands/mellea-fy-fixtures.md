@@ -20,7 +20,7 @@ Step 4 generates 5–8 test fixtures covering ≥3 C-categories. Fixtures are th
 
 The model emits one JSON object; the writer renders the entire `fixtures/` subpackage.
 
-*JSON the model emits (conforms to `fixtures_emission.schema.json`):*
+_JSON the model emits (conforms to `fixtures_emission.schema.json`):_
 
 ```json
 {
@@ -46,7 +46,7 @@ The model emits one JSON object; the writer renders the entire `fixtures/` subpa
 }
 ```
 
-*Python source the writer renders from that JSON:*
+_Python source the writer renders from that JSON:_
 
 ```python
 # fixtures/__init__.py
@@ -84,7 +84,7 @@ Each rendered factory is a zero-arg callable returning `(inputs, fixture_id, des
 
 ### Anti-patterns the writer prevents (do not emit)
 
-The writer architecture makes these shapes unreachable, but they have appeared in past LLM-generated outputs and serve as a sanity check on what *not* to think you should emit:
+The writer architecture makes these shapes unreachable, but they have appeared in past LLM-generated outputs and serve as a sanity check on what _not_ to think you should emit:
 
 - **Pytest-style test functions** — `def test_<name>() -> None: assert ...` is a pytest test, not a melleafy fixture. Melleafy fixtures are factories returning `(inputs, fixture_id, description)`.
 - **Bare `INPUT = {...}` modules** with `__init__.py` re-exporting them as `*_INPUT` aliases — there is no `ALL_FIXTURES` list and no factory functions, so `load_fixtures` rejects the package.
@@ -96,14 +96,14 @@ The writer architecture makes these shapes unreachable, but they have appeared i
 
 Generate at least one fixture per category. Not all categories apply to every skill — use judgment:
 
-| Category | Purpose | When to include |
-|---|---|---|
-| **Positive case** | Clear input triggering the skill's primary behaviour | Always |
-| **Clean/negative case** | Input where the skill finds nothing or produces minimal output | Always |
-| **Edge case (structural)** | Empty input, very short, very long, missing optional fields | Always |
-| **Edge case (domain)** | Input at the boundary of the skill's scope | When the skill has meaningful domain boundaries |
-| **Mixed case** | Combination of positive and negative signals | For analysis/diagnosis archetypes |
-| **Out-of-scope case** | Input the skill should explicitly decline | When the spec defines "When NOT to Use" |
+| Category                   | Purpose                                                        | When to include                                 |
+| -------------------------- | -------------------------------------------------------------- | ----------------------------------------------- |
+| **Positive case**          | Clear input triggering the skill's primary behaviour           | Always                                          |
+| **Clean/negative case**    | Input where the skill finds nothing or produces minimal output | Always                                          |
+| **Edge case (structural)** | Empty input, very short, very long, missing optional fields    | Always                                          |
+| **Edge case (domain)**     | Input at the boundary of the skill's scope                     | When the skill has meaningful domain boundaries |
+| **Mixed case**             | Combination of positive and negative signals                   | For analysis/diagnosis archetypes               |
+| **Out-of-scope case**      | Input the skill should explicitly decline                      | When the spec defines "When NOT to Use"         |
 
 ---
 
@@ -112,6 +112,7 @@ Generate at least one fixture per category. Not all categories apply to every sk
 Fixtures must collectively exercise ≥3 dependency categories (C1–C9). This is R16's fixture coverage threshold. Document which categories each fixture exercises in the `description` field.
 
 Example — a ticket-triage skill with C1 (persona), C2 (operating rules), and C6 (tool calls):
+
 - Positive case exercises C1 (persona applied), C2 (escalation rule fires), C6 (Slack notification called)
 - Clean case exercises C1 and C2 (no escalation, no tool call)
 - Edge case (empty) exercises C2 (out-of-scope handling rule)
@@ -168,6 +169,7 @@ The schema (`fixtures_emission.schema.json`) and writer (`fixtures_writer.py`) t
 - `coverage_doc` is populated with C-category coverage notes
 
 The writer guarantees, regardless of model output:
+
 - `fixtures/__init__.py` exports `ALL_FIXTURES: list[Callable]`
 - Each `fixtures/<id>.py` defines a `make_<id>()` factory returning `(inputs, fixture_id, description)`
 - All `id` values are unique snake_case identifiers

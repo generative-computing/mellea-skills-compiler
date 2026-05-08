@@ -43,9 +43,9 @@ Expected output:
 
 Two stubs, matching the count in `SETUP.md §8`:
 
-| Name | Lines | Signature |
-|------|-------|-----------|
-| `search_fn` | 6–24 | `search_fn(pattern: str) -> list[str]` |
+| Name           | Lines | Signature                                                             |
+| -------------- | ----- | --------------------------------------------------------------------- |
+| `search_fn`    | 6–24  | `search_fn(pattern: str) -> list[str]`                                |
 | `read_file_fn` | 27–42 | `read_file_fn(file_path: str, start_line: int, end_line: int) -> str` |
 
 Both are keyword defaults on `run_pipeline` (`pipeline.py:54-55`).

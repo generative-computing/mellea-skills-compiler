@@ -58,14 +58,14 @@ if report.architectural_issue_detected:
 
 ## Parameters
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `issue_description` | `str` | Yes | Description of the bug, test failure, or unexpected behavior |
-| `error_text` | `str` | No | Error messages, stack traces, or log output |
-| `recent_changes` | `str` | No | Recent code changes (git diff, commit log, dependency updates) |
-| `code_context` | `str` | No | Relevant code snippets for data flow tracing |
-| `working_examples_text` | `str` | No | Similar working code to compare against |
-| `fix_attempts_count` | `int` | No | Number of fix attempts already made (default: 0; ≥3 triggers architectural review) |
+| Parameter               | Type  | Required | Description                                                                        |
+| ----------------------- | ----- | -------- | ---------------------------------------------------------------------------------- |
+| `issue_description`     | `str` | Yes      | Description of the bug, test failure, or unexpected behavior                       |
+| `error_text`            | `str` | No       | Error messages, stack traces, or log output                                        |
+| `recent_changes`        | `str` | No       | Recent code changes (git diff, commit log, dependency updates)                     |
+| `code_context`          | `str` | No       | Relevant code snippets for data flow tracing                                       |
+| `working_examples_text` | `str` | No       | Similar working code to compare against                                            |
+| `fix_attempts_count`    | `int` | No       | Number of fix attempts already made (default: 0; ≥3 triggers architectural review) |
 
 ## Output: `DebuggingReport`
 

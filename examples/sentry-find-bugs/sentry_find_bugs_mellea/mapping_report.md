@@ -43,17 +43,17 @@ This is a five-phase analytical security review pipeline. The LLM performs struc
 
 ### Element counts by tag
 
-| Tag | Count | Source lines |
-|---|---|---|
-| NO_DECOMPOSE | 3 | spec.md:3, 8, 43 |
-| CONFIG | 4 | spec.md:2, 60, 62, 75 |
-| SCHEMA | 4 | spec.md:18-25, 29-39, 64-71 (×2 — IssueReport + inferred IssueVerdict) |
-| EXTRACT | 3 | spec.md:14, 18-25 (×2 steps) |
-| ORCHESTRATE | 2 | spec.md:13, 43 |
-| VALIDATE_DOMAIN | 3 | spec.md:29-39, 45 (×2 — m.instruct per file, per issue) |
-| VALIDATE_OUTPUT | 2 | spec.md:51-56, 73 |
-| TOOL_INPUT | 3 | spec.md:12, 46, 47 |
-| **Total** | **24** | (21 inventory elements + 3 two-step expansions) |
+| Tag             | Count  | Source lines                                                           |
+| --------------- | ------ | ---------------------------------------------------------------------- |
+| NO_DECOMPOSE    | 3      | spec.md:3, 8, 43                                                       |
+| CONFIG          | 4      | spec.md:2, 60, 62, 75                                                  |
+| SCHEMA          | 4      | spec.md:18-25, 29-39, 64-71 (×2 — IssueReport + inferred IssueVerdict) |
+| EXTRACT         | 3      | spec.md:14, 18-25 (×2 steps)                                           |
+| ORCHESTRATE     | 2      | spec.md:13, 43                                                         |
+| VALIDATE_DOMAIN | 3      | spec.md:29-39, 45 (×2 — m.instruct per file, per issue)                |
+| VALIDATE_OUTPUT | 2      | spec.md:51-56, 73                                                      |
+| TOOL_INPUT      | 3      | spec.md:12, 46, 47                                                     |
+| **Total**       | **24** | (21 inventory elements + 3 two-step expansions)                        |
 
 ### Coverage
 
@@ -68,63 +68,63 @@ This is a five-phase analytical security review pipeline. The LLM performs struc
 
 ### `config.py`
 
-| Element | Source | Tag | Category | Symbol |
-|---|---|---|---|---|
-| elem_001 | spec.md:2 | CONFIG | C8 | `SKILL_NAME` |
-| elem_016 | spec.md:60 | CONFIG | — | `ISSUE_PRIORITY_ORDER` |
-| elem_017 | spec.md:62 | CONFIG | — | `SKIP_STYLISTIC_ISSUES` |
-| elem_020 | spec.md:75 | CONFIG | — | `READ_ONLY_MODE` |
+| Element  | Source     | Tag    | Category | Symbol                  |
+| -------- | ---------- | ------ | -------- | ----------------------- |
+| elem_001 | spec.md:2  | CONFIG | C8       | `SKILL_NAME`            |
+| elem_016 | spec.md:60 | CONFIG | —        | `ISSUE_PRIORITY_ORDER`  |
+| elem_017 | spec.md:62 | CONFIG | —        | `SKIP_STYLISTIC_ISSUES` |
+| elem_020 | spec.md:75 | CONFIG | —        | `READ_ONLY_MODE`        |
 
 Additional constants from C8 bundle: `BACKEND`, `MODEL_ID`, `PREFIX_TEXT`, `LOOP_BUDGET`.
 
 ### `schemas.py`
 
-| Element | Source | Tag | Category | Symbol |
-|---|---|---|---|---|
-| elem_008 | spec.md:18-25 | SCHEMA | — | `FileAttackSurface`, `AttackSurfaceMap` |
-| elem_010 | spec.md:29-39 | SCHEMA | — | `SecurityCheckResult`, `SecurityChecklist` |
-| elem_018 | spec.md:64-71 | SCHEMA | — | `IssueReport` |
-| (inferred) | map_013 note | SCHEMA | — | `IssueVerdict` (inferred from Phase 4 spec) |
-| (derived) | pipeline output | SCHEMA | — | `FindingsReport` |
+| Element    | Source          | Tag    | Category | Symbol                                      |
+| ---------- | --------------- | ------ | -------- | ------------------------------------------- |
+| elem_008   | spec.md:18-25   | SCHEMA | —        | `FileAttackSurface`, `AttackSurfaceMap`     |
+| elem_010   | spec.md:29-39   | SCHEMA | —        | `SecurityCheckResult`, `SecurityChecklist`  |
+| elem_018   | spec.md:64-71   | SCHEMA | —        | `IssueReport`                               |
+| (inferred) | map_013 note    | SCHEMA | —        | `IssueVerdict` (inferred from Phase 4 spec) |
+| (derived)  | pipeline output | SCHEMA | —        | `FindingsReport`                            |
 
 ### `slots.py`
 
-| Element | Source | Tag | Primitive | Symbol |
-|---|---|---|---|---|
-| elem_006 | spec.md:14 | EXTRACT | `@generative` | `extract_modified_files` |
+| Element        | Source        | Tag     | Primitive     | Symbol                       |
+| -------------- | ------------- | ------- | ------------- | ---------------------------- |
+| elem_006       | spec.md:14    | EXTRACT | `@generative` | `extract_modified_files`     |
 | elem_007-step1 | spec.md:18-25 | EXTRACT | `@generative` | `extract_attack_surface_raw` |
 
 ### `pipeline.py`
 
-| Element | Source | Tag | Primitive | Symbol |
-|---|---|---|---|---|
-| elem_005 | spec.md:13 | ORCHESTRATE | Python control flow | completeness guard in `run_pipeline` |
-| elem_007-step2 | spec.md:18-25 | EXTRACT | `m.instruct(format=AttackSurfaceMap)` | inline in `run_pipeline` |
-| elem_009 | spec.md:29-39 | VALIDATE_DOMAIN | `m.instruct(format=SecurityChecklist)` | inline in `run_pipeline` |
-| elem_011 | spec.md:43 | ORCHESTRATE | Python for-loop | inline in `run_pipeline` |
-| elem_012 | spec.md:45 | VALIDATE_DOMAIN | `m.instruct(format=IssueVerdict)` | inline in `run_pipeline` |
-| elem_015 | spec.md:51-56 | VALIDATE_OUTPUT | `requirements=` on final instruct | `audit_completeness_req` applied |
-| elem_019 | spec.md:73 | VALIDATE_OUTPUT | `requirements=` on final instruct | `no_invented_issues_req` applied |
+| Element        | Source        | Tag             | Primitive                              | Symbol                               |
+| -------------- | ------------- | --------------- | -------------------------------------- | ------------------------------------ |
+| elem_005       | spec.md:13    | ORCHESTRATE     | Python control flow                    | completeness guard in `run_pipeline` |
+| elem_007-step2 | spec.md:18-25 | EXTRACT         | `m.instruct(format=AttackSurfaceMap)`  | inline in `run_pipeline`             |
+| elem_009       | spec.md:29-39 | VALIDATE_DOMAIN | `m.instruct(format=SecurityChecklist)` | inline in `run_pipeline`             |
+| elem_011       | spec.md:43    | ORCHESTRATE     | Python for-loop                        | inline in `run_pipeline`             |
+| elem_012       | spec.md:45    | VALIDATE_DOMAIN | `m.instruct(format=IssueVerdict)`      | inline in `run_pipeline`             |
+| elem_015       | spec.md:51-56 | VALIDATE_OUTPUT | `requirements=` on final instruct      | `audit_completeness_req` applied     |
+| elem_019       | spec.md:73    | VALIDATE_OUTPUT | `requirements=` on final instruct      | `no_invented_issues_req` applied     |
 
 ### `requirements.py`
 
-| Element | Source | Tag | Validation Kind | Symbol |
-|---|---|---|---|---|
-| elem_015 | spec.md:51-56 | VALIDATE_OUTPUT | executable | `audit_completeness_req` |
-| elem_019 | spec.md:73 | VALIDATE_OUTPUT | llm_judged | `no_invented_issues_req` |
+| Element  | Source        | Tag             | Validation Kind | Symbol                   |
+| -------- | ------------- | --------------- | --------------- | ------------------------ |
+| elem_015 | spec.md:51-56 | VALIDATE_OUTPUT | executable      | `audit_completeness_req` |
+| elem_019 | spec.md:73    | VALIDATE_OUTPUT | llm_judged      | `no_invented_issues_req` |
 
 ### `constrained_slots.py`
 
-| Element | Source | Tag | Disposition | Symbol |
-|---|---|---|---|---|
-| elem_013 | spec.md:46 | TOOL_INPUT | stub | `search_fn` |
-| elem_014 | spec.md:47 | TOOL_INPUT | stub | `read_file_fn` |
+| Element  | Source     | Tag        | Disposition | Symbol         |
+| -------- | ---------- | ---------- | ----------- | -------------- |
+| elem_013 | spec.md:46 | TOOL_INPUT | stub        | `search_fn`    |
+| elem_014 | spec.md:47 | TOOL_INPUT | stub        | `read_file_fn` |
 
 ### `main.py`
 
-| Element | Source | Tag | Disposition | Symbol |
-|---|---|---|---|---|
-| elem_004 | spec.md:12 | TOOL_INPUT | real_impl | `gather_diff` |
+| Element  | Source     | Tag        | Disposition | Symbol        |
+| -------- | ---------- | ---------- | ----------- | ------------- |
+| elem_004 | spec.md:12 | TOOL_INPUT | real_impl   | `gather_diff` |
 
 ---
 
@@ -152,29 +152,29 @@ Note: `map_014` and `map_015` were **amended** (not removed) — their `final_ta
 
 **`spec.md`** (sole source file, 76 lines total):
 
-| Source range | Element(s) | Role |
-|---|---|---|
-| 1–4 (frontmatter) | elem_001, elem_002 | C8 SKILL_NAME config + NO_DECOMPOSE description |
-| 8 | elem_003 | NO_DECOMPOSE — purpose overview |
-| 12 | elem_004 | TOOL_INPUT — git diff command (P4 pre-pipeline) |
-| 13 | elem_005 | ORCHESTRATE — completeness guard |
-| 14 | elem_006 | EXTRACT — list modified files |
-| 18–25 | elem_007 (steps 1+2), elem_008 | EXTRACT two-step + SCHEMA (AttackSurfaceMap) |
-| 27 | (section heading — NO_DECOMPOSE) | Phase 3 header |
-| 29–39 | elem_009, elem_010 | VALIDATE_DOMAIN + SCHEMA (SecurityChecklist/SecurityCheckResult) |
-| 41 | (section heading — NO_DECOMPOSE) | Phase 4 header |
-| 43 | elem_011 | ORCHESTRATE — Phase 4 loop header |
-| 45 | elem_012 | VALIDATE_DOMAIN — already-handled check |
-| 46 | elem_013 | TOOL_INPUT — search for tests (stub) |
-| 47 | elem_014 | TOOL_INPUT — read file context (stub) |
-| 49 | (section heading — NO_DECOMPOSE) | Phase 5 header |
-| 51–56 | elem_015 | VALIDATE_OUTPUT — pre-conclusion completeness audit |
-| 58 | (section heading — NO_DECOMPOSE) | Output Format header |
-| 60 | elem_016 | CONFIG — `ISSUE_PRIORITY_ORDER` |
-| 62 | elem_017 | CONFIG — `SKIP_STYLISTIC_ISSUES` |
-| 64–71 | elem_018 | SCHEMA — `IssueReport` |
-| 73 | elem_019 | VALIDATE_OUTPUT — no-invention requirement |
-| 75 | elem_020 | CONFIG — `READ_ONLY_MODE` |
+| Source range      | Element(s)                       | Role                                                             |
+| ----------------- | -------------------------------- | ---------------------------------------------------------------- |
+| 1–4 (frontmatter) | elem_001, elem_002               | C8 SKILL_NAME config + NO_DECOMPOSE description                  |
+| 8                 | elem_003                         | NO_DECOMPOSE — purpose overview                                  |
+| 12                | elem_004                         | TOOL_INPUT — git diff command (P4 pre-pipeline)                  |
+| 13                | elem_005                         | ORCHESTRATE — completeness guard                                 |
+| 14                | elem_006                         | EXTRACT — list modified files                                    |
+| 18–25             | elem_007 (steps 1+2), elem_008   | EXTRACT two-step + SCHEMA (AttackSurfaceMap)                     |
+| 27                | (section heading — NO_DECOMPOSE) | Phase 3 header                                                   |
+| 29–39             | elem_009, elem_010               | VALIDATE_DOMAIN + SCHEMA (SecurityChecklist/SecurityCheckResult) |
+| 41                | (section heading — NO_DECOMPOSE) | Phase 4 header                                                   |
+| 43                | elem_011                         | ORCHESTRATE — Phase 4 loop header                                |
+| 45                | elem_012                         | VALIDATE_DOMAIN — already-handled check                          |
+| 46                | elem_013                         | TOOL_INPUT — search for tests (stub)                             |
+| 47                | elem_014                         | TOOL_INPUT — read file context (stub)                            |
+| 49                | (section heading — NO_DECOMPOSE) | Phase 5 header                                                   |
+| 51–56             | elem_015                         | VALIDATE_OUTPUT — pre-conclusion completeness audit              |
+| 58                | (section heading — NO_DECOMPOSE) | Output Format header                                             |
+| 60                | elem_016                         | CONFIG — `ISSUE_PRIORITY_ORDER`                                  |
+| 62                | elem_017                         | CONFIG — `SKIP_STYLISTIC_ISSUES`                                 |
+| 64–71             | elem_018                         | SCHEMA — `IssueReport`                                           |
+| 73                | elem_019                         | VALIDATE_OUTPUT — no-invention requirement                       |
+| 75                | elem_020                         | CONFIG — `READ_ONLY_MODE`                                        |
 
 ### 8. Runtime-specific constructs not reproduced
 
@@ -188,4 +188,4 @@ No deferred features detected. The spec uses only constructs supported in mellea
 
 ---
 
-*End of mapping report.*
+_End of mapping report._

@@ -9,7 +9,7 @@ index 1a2b3c4..5d6e7f8 100644
 +++ b/api/views.py
 @@ -12,8 +12,12 @@ from django.contrib.auth.models import User
  from django.http import JsonResponse
- 
+
  class UserSearchView(APIView):
 +    permission_classes = [IsAuthenticated]
 +
