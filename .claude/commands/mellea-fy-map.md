@@ -94,7 +94,7 @@ Record `final_target_file: "pending_step_2.5"` in the mapping entry until Step 2
 
 ## Dialect-specific overrides
 
-The dialect mapping table in `melleafy-handoff/plans/dialects/<runtime>.md` takes precedence over the general table above.
+The dialect mapping table in `docs/dialects/<runtime>.md` takes precedence over the general table above.
 
 Precedence (highest first):
 

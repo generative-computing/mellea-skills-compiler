@@ -12,7 +12,9 @@
   <a href="#quick-start">Quick Start</a> &middot;
   <a href="#example-outputs">Examples</a> &middot;
   <a href="#next-steps">Next Steps</a> &middot;
-  <a href="FAQ.md">FAQ</a>
+  <a href="FAQ.md">FAQ</a> &middot;
+  <a href="docs/Mellea_Skills_Compiler-tech_report.pdf">Tech Report</a> &middot;
+  <a href="#citation">Cite</a>
 </p>
 
 ---
@@ -295,6 +297,26 @@ This is a research preview. We welcome feedback, bug reports, and suggestions vi
 ## Team
 
 Elizabeth M. Daly, Dhaval Salwala, Inge Vejsbjerg, Seshu Tirupathi, Rebecka Nordenlöw, Jessica He, Kush R. Varshney, and Jordan McAfoose — IBM Research
+
+## Citation
+
+A technical report describing the system architecture, design rationale, and governance pipeline is included in this repository: [`docs/Mellea_Skills_Compiler-tech_report.pdf`](docs/Mellea_Skills_Compiler-tech_report.pdf).
+
+If you use Mellea Skills Compiler in your work, please cite:
+
+```bibtex
+@techreport{daly2026mellea,
+  title       = {Mellea Skills Compiler: Compiling and Certifying Agent Skills with Mellea},
+  author      = {Daly, Elizabeth M. and Salwala, Dhaval and Vejsbjerg, Inge and
+                 Tirupathi, Seshu and Nordenl{\"o}w, Rebecka and He, Jessica and
+                 Varshney, Kush R. and McAfoose, Jordan},
+  institution = {IBM Research},
+  year        = {2026},
+  month       = {May},
+  type        = {Technical Report},
+  url         = {https://github.com/generative-computing/mellea-skills-compiler/blob/main/docs/Mellea_Skills_Compiler-tech_report.pdf}
+}
+```
 
 ## License
 

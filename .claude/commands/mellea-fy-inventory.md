@@ -10,7 +10,7 @@ Step 1a reads files from the source based on the detected runtime's dialect. Ste
 
 ## Step 1a: File Inventory
 
-Read source files per the runtime's dialect. The dialect doc at `melleafy-handoff/plans/dialects/<runtime>.md` defines exactly which files to read and their roles.
+Read source files per the runtime's dialect. The dialect doc at `docs/dialects/<runtime>.md` defines exactly which files to read and their roles.
 
 | Runtime             | Primary files                                                          | Roles                                                                      |
 | ------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------- |

@@ -31,7 +31,6 @@ dependencies = [
     "ai-atlas-nexus[ollama]",
     "rich",
     "typer",
-    "isort",
     "anthropic",
     "packaging"
 ]
@@ -44,17 +43,8 @@ secrets = ["detect-secrets @ git+https://github.com/ibm/detect-secrets.git@maste
 source = "file"
 path = "src/mellea_skills_compiler/__init__.py"
 
-
 [project.scripts]
 mellea-skills = "mellea_skills_compiler.cli:app"
-
-[tool.isort]
-profile = "black"
-line_length = 88
-remove_redundant_aliases = true
-group_by_package = true
-combine_star = true
-lines_after_imports = 2
 
 [tool.pdm.build]
 package-dir = "src"
