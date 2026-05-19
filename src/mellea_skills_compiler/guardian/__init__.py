@@ -11,7 +11,6 @@ from mellea_skills_compiler.guardian.audit_trail import AuditTrailPlugin
 from mellea_skills_compiler.guardian.guardian_hook import GuardianAuditPlugin
 from mellea_skills_compiler.toolkit.logging import configure_logger
 
-
 LOGGER = configure_logger()
 
 
@@ -30,7 +29,9 @@ def register_plugins(
     )
 
     # Clear audit log
-    AUDIT_LOG = log_dir / "runtime_audit.jsonl" if log_dir else "runtime_audit.jsonl"
+    AUDIT_LOG = (
+        log_dir / "runtime_audit.jsonl" if log_dir else "runtime_audit.jsonl"
+    )
     if AUDIT_LOG.exists():
         AUDIT_LOG.unlink()
 
@@ -44,7 +45,7 @@ def register_plugins(
     register(audit)
 
     LOGGER.info(
-        f"Guardian registered: {len(manifest.risks)} risks, mode={"enforce" if enforce else "audit"}",
+        f"Guardian registered: {len(manifest.risks)} risks, mode={'enforce' if enforce else 'audit'}",
     )
     LOGGER.info("Audit trail: %s", AUDIT_LOG)
 

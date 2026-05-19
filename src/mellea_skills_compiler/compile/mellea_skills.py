@@ -14,7 +14,6 @@ from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
 
-from mellea_skills_compiler.compile import CLAUDE_DIR
 from mellea_skills_compiler.compile.claude_directives import (
     build_system_prompt,
     derive_package_name,
@@ -37,7 +36,6 @@ from mellea_skills_compiler.enums import (
 from mellea_skills_compiler.toolkit.file_utils import parse_spec_file
 from mellea_skills_compiler.toolkit.logging import configure_logger
 
-
 LOGGER = configure_logger()
 console = Console(log_time=True)
 
@@ -58,7 +56,7 @@ def _get_spec_md_path(spec_path: Path):
 def validate(package_dir: Path, *, no_run: bool, all_fixtures: bool) -> None:
     """Shared implementation for the validate command and the compile auto-chain."""
     if not package_dir.exists() or not package_dir.is_dir():
-        raise Exception("Package directory does not exist: %s", package_dir)
+        raise Exception(f"Package directory does not exist: {package_dir}")
 
     from mellea_skills_compiler.compile.lints import run_lints
 
@@ -67,19 +65,21 @@ def validate(package_dir: Path, *, no_run: bool, all_fixtures: bool) -> None:
         for lint in lint_result.lints:
             if lint.verdict != "fail":
                 continue
-            LOGGER.error("[%s] %d failure(s):", lint.lint_id, len(lint.failures))
+            LOGGER.error(
+                "[%s] %d failure(s):", lint.lint_id, len(lint.failures)
+            )
             for failure in lint.failures:
                 location = failure.file
                 if failure.line is not None:
                     location = f"{location}:{failure.line}"
                 LOGGER.error("  %s — %s", location, failure.message)
         raise Exception(
-            "Step 7 lints failed. Report at %s/intermediate/step_7_report.json",
-            package_dir,
+            f"Step 7 lints failed. Report at {str(package_dir)}/intermediate/step_7_report.json"
         )
 
     LOGGER.info(
-        "Step 7 structural lints passed (%d lints checked).", len(lint_result.lints)
+        "Step 7 structural lints passed (%d lints checked).",
+        len(lint_result.lints),
     )
 
     if no_run:
@@ -92,7 +92,7 @@ def validate(package_dir: Path, *, no_run: bool, all_fixtures: bool) -> None:
         smoke_result = run_smoke_check(package_dir, all_fixtures=all_fixtures)
     except Exception as exc:
         raise Exception(
-            "Smoke-check infrastructure error (could not even start): %s", exc
+            f"Smoke-check infrastructure error (could not even start): {exc}"
         )
 
     if smoke_result.overall_verdict == "failed":
@@ -104,8 +104,7 @@ def validate(package_dir: Path, *, no_run: bool, all_fixtures: bool) -> None:
                     fixture.failure_message,
                 )
         raise Exception(
-            "Smoke-check failed. Report at %s/intermediate/step_7b_report.json",
-            package_dir,
+            f"Smoke-check failed. Report at {package_dir}/intermediate/step_7b_report.json"
         )
 
     LOGGER.info(
@@ -126,7 +125,7 @@ def compile(
     skill_model: Optional[str] = None,
 ) -> None:
     # clears screen
-    subprocess.call("clear")
+    subprocess.run(["clear"])
 
     # print mellea-fy header
     console.print()
@@ -158,7 +157,8 @@ def compile(
             rprint(
                 Panel(
                     json.dumps(
-                        specs.get("frontmatter", {"Name", spec_path.name}), indent=2
+                        specs.get("frontmatter", {"Name", spec_path.name}),
+                        indent=2,
                     ),
                     title="Specification",
                     subtitle=str(spec_path),
@@ -194,9 +194,9 @@ def compile(
             raise ValueError(
                 f"Please provide claude model via --model option.\nAvailable: {available_models}"
             )
-        else:
-            # Use the first model to compile given skill
-            model = models[0]
+
+        # Use the first model to compile given skill
+        model = models[0]
 
     console.print(
         f"\n[green]{'Repairing' if repair_mode else 'Compiling'} using Claude model:[/] {model}\n"
@@ -274,8 +274,8 @@ def compile(
     # Resolve which backend and model the compiled skill will use at runtime,
     # record the choice for the post-compile lint, and bake the values into
     # the system prompt so the LLM puts the correct constants in config.py.
-    chosen_backend, chosen_model_id, defaults_source = resolve_runtime_defaults(
-        skill_backend, skill_model
+    chosen_backend, chosen_model_id, defaults_source = (
+        resolve_runtime_defaults(skill_backend, skill_model)
     )
     LOGGER.info(
         "Compiled skill will use backend=%r, model=%r (from %s).",
@@ -302,7 +302,9 @@ def compile(
     # Passed to claude via --settings; deny rules are honoured deterministically
     # in -p mode (verified in the synthetic test).
     try:
-        compile_settings_path = write_compile_settings(intermediate_dir, package_dir)
+        compile_settings_path = write_compile_settings(
+            intermediate_dir, package_dir
+        )
     except Exception as exc:
         LOGGER.warning(
             "Could not write per-invocation settings (%s). Falling back to no "
@@ -333,7 +335,7 @@ def compile(
         claude_argv.extend(["--settings", str(compile_settings_path)])
 
     claude_argv.append(
-        f"'{"./mellea-fy-repair" if repair_mode else "./mellea-fy"} {str(spec_path)}'"
+        f"'{'./mellea-fy-repair' if repair_mode else './mellea-fy'} {str(spec_path)}'"
     )
 
     # Set Mellea-fy process start time
@@ -385,7 +387,10 @@ def compile(
             if output:
                 try:
                     response = json.loads(output.strip())
-                    if response.get("type", None) == ClaudeResponseType.ASSISTANT:
+                    if (
+                        response.get("type", None)
+                        == ClaudeResponseType.ASSISTANT
+                    ):
                         for message_content in response.get("message", {}).get(
                             "content", []
                         ):
@@ -414,7 +419,9 @@ def compile(
         # because melleafy normalises hyphens → underscores per Rule OUT-2)
         skill_dir = spec_path if spec_path.is_dir() else spec_path.parent
         mellea_dirs = [
-            d for d in skill_dir.iterdir() if d.is_dir() and d.name.endswith("_mellea")
+            d
+            for d in skill_dir.iterdir()
+            if d.is_dir() and d.name.endswith("_mellea")
         ]
         if mellea_dirs:
             # Wrapper-side writer invocation (migration phase: WARN only).
@@ -450,7 +457,9 @@ def compile(
             validate(mellea_dirs[0], no_run=no_run, all_fixtures=False)
 
             if spec_md_path:
-                shutil.copy(spec_md_path, mellea_dirs[0] / SpecFileFormat.SKILL_FILE_MD)
+                shutil.copy(
+                    spec_md_path, mellea_dirs[0] / SpecFileFormat.SKILL_FILE_MD
+                )
         else:
             raise Exception(
                 f"No *_mellea directory found in {skill_dir} after compilation"

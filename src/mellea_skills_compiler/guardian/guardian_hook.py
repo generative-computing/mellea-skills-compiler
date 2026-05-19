@@ -256,6 +256,8 @@ class GuardianAuditPlugin(
             manifest: A PolicyManifest with guardian_risks and risk_names.
             enforce: If True, returns a GuardianEnforcePlugin (SEQUENTIAL mode)
                 that blocks generation when risks are detected.
+            guardian_model: The guardian model
+            inference_engine: The inference engine, defaults to Ollama
         """
         # Log tier breakdown for transparency
         native = [r for r in manifest.risks if r.is_native]
