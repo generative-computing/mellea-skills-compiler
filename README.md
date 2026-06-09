@@ -1,11 +1,10 @@
-<h1 align="center">Mellea Skills Compiler</h1>
+# Mellea Skills Compiler
 
-<p align="center">
   <strong>Compiling and certifying agent skills with Mellea</strong><br>
   <em>Research preview — IBM Research, May 2026</em>
-</p>
 
-<p align="center">
+
+
   <a href="#what-is-mellea-skills-compiler">What</a> &middot;
   <a href="#why">Why</a> &middot;
   <a href="#how-it-works">How</a> &middot;
@@ -13,13 +12,13 @@
   <a href="#example-outputs">Examples</a> &middot;
   <a href="#next-steps">Next Steps</a> &middot;
   <a href="FAQ.md">FAQ</a> &middot;
-  <a href="docs/Mellea_Skills_Compiler-tech_report.pdf">Tech Report</a> &middot;
+  <a href="https://github.com/generative-computing/mellea-skills-compiler/blob/main/docs/Mellea_Skills_Compiler-tech_report.pdf">Tech Report</a> &middot;
   <a href="#citation">Cite</a>
-</p>
+
 
 ---
 
-> **Research preview (v0.1)** — This is an early-stage research project from IBM Research. The APIs, CLI, and artifact formats are subject to change. We welcome feedback via [Issues](../../issues).
+> **Research preview (v0.1)** — This is an early-stage research project from IBM Research. The APIs, CLI, and artifact formats are subject to change. We welcome feedback via [Issues](https://github.com/generative-computing/mellea-skills-compiler/issues).
 
 > **Coming soon** (active development):
 >
@@ -62,7 +61,7 @@ agent specification        spec → typed pipeline                   Guardian ho
                                                                    compliance classification + report
 ```
 
-**Step 1: Compile** — A `.md` specification is decomposed into a typed Mellea pipeline package: Pydantic schemas, `@generative` extraction slots, requirement validators, and multi-phase orchestration code. Two compilation paths are available: the `mellea-skills compile` CLI command, or the `/mellea-fy` command inside Claude Code. See [`src/mellea_skills_compiler/examples/`](src/mellea_skills_compiler/examples/) for pre-compiled examples.
+**Step 1: Compile** — A `.md` specification is decomposed into a typed Mellea pipeline package: Pydantic schemas, `@generative` extraction slots, requirement validators, and multi-phase orchestration code. Two compilation paths are available: the `mellea-skills compile` CLI command, or the `/mellea-fy` command inside Claude Code. See [`examples/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/examples/) for pre-compiled examples.
 
 **Step 2: Certify** — A single `mellea-skills certify` invocation performs end-to-end governance: AI Atlas Nexus identifies applicable risks from Granite Guardian, NIST AI RMF, and Credo UCF taxonomies and emits a `PolicyManifest`; Guardian hooks configured from that manifest monitor every `m.instruct()` call as fixtures execute; each governance requirement is classified as AUTOMATED, PARTIAL, or MANUAL based on runtime evidence; a compliance report and audit trail are written alongside the compiled pipeline.
 
@@ -174,7 +173,7 @@ Run `/mellea-fy` directly inside Claude Code:
 ./mellea-fy <Your-local-path>/skills/weather/spec.md
 ```
 
-See [`mellea-fy/README.md`](mellea-fy/README.md) for detailed usage of the Claude Code command.
+See [`mellea-fy/README.md`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/mellea-fy/README.md) for detailed usage of the Claude Code command.
 
 ### Run Skill Pipeline
 
@@ -223,16 +222,16 @@ skills/weather/audit/
 
 ## Example Outputs
 
-The [`src/mellea_skills_compiler/examples/`](src/mellea_skills_compiler/examples/) directory contains pre-compiled, validated Mellea pipeline packages — runnable end-to-end against the project's Ollama + `granite3.3:8b` baseline. Each is a curated reference snapshot of what `mellea-skills compile` produces under the current architecture.
+The [`examples/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/examples) directory contains pre-compiled, validated Mellea pipeline packages — runnable end-to-end against the project's Ollama + `granite3.3:8b` baseline. Each is a curated reference snapshot of what `mellea-skills compile` produces under the current architecture.
 
 | Skill                                                                          | Tier    | Archetype                  | Description                                                                                                                                    |
 | ------------------------------------------------------------------------------ | ------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| [weather](examples/weather/)                                                   | T1      | Fetch + summarise          | Public no-auth HTTP to `wttr.in`; intent classification dispatches to one of seven URL templates                                               |
-| [sentry-find-bugs](examples/sentry-find-bugs/)                                 | T1 / T2 | Structured analysis        | Multi-phase OWASP review producing severity-classified findings; two stub helpers (`search_fn`, `read_file_fn`) for codebase-scanning fixtures |
-| [superpowers-systematic-debugging](examples/superpowers-systematic-debugging/) | T1      | Constrained reasoning      | Four-phase debugging walk with hypothesis testing; `fix_attempts_count >= 3` triggers architectural-issue branch                               |
-| [clawdefender](examples/clawdefender/)                                         | T3      | Adversarial classification | Prompt injection / SSRF / command injection / credential exfiltration detection; bundled scripts need `chmod +x` on Unix                       |
+| [weather](https://github.com/generative-computing/mellea-skills-compiler/tree/main/examples/weather/)                                                   | T1      | Fetch + summarise          | Public no-auth HTTP to `wttr.in`; intent classification dispatches to one of seven URL templates                                               |
+| [sentry-find-bugs](https://github.com/generative-computing/mellea-skills-compiler/tree/main/examples/sentry-find-bugs/)                                 | T1 / T2 | Structured analysis        | Multi-phase OWASP review producing severity-classified findings; two stub helpers (`search_fn`, `read_file_fn`) for codebase-scanning fixtures |
+| [superpowers-systematic-debugging](https://github.com/generative-computing/mellea-skills-compiler/tree/main/examples/superpowers-systematic-debugging/) | T1      | Constrained reasoning      | Four-phase debugging walk with hypothesis testing; `fix_attempts_count >= 3` triggers architectural-issue branch                               |
+| [clawdefender](https://github.com/generative-computing/mellea-skills-compiler/tree/main/examples/clawdefender/)                                         | T3      | Adversarial classification | Prompt injection / SSRF / command injection / credential exfiltration detection; bundled scripts need `chmod +x` on Unix                       |
 
-Each example includes the original `spec.md` (or `SKILL.md`), generated pipeline code, factory-shape fixtures, intermediate IR (`config_emission.json`, `fixtures_emission.json`, etc.), `mapping_report.md`, and `melleafy.json` manifest. See [`docs/README.md`](docs/README.md) for the runnable tutorial that walks through each one and [`docs/FROM_STUBS_TO_RUNNING.md`](docs/FROM_STUBS_TO_RUNNING.md) for the stub-implementation walkthrough.
+Each example includes the original `spec.md` (or `SKILL.md`), generated pipeline code, factory-shape fixtures, intermediate IR (`config_emission.json`, `fixtures_emission.json`, etc.), `mapping_report.md`, and `melleafy.json` manifest. See [`docs/TUTORIAL.md`](docs/TUTORIAL.md) for the runnable tutorial that walks through each one and [`docs/FROM_STUBS_TO_RUNNING.md`](docs/FROM_STUBS_TO_RUNNING.md) for the stub-implementation walkthrough.
 
 ## Skills
 
@@ -300,7 +299,7 @@ Mellea Skills Compiler is an active research project. The current release demons
 
 ## Contributing
 
-This is a research preview. We welcome feedback, bug reports, and suggestions via [Issues](../../issues). If you're interested in contributing or collaborating, please open an issue to start the conversation.
+This is a research preview. We welcome feedback, bug reports, and suggestions via [Issues](https://github.com/generative-computing/mellea-skills-compiler/issues). If you're interested in contributing or collaborating, please open an issue to start the conversation.
 
 ## Team
 

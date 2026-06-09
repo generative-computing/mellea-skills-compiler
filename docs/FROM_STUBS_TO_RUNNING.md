@@ -16,7 +16,7 @@ The worked example is `sentry-find-bugs`: two stubs (`search_fn`,
 Before touching any stub, confirm the package is functional:
 
 ```bash
-mellea-skills run src/mellea_skills_compiler/examples/sentry-find-bugs/sentry_find_bugs_mellea \
+mellea-skills run examples/sentry-find-bugs/sentry_find_bugs_mellea \
   --fixture clean_secure_parameterized
 ```
 
@@ -31,7 +31,7 @@ that neither stub is invoked: the diff-augmentation branch is gated on
 
 ```bash
 grep -n "raise NotImplementedError" \
-  src/mellea_skills_compiler/examples/sentry-find-bugs/sentry_find_bugs_mellea/constrained_slots.py
+  examples/sentry-find-bugs/sentry_find_bugs_mellea/constrained_slots.py
 ```
 
 Expected output:
@@ -65,7 +65,7 @@ verification.
 
 ## 3. Anatomy of a Stub
 
-Open `src/mellea_skills_compiler/examples/sentry-find-bugs/sentry_find_bugs_mellea/constrained_slots.py`.
+Open `examples/sentry-find-bugs/sentry_find_bugs_mellea/constrained_slots.py`.
 The simpler of the two — `read_file_fn` (lines 27–42) — has a fixed
 signature (call sites pass `(str, int, int)`), a fixed return type
 (downstream code expects `str` for `grounding_context`), and a
@@ -126,7 +126,7 @@ modified file `api/auth.py` — the most direct way to route through the
 diff-augmentation path at `pipeline.py:82`:
 
 ```bash
-mellea-skills run src/mellea_skills_compiler/examples/sentry-find-bugs/sentry_find_bugs_mellea \
+mellea-skills run examples/sentry-find-bugs/sentry_find_bugs_mellea \
   --fixture edge_comments_only
 ```
 

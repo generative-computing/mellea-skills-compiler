@@ -2,11 +2,11 @@
 
 Agent skill specifications for the Mellea Skills Compiler. Each directory contains a `spec.md` (or `SKILL.md` for non-Markdown source runtimes) — the natural-language specification that can be compiled, instrumented, and certified.
 
-Pre-compiled, runnable examples for a curated subset of these skills live under [`src/mellea_skills_compiler/examples/`](../src/mellea_skills_compiler/examples/). The tutorial in [`docs/`](../docs/README.md) walks through running them.
+Pre-compiled, runnable examples for a curated subset of these skills live under [`examples/`](../examples/). The tutorial in [`docs/`](../docs/TUTORIAL.md) walks through running them.
 
 ## What you can do with a skill in this directory
 
-1. **Run a pre-compiled example** if the skill is in [`src/mellea_skills_compiler/examples/`](../src/mellea_skills_compiler/examples/) — the package is already built and ships fixtures, lints, and a smoke check. See [`docs/README.md`](../docs/README.md).
+1. **Run a pre-compiled example** if the skill is in [`examples/`](../examples/) — the package is already built and ships fixtures, lints, and a smoke check. See [`docs/TUTORIAL.md`](../docs/TUTORIAL.md).
 2. **Compile your own** from the spec via `mellea-skills compile skills/<name>/spec.md`. The compile pipeline emits a `<name>_mellea/` package alongside the spec.
 3. **Fill stubs** if the compile output uses `NotImplementedError` placeholders for tool integrations the spec couldn't pin down. See [`docs/FROM_STUBS_TO_RUNNING.md`](../docs/FROM_STUBS_TO_RUNNING.md).
 
@@ -90,7 +90,7 @@ The compile pipeline runs `/mellea-fy` for specification decomposition, then cha
 
 ## Running a fixture
 
-Once compiled (or against one of the pre-compiled examples in [`src/mellea_skills_compiler/examples/`](../src/mellea_skills_compiler/examples/)):
+Once compiled (or against one of the pre-compiled examples in [`examples/`](../examples/)):
 
 ```bash
 mellea-skills run <package_dir> --fixture <fixture_id>
@@ -103,4 +103,4 @@ Each compiled `<name>_mellea/` package ships a `fixtures/` subdirectory with sev
 1. Create a directory under `skills/` with a `spec.md` (single-file `.md` source). Support for other source formats — `agents.yaml` + `crew.py` for CrewAI, `.af` for Letta, LangGraph Python, etc. — is **experimental**; see [`mellea-fy-inventory.md`](../src/mellea_skills_compiler/compile/claude/commands/mellea-fy-inventory.md) for the dialect detection table.
 2. Compile with `mellea-skills compile skills/<name>/<spec_file>` or directly via `/mellea-fy` in Claude Code.
 3. The compile output emits `skills/<name>/<package>_mellea/` with the full pipeline + fixtures + lints + smoke check.
-4. If you want the skill to ship as a canonical pre-compiled example, copy the resulting package to `src/mellea_skills_compiler/examples/<name>/` and add it to the tier table above.
+4. If you want the skill to ship as a canonical pre-compiled example, copy the resulting package to `examples/<name>/` and add it to the tier table above.
