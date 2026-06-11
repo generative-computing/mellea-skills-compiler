@@ -1,1 +1,4 @@
---8<-- "README.md"
+---
+template: home.html
+title: Home
+---

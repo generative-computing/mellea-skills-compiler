@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+  .feature-card {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    border: 1px solid var(--md-default-fg-color--lightest); 
+    border-radius: 8px; padding: 0 1.5rem;
+  }
+  .feature-card:hover {
+    border-color: var(--md-primary-fg-color) !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  .md-typeset a {
+    text-decoration: none!important;
+  }
+  .home-cards {
+
+  }
+  .hero-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 2rem;
+  }
+  .hero-text {
+    flex: 1;
+  }
+  .hero-image {
+    flex-shrink: 0;
+  }
+  .hero-image img {
+    max-width: 250px;
+    width: 100%;
+    height: auto;
+  }
+  @media (max-width: 768px) {
+    .hero-content {
+      flex-direction: column;
+    }
+    .hero-image {
+      width: 100%;
+    }
+    .hero-image img {
+      max-width: 100%;
+    }
+  }
+</style>
+
+<div class="md-typeset">
+
+  <!-- Hero section -->
+  <section style="padding: rem 1rem;">
+    <div class="hero-content">
+      <div class="hero-text">
+        <h1 style="font-size: 2rem; margin-bottom: 1rem;">
+      {{ config.site_name }}
+    </h1>
+        <p style="font-size: 1rem; color: var(--md-default-fg-color--light); margin: 0 0 1rem 0;">
+          Agent specification certification pipeline: <em>from .md skill specs to governed, certified Mellea Python pipelines</em>
+        </p>
+        <a href="{{ 'TUTORIAL/' | url }}"
+           class="md-button md-button--primary" style="margin-right: 0.5rem;">
+          Let's get started
+        </a>
+        <a href="{{ config.repo_url }}"
+           class="md-button">
+          GitHub
+        </a>
+      </div>
+      <div class="hero-image">
+        <img src="assets/MSC.png" alt="Mellea Skills Compiler" />
+      </div>
+    </div>
+  </section>
+  <section>
+   
+  </section>
+
+  <section style="padding: 1rem 0;">
+    <h2>How it works</h2>
+       <p>Mellea Skills Compiler is a certification pipeline for AI agent skills. It takes a natural-language skill specification (a .md file) and produces a typed, instrumented program with policy-driven guardrails and auditable execution traces.</p>
+      <p>Mellea Skills Compiler operates as a workflow:</p>
+    </p>
+    <div style="overflow-x: auto;">
+      <img src="assets/paper-pipeline.png" alt="Illustration of Mella Pipeline:"/>
+    </div>
+  </section>
+
+  <section class="md-grid home-cards" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; padding: 1rem 0 0 0.5rem;">
+    <a href="{{ 'INSTALLATION/' | url }}" class="md-typeset feature-card">
+      <h3>Get started</h3>
+      <p>Install mellea skills compiler and start compiling your own skills.</p>
+    </a>
+    <a href="{{ 'TUTORIAL/' | url }}" class="md-typeset feature-card">
+      <h3>Tutorial</h3>
+      <p>Four Skills, five minutes each. See a compiled skill produce a real result.</p>
+    </a>
+    <a href="https://github.com/generative-computing/mellea/blob/main/docs/docs/examples/index.md" target="_blank" rel="noopener" class="md-typeset feature-card">
+      <h3>Examples</h3>
+      <p>Explore runnable example skills, precompiled skill outputs from the melleafy command</p>
+    </a>
+  </section>
+
+  <section>
+    <p>Research preview (v0.1) — This is an early-stage research project from IBM Research. The APIs, CLI, and artifact formats are subject to change. We welcome feedback via Issues.</p>
+    <h2>Features</h2>
+  </section>
+
+</div>
+{% endblock %}

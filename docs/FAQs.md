@@ -1,5 +1,10 @@
 # Frequently Asked Questions
 
+!!! tip "Question not answered?"
+    If you find that you have questions that should be
+    covered here, feel free to reach out to us by raising an issue
+    in the github repo.
+
 ## General
 
 ### What is the Mellea Skills Compiler?

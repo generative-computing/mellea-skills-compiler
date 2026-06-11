@@ -1,4 +1,4 @@
-# Tutorial — Four Skills, Five Minutes Each
+# Four Skills, Five Minutes Each
 
 This tutorial assumes you have already followed [`README.md`](README.md) §
 _Install_: `pip install -e .` succeeds in your virtual environment, an Ollama

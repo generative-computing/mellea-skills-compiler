@@ -11,7 +11,7 @@
   <a href="#quick-start">Quick Start</a> &middot;
   <a href="#example-outputs">Examples</a> &middot;
   <a href="#next-steps">Next Steps</a> &middot;
-  <a href="FAQ.md">FAQ</a> &middot;
+  <a href="FAQs.md">FAQs</a> &middot;
   <a href="https://github.com/generative-computing/mellea-skills-compiler/blob/main/docs/Mellea_Skills_Compiler-tech_report.pdf">Tech Report</a> &middot;
   <a href="#citation">Cite</a>
 
@@ -66,26 +66,26 @@ agent specification        spec → typed pipeline                   Guardian ho
 **Step 2: Certify** — A single `mellea-skills certify` invocation performs end-to-end governance: AI Atlas Nexus identifies applicable risks from Granite Guardian, NIST AI RMF, and Credo UCF taxonomies and emits a `PolicyManifest`; Guardian hooks configured from that manifest monitor every `m.instruct()` call as fixtures execute; each governance requirement is classified as AUTOMATED, PARTIAL, or MANUAL based on runtime evidence; a compliance report and audit trail are written alongside the compiled pipeline.
 
 ## Install
+!!! note "Prerequisites"
+    ### Claude Setup
 
-### Claude Setup
+    1. Claude Code is required to compile a Mellea skill. Please ensure that the Claude Code is installed by following the guide here: https://code.claude.com/docs/en/quickstart
 
-1. Claude Code is required to compile a Mellea skill. Please ensure that the Claude Code is installed by following the guide here: https://code.claude.com/docs/en/quickstart
+    2. Set relevant platform-specific environment variables to communicate with your Claude platform.
 
-2. Set relevant platform-specific environment variables to communicate with your Claude platform.
+      For example, Claude via LiteLLM Gateway requires following env variables:
 
-   For example, Claude via LiteLLM Gateway requires following env variables:
+      ```
+      export ANTHROPIC_BASE_URL = ""
+      export ANTHROPIC_AUTH_TOKEN = ""
+      ```
 
-   ```
-   export ANTHROPIC_BASE_URL = ""
-   export ANTHROPIC_AUTH_TOKEN = ""
-   ```
+      or if you have an ANTHROPIC_API_KEY
 
-   or if you have an ANTHROPIC_API_KEY
-
-   ```
-   export ANTHROPIC_API_KEY = ""
-   export ANTHROPIC_BASE_URL = ""
-   ```
+      ```
+      export ANTHROPIC_API_KEY = ""
+      export ANTHROPIC_BASE_URL = ""
+      ```
 
 ### Project Code
 

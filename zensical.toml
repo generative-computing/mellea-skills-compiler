@@ -1,11 +1,39 @@
 [project]
 site_name = "Mellea skills compiler"
-site_description = "Agent specification certification pipeline — from skill specs to governed, certified Mellea pipelines"
+site_description = "Agent specification certification pipeline: from skill specs to governed, certified Mellea pipelines"
 site_author = "IBM Research" 
+site_url = "https://generative-computing.github.io/mellea-skills-compiler"
 repo_url = "https://github.com/generative-computing/mellea-skills-compiler"
 docs_dir = "docs"
 site_dir = "site"
 watch = ["README.md"]
+
+nav = [
+  {"Home" = "README.md"},
+  {"Getting started" = [
+    {Installation = "INSTALLATION.md"},
+    {"Quick start" = "QUICK_START.md"},
+    {"CLI reference" = "CLI.md"}, 
+     {"From Stubs to Running" = "FROM_STUBS_TO_RUNNING.md"},
+     {Exporting = "EXPORTING.md"}
+  ]},
+   {"Tutorials" = [
+     {"Four Skills, Five Minutes Each" = "TUTORIAL.md"},
+  ]},
+  {FAQs = "FAQs.md"},
+  {Dialects = [
+    {Overview = "dialects/README.md"},
+    {"Claude Code" = "dialects/claude-code.md"},
+{LangGraph = "dialects/langgraph.md"},
+    {CrewAI = "dialects/crewai.md"},
+{OpenClaw = "dialects/openclaw.md"},
+{Hybrid = "dialects/hybrid.md"},
+{Letta = "dialects/letta.md"},
+{"Agent Skills Standard" = "dialects/agent-skills-std.md"},
+  ]},
+  {Community = [{Contributing = "CONTRIBUTING.md"}]},
+  {Reference = [{"API Reference" = "API.md"}]}
+]
 
 [[project.theme.palette]] 
 scheme = "default"
@@ -16,6 +44,21 @@ toggle.name = "Switch to dark mode"
 scheme = "slate"
 toggle.icon = "lucide/moon"
 toggle.name = "Switch to light mode"
+
+[project.theme]
+custom_dir = "overrides"
+font.text = "IBM Plex Sans Light"
+font.code = "IBM Plex Mono"
+features = ["navigation.path", "navigation.footer"]
+
+[project.plugins.mkdocstrings.handlers.python]
+inventories = ["https://docs.python.org/3/objects.inv"]
+paths = ["src"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "google"
+inherited_members = true
+show_source = false
 
 [project.markdown_extensions.zensical.extensions.macros]
 module_name = "macros"
@@ -62,6 +105,3 @@ combine_header_slug = true
 custom_checkbox = true
 [project.markdown_extensions.pymdownx.tilde]
 
-[project.theme]
-font.text = "IBM Plex Sans"
-font.code = "IBM Plex Mono"
