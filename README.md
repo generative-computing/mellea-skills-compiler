@@ -303,7 +303,7 @@ This is a research preview. We welcome feedback, bug reports, and suggestions vi
 
 ## Team
 
-Elizabeth M. Daly, Dhaval Salwala, Inge Vejsbjerg, Seshu Tirupathi, Rebecka Nordenlöw, Jessica He, Kush R. Varshney, and Jordan McAfoose — IBM Research
+Elizabeth M. Daly, Dhaval Salwala, Inge Vejsbjerg, Seshu Tirupathi, Rebecka Nordenlöw, Lamogha Chiazor, Jessica He, Kush R. Varshney, and Jordan McAfoose — IBM Research
 
 ## Citation
 
@@ -315,7 +315,7 @@ If you use Mellea Skills Compiler in your work, please cite:
 @techreport{daly2026mellea,
   title       = {Mellea Skills Compiler: Compiling and Certifying Agent Skills with Mellea},
   author      = {Daly, Elizabeth M. and Salwala, Dhaval and Vejsbjerg, Inge and
-                 Tirupathi, Seshu and Nordenl{\"o}w, Rebecka and He, Jessica and
+                 Tirupathi, Seshu and Nordenl{\"o}w, Rebecka and Chiazor, Lamogha and He, Jessica and
                  Varshney, Kush R. and McAfoose, Jordan},
   institution = {IBM Research},
   year        = {2026},
