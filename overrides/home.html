@@ -6,7 +6,7 @@
     text-decoration: none;
     color: inherit;
     display: block;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
     border: 1px solid var(--md-default-fg-color--lightest); 
     border-radius: 8px; padding: 0 1.5rem;
   }
@@ -32,7 +32,7 @@
     flex-shrink: 0;
   }
   .hero-image img {
-    max-width: 250px;
+    max-width: 200px;
     width: 100%;
     height: auto;
   }
@@ -52,7 +52,7 @@
 <div class="md-typeset">
 
   <!-- Hero section -->
-  <section style="padding: rem 1rem;">
+  <section style="padding: rem 1rem; ">
     <div class="hero-content">
       <div class="hero-text">
         <h1 style="font-size: 2rem; margin-bottom: 1rem;">
@@ -61,13 +61,13 @@
         <p style="font-size: 1rem; color: var(--md-default-fg-color--light); margin: 0 0 1rem 0;">
           Agent specification certification pipeline: <em>from .md skill specs to governed, certified Mellea Python pipelines</em>
         </p>
-        <a href="{{ 'TUTORIAL/' | url }}"
+        <a href="{{ 'INSTALLATION/' | url }}"
            class="md-button md-button--primary" style="margin-right: 0.5rem;">
-          Let's get started
+          Get started with the compiler
         </a>
         <a href="{{ config.repo_url }}"
            class="md-button">
-          GitHub
+          GitHub repo
         </a>
       </div>
       <div class="hero-image">
@@ -75,11 +75,7 @@
       </div>
     </div>
   </section>
-  <section>
-   
-  </section>
-
-  <section style="padding: 1rem 0;">
+  <section style="padding: 0.5rem 0;">
     <h2>How it works</h2>
        <p>Mellea Skills Compiler is a certification pipeline for AI agent skills. It takes a natural-language skill specification (a .md file) and produces a typed, instrumented program with policy-driven guardrails and auditable execution traces.</p>
       <p>Mellea Skills Compiler operates as a workflow:</p>
@@ -89,7 +85,7 @@
     </div>
   </section>
 
-  <section class="md-grid home-cards" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; padding: 1rem 0 0 0.5rem;">
+  <section class="md-grid home-cards" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; padding: 1rem 0 0 0rem;">
     <a href="{{ 'INSTALLATION/' | url }}" class="md-typeset feature-card">
       <h3>Get started</h3>
       <p>Install mellea skills compiler and start compiling your own skills.</p>
@@ -105,9 +101,24 @@
   </section>
 
   <section>
-    <p>Research preview (v0.1) — This is an early-stage research project from IBM Research. The APIs, CLI, and artifact formats are subject to change. We welcome feedback via Issues.</p>
-    <h2>Features</h2>
+    
+    <h2>Pipeline Features</h2>
+    <ul>
+      <li>Natural-language to typed pipeline compilation</li>
+      <li>Automated contradiction detection in specifications</li>
+      <li>Policy-driven guardrails and enforcement</li>
+      <li>Auditable execution traces with compliance reporting</li>
+      <li>Runtime instrumentation via Guardian hooks</li>
+      <li>Multi-dialect support (Claude Code, LangGraph, CrewAI, and more)</li>
+      <li>Fixture generation and automated testing</li>
+      <li>Compliance classification and manifest generation</li>
+    </ul>
+    <div class="admonition example">
+      <p class="admonition-title">Research preview (v0.1)</p>
+      <p>This is an early-stage research project from IBM Research. The APIs, CLI, and artifact formats are subject to change. We welcome feedback via Issues.</p>
+    </div>
+    <h3 id="ibm-open-source-ai">IBM ❤️ Open Source AI</h3>
+    <p>Mellea Skills Compiler has been brought to you by IBM Research.</p>
   </section>
-
 </div>
 {% endblock %}

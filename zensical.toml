@@ -21,6 +21,10 @@ nav = [
      {"Four Skills, Five Minutes Each" = "TUTORIAL.md"},
   ]},
   {FAQs = "FAQs.md"},
+  {Examples ="EXAMPLES.md"},
+  {Concepts = [
+    {"Main concepts" = "CONCEPTS.md"},
+  {"Next Steps" = "NEXT_STEPS.md"}]},
   {Dialects = [
     {Overview = "dialects/README.md"},
     {"Claude Code" = "dialects/claude-code.md"},
