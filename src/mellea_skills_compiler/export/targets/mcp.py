@@ -53,6 +53,7 @@ def translate_mcp(loaded: "LoadedContext") -> "TranslationPlan":
         sig=sig,
         is_async=is_async,
         declared_env_vars=manifest.get("declared_env_vars", []),
+        has_policy_manifest=loaded.policy_manifest_path is not None,
     )
 
     mcp_json = _render_mcp_json(
@@ -201,6 +202,7 @@ def _render_server_py(
     sig: "ParsedSignature",
     is_async: bool,
     declared_env_vars: list,
+    has_policy_manifest: bool = False,
 ) -> str:
     param_list = _render_param_list(sig)
     passthrough = _render_passthrough(sig)
@@ -213,6 +215,21 @@ def _render_server_py(
             "\n# Required environment variables: "
             + ", ".join(var_names)
             + "\n"
+        )
+
+    guardian_block = ""
+    if has_policy_manifest:
+        guardian_block = (
+            "import json\n"
+            "from pathlib import Path\n"
+            "from mellea_skills_compiler.guardian import register_plugins\n"
+            "from mellea_skills_compiler.certification.nexus_policy import PolicyManifest\n"
+            "\n"
+            '_manifest_path = Path(__file__).parent / "policy_manifest.json"\n'
+            "if _manifest_path.exists():\n"
+            "    _manifest = PolicyManifest(**json.loads(_manifest_path.read_text()))\n"
+            '    register_plugins(_manifest, log_dir=Path(__file__).parent / "audit")\n'
+            "\n"
         )
 
     if is_async:
@@ -237,6 +254,7 @@ def _render_server_py(
         "from mcp.server.fastmcp import FastMCP\n"
         f"from {package_name}.{entry_module} import {entry_function}\n"
         f"{env_note}\n"
+        f"{guardian_block}"
         f'mcp = FastMCP(name="{tool_name}")\n'
         "\n"
         "\n"

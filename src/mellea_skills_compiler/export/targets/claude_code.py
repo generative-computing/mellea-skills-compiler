@@ -54,6 +54,7 @@ def translate_claude_code(loaded: "LoadedContext") -> "TranslationPlan":
         pattern=sig.pattern,
         params=sig.params,
         export_version=export_version,
+        has_policy_manifest=loaded.policy_manifest_path is not None,
     )
 
     skill_md = _render_skill_md(
@@ -144,6 +145,7 @@ def _render_run_sh(
     pattern: str,
     params: list[dict],
     export_version: str,
+    has_policy_manifest: bool = False,
 ) -> str:
     dispatch = {
         "synchronous_oneshot": _run_sh_synchronous_oneshot,
@@ -157,6 +159,7 @@ def _render_run_sh(
         pattern=pattern,
         params=params,
         export_version=export_version,
+        has_policy_manifest=has_policy_manifest,
     )
 
 
@@ -189,6 +192,19 @@ def _invocation_args(pattern: str, params: list[dict]) -> str:
     return args
 
 
+def _guardian_inline_snippet() -> str:
+    return (
+        "import json as _gjson, os as _gos\n"
+        "from pathlib import Path as _GPath\n"
+        "from mellea_skills_compiler.guardian import register_plugins as _reg\n"
+        "from mellea_skills_compiler.certification.nexus_policy import PolicyManifest as _PM\n"
+        '_gmp = _GPath(_gos.environ.get("ADAPTER_DIR", ".")) / "policy_manifest.json"\n'
+        "if _gmp.exists():\n"
+        "    _gm = _PM(**_gjson.loads(_gmp.read_text()))\n"
+        '    _reg(_gm, log_dir=_GPath(_gos.environ.get("ADAPTER_DIR", ".")) / "audit")\n'
+    )
+
+
 def _run_sh_synchronous_oneshot(
     *,
     package_name: str,
@@ -197,15 +213,18 @@ def _run_sh_synchronous_oneshot(
     pattern: str,
     params: list[dict],
     export_version: str,
+    has_policy_manifest: bool = False,
 ) -> str:
     inv_args = _invocation_args(pattern, params)
     header = _bash_header(export_version)
+    guardian = _guardian_inline_snippet() if has_policy_manifest else ""
     return (
         header
         + "\n"
         + "exec python -c \"\n"
         + "import json, sys\n"
         + f"from {package_name}.{entry_module} import {entry_function}\n"
+        + guardian
         + "try:\n"
         + f"    result = {entry_function}({inv_args})\n"
         + "except Exception as exc:\n"
@@ -244,15 +263,18 @@ def _run_sh_streaming(
     pattern: str,
     params: list[dict],
     export_version: str,
+    has_policy_manifest: bool = False,
 ) -> str:
     header = _bash_header(export_version)
     call_line = _streaming_call(entry_function, pattern, params)
+    guardian = _guardian_inline_snippet() if has_policy_manifest else ""
     return (
         header
         + "\n"
         + "python -u - \"$@\" <<'PYEOF'\n"
         + "import sys, asyncio, json\n"
         + f"from {package_name}.{entry_module} import {entry_function}\n"
+        + guardian
         + "\n"
         + "async def main():\n"
         + call_line
@@ -272,14 +294,17 @@ def _run_sh_conversational_session(
     pattern: str,
     params: list[dict],
     export_version: str,
+    has_policy_manifest: bool = False,
 ) -> str:
     header = _bash_header(export_version)
+    guardian = _guardian_inline_snippet() if has_policy_manifest else ""
     return (
         header
         + "\n"
         + "python - \"$@\" <<'PYEOF'\n"
         + "import sys, json, argparse, inspect\n"
         + f"from {package_name}.{entry_module} import {entry_function}\n"
+        + guardian
         + "\n"
         + "parser = argparse.ArgumentParser()\n"
         + "parser.add_argument(\"--input\", required=True)\n"

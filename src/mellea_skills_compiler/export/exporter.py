@@ -70,6 +70,7 @@ class TranslationPlan:
     bundled_package_name: str
     warnings: list[str] = field(default_factory=list)
     deployment_guidance: str = ""
+    has_policy_manifest: bool = False
 
 
 @dataclass
@@ -274,16 +275,19 @@ def stage3_translate(loaded: LoadedContext) -> TranslationPlan:
     """Build TranslationPlan from LoadedContext. Dispatches to target module."""
     if loaded.invocation.target == "langgraph":
         from mellea_skills_compiler.export.targets.langgraph import translate_langgraph
-        return translate_langgraph(loaded)
+        plan = translate_langgraph(loaded)
     elif loaded.invocation.target == "claude-code":
         from mellea_skills_compiler.export.targets.claude_code import (
             translate_claude_code,
         )
-        return translate_claude_code(loaded)
+        plan = translate_claude_code(loaded)
     elif loaded.invocation.target == "mcp":
         from mellea_skills_compiler.export.targets.mcp import translate_mcp
-        return translate_mcp(loaded)
-    _halt(2, f"No translator for target '{loaded.invocation.target}'")
+        plan = translate_mcp(loaded)
+    else:
+        _halt(2, f"No translator for target '{loaded.invocation.target}'")
+    plan.has_policy_manifest = loaded.policy_manifest_path is not None
+    return plan
 
 
 # ---------------------------------------------------------------------------
