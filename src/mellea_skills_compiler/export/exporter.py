@@ -520,6 +520,20 @@ def stage5_lint(result: EmitResult, loaded: LoadedContext, plan: TranslationPlan
             except Exception as e:
                 failures.append(f"mcp.json: invalid JSON — {e}")
 
+    if loaded.policy_manifest_path is not None:
+        entry_files = {
+            "langgraph": result.out_path / "graph.py",
+            "mcp": result.out_path / "server.py",
+            "claude-code": result.out_path / "scripts" / "run.sh",
+        }
+        entry_file = entry_files.get(target)
+        if entry_file and entry_file.exists():
+            if "register_plugins" not in entry_file.read_text():
+                failures.append(
+                    f"{entry_file.name}: policy_manifest.json present but "
+                    f"'register_plugins' not found in generated entry point"
+                )
+
     pkg_dir = result.out_path / plan.bundled_package_name
     if not pkg_dir.is_dir():
         failures.append(f"Bundled package directory '{plan.bundled_package_name}' not found")
