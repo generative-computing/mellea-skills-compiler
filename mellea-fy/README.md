@@ -2,7 +2,7 @@
 
 `/mellea-fy` is the Claude Code slash command that compiles agent specifications into governed Mellea pipelines. It runs the LLM-driven decomposition phase of the Mellea Skills Compiler workflow.
 
-In most cases you don't invoke `/mellea-fy` directly — `mellea-skills compile` calls it under the hood and adds deterministic plumbing on either side (companion-directory mirroring, grounding pre-population, runtime-defaults injection, structural lints, fixture smoke check). For an end-to-end walkthrough see [`docs/README.md`](../docs/README.md).
+In most cases you don't invoke `/mellea-fy` directly — `mellea-skills compile` calls it under the hood and adds deterministic plumbing on either side (companion-directory mirroring, grounding pre-population, runtime-defaults injection, structural lints, fixture smoke check). For an end-to-end walkthrough see [`docs/TUTORIAL.md`](../docs/TUTORIAL.md).
 
 ## Usage
 

@@ -171,7 +171,7 @@ What's lost: token-by-token streaming to MCP clients (would require `streamable-
 
 ## 5. Harnesses We Do Not Export To
 
-To set expectations clearly: **this research preview does not currently export to OpenClaw, NanoClaw, CrewAI, Letta, AutoGen, OpenAI Agents SDK, smolagents, or any harness outside the three above.** The compiler can _detect_ several of these as input dialects (see [`mellea-fy-inventory.md`](../src/mellea_skills_compiler/compile/claude/commands/mellea-fy-inventory.md) for the dialect detection table) — that lets you compile a skill _from_ one of those formats, but it does not produce an export _to_ it.
+To set expectations clearly: **this research preview does not currently export to OpenClaw, NanoClaw, CrewAI, Letta, AutoGen, OpenAI Agents SDK, smolagents, or any harness outside the three above.** The compiler can _detect_ several of these as input dialects (see [`mellea-fy-inventory.md`](../.claude/commands/mellea-fy-inventory.md) for the dialect detection table) — that lets you compile a skill _from_ one of those formats, but it does not produce an export _to_ it.
 
 If you need to run a compiled skill under one of these harnesses, you write the wrapper yourself. The §3 patterns are the starting point; the typed contract in `melleafy.json` tells you what shape the wrapper has to bridge. More native export targets are on the roadmap, not in this preview.
 
@@ -181,7 +181,7 @@ If you need to run a compiled skill under one of these harnesses, you write the 
 
 If you're writing your own integration (manual or via your own exporter), the following are stable and safe to build against:
 
-- **`run_pipeline` is the entry point.** Modality-specific signatures are documented in [`mellea-fy-generate.md`](../src/mellea_skills_compiler/compile/claude/commands/mellea-fy-generate.md). Synchronous one-shot is the most common.
+- **`run_pipeline` is the entry point.** Modality-specific signatures are documented in [`mellea-fy-generate.md`](../.claude/commands/mellea-fy-generate.md). Synchronous one-shot is the most common.
 - **Pydantic schemas in `schemas.py` define the I/O contract.** Output models are non-`Optional` for hard-required fields; nullable fields use `Optional`.
 - **`melleafy.json` is versioned.** `manifest_version` ≥ 1.0.0 is required by the exporter; the current emitted version is `1.1.0`.
 - **Fixtures in `fixtures/` follow the `ALL_FIXTURES = [factory, ...]` contract.** Each factory returns `(inputs_dict, fixture_id, description)` — runnable input examples for any wrapper that needs them.
@@ -199,4 +199,4 @@ What's _not_ stable yet:
 - For experimental export today: `mellea-skills export --help` after checking out the [`export-pipeline`](../../../tree/export-pipeline) branch (or `main` once it lands).
 - For hand-wrapping a non-supported harness: §3 documents the patterns; the wrapper is yours to maintain.
 - For typed contract questions: read `melleafy.json` for the package you're integrating, and the spec at `mellea-fy-artifacts.md` for what each field means.
-- For status of the export feature graduating from experimental to stable: check the project [Issues](../../../issues).
+- For status of the export feature graduating from experimental to stable: check the project [Issues](https://github.com/generative-computing/mellea-skills-compiler/issues).

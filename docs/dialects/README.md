@@ -30,6 +30,8 @@ The following are recognised by the Step 0 classifier but do not yet have shippi
 - `openai_agents_sdk`
 - `smolagents`
 
-## What if my runtime is not listed at all?
 
-The Step 0 classifier returns `unknown`. The compiler proceeds with the generic inventory pass and the general mapping table; the package will be generated but without runtime-specific knowledge. Open a discussion if your runtime is widely used and you want a dedicated dialect doc.
+!!! tip "What if my runtime is not listed at all?"
+    The Step 0 classifier returns `unknown`. The compiler proceeds with the generic inventory pass and the general 
+    mapping table; the package will be generated but without runtime-specific knowledge. Open a discussion if your 
+    runtime is widely used and you want a dedicated dialect doc.

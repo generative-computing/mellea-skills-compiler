@@ -1,8 +1,9 @@
 import importlib
 import re
+import shutil
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import yaml
 from rich.console import Console
@@ -68,11 +69,28 @@ def load_skill_pipeline(pipeline_dir: Path):
         # Remove parent directory from sys.path
         sys.path.pop(0)
 
-    # Find the main entry point (run_* function).
-    # Prefer functions defined directly in pipeline.py over imported ones,
-    # since pipeline.py may import helper run_* functions from other modules
-    # (e.g., run_all_detectors from detectors.py) that aren't the entry point.
+    # Find the main entry point.
+    # Resolution order:
+    #   1. Locally-defined `run_pipeline` — the documented canonical entry
+    #      (`melleafy.json:entry_signature` always names this) and the only
+    #      name guaranteed to be the entry point regardless of any helper
+    #      `run_*` functions that may be defined alongside it.
+    #   2. Any other locally-defined `run_*` function — first match by
+    #      sorted dir() order.
+    #   3. Any imported `run_*` function (functions whose `__module__` is
+    #      not the pipeline module itself).
+    #
+    # The earlier "first locally-defined run_* wins" rule picked the
+    # alphabetically-first match, which silently bound `run_assessment_method`,
+    # `run_analysis`, etc. as the entry whenever the canonical `run_pipeline`
+    # sorted after a helper. The smoke-check would then call the helper with
+    # the fixture's kwargs and raise TypeError on signature mismatch.
     module_name = skill_pipeline.__name__
+
+    canonical = getattr(skill_pipeline, "run_pipeline", None)
+    if callable(canonical) and getattr(canonical, "__module__", None) == module_name:
+        return canonical
+
     run_fn = None
     imported_run_fn = None
     for attr_name in dir(skill_pipeline):
@@ -150,3 +168,67 @@ def load_fixtures(pipeline_dir: Path) -> List[Dict]:
         raise Exception(f"No valid FIXTURES found in {fixtures_dir}")
     else:
         return fixtures
+
+
+def mirror_dir_contents_to_target(
+    source_dir: Path,
+    target_dir: Path,
+    include_only: Optional[List[str]] = None,
+    ignore_patterns: Optional[List[str]] = None,
+) -> List[str]:
+    """Mirror directory contents from source to target directory.
+
+    Copies all files and subdirectories from source_dir into target_dir,
+    excluding items in the ignore list. If `include_only` provided, copy only those items.
+    Skips copying if the target directory is inside the source to prevent infinite recursion.
+
+    Args:
+        source_dir Path: Source directory to copy from
+        target_dir Path: Destination directory (created if it doesn't exist)
+        include_only List[str], optional: Include items in the given list only. Default is None.
+        ignore_patterns List[str], optional: List of file/directory names to skip. Default is None.
+
+    Returns:
+        List of item names that were successfully copied
+
+    Raises:
+        OSError: If file operations fail
+
+    Example:
+        >>> mirror_dir_contents_to_target(
+        ...     Path("/skill"),
+        ...     Path("/skill/skill_mellea"),
+        ...     ignore_patterns=["audit", "pyproject.toml"]
+        ... )
+        ['scripts', 'references', 'spec.md']
+    """
+
+    mirrored: List[str] = []
+
+    # Ensure target directory exists
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    for source in source_dir.iterdir():
+        # If include_only provided, skip items NOT in it
+        if include_only and source.name not in include_only:
+            continue
+
+        # Skip items in ignore_patterns
+        if ignore_patterns and source.name in ignore_patterns:
+            continue
+
+        # Skip recursion
+        if source == target_dir or source.is_relative_to(target_dir):
+            continue
+
+        target = target_dir / source.name
+        try:
+            if source.is_dir():
+                shutil.copytree(source, target, dirs_exist_ok=True)
+            else:
+                shutil.copy2(source, target)
+            mirrored.append(source.name)
+        except Exception as e:
+            LOGGER.warning(f"Failed to mirror {source.name}: {e}")
+
+    return mirrored

@@ -19,7 +19,7 @@
     "model_id": {
       "type": "string",
       "minLength": 1,
-      "description": "Model name passed to the backend (e.g. 'granite3.3:8b' for ollama). The model must be available in the user's runtime environment — the schema does not validate availability."
+      "description": "Model name passed to the backend (e.g. 'granite4.1:3b' for ollama). The model must be available in the user's runtime environment — the schema does not validate availability."
     },
     "_comment": {
       "type": "string",

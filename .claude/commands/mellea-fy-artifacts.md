@@ -52,7 +52,7 @@ Numbered sections in fixed order (conditional sections omitted when not triggere
 - **§8 Generated stubs to implement** — if any `stub` or `delegate_to_runtime` dispositions: table listing every stub with its target symbol and implementation instructions
 - **§9 Fixtures and smoke test** — always present: how to run `python -m pytest fixtures/` and the expected output
 
-SETUP.md sections do NOT invent backend options. The C8 default is always `ollama` with `granite3.3:8b` unless the source spec explicitly names a different backend.
+SETUP.md sections do NOT invent backend options. The C8 default is always `ollama` with `granite4.1:3b` unless the source spec explicitly names a different backend.
 
 ---
 
@@ -132,10 +132,9 @@ Do NOT emit recap when mode is `ask` or `config` (user already acknowledged stub
 
 Narrative pieces are batched to minimise LLM call count. KB5 schema priming concerns do not apply to melleafy compilation calls (KB5 governs Mellea pipeline sessions inside compiled skills, not the compilation process itself). Batching rules:
 
-- **Single invocation** where pieces share the same input context: `classification_narrative` and `deferred_feature_entry` can be generated together.
-- **Separate invocations only** when input contexts are meaningfully different or the combined context would exceed the model's practical window.
-- `judgment_call_explanation` entries: if ≤3 judgment calls exist, generate all in one invocation with a list of `{element_id, explanation}` pairs. If >3, batch into groups of 3.
-- `setup_section_body` entries: all SETUP.md §4–§7 bodies in one invocation.
+- **Merged invocation** when ≤3 judgment calls exist: combine `classification_narrative`, `deferred_feature_entry`, and `judgment_call_explanation` (≤3 items) into a **single invocation**. All three share compatible input context (`classification.json`, `element_mapping_amendments.json`, and judgment traces), so batching them together reduces call count by 1. This is the primary performance optimization for Step 6 — most runs have ≤3 judgment calls.
+- **Separate invocations** when input contexts are meaningfully different or the combined context would exceed the model's practical window. Use this fallback when judgment count >3, split `judgment_call_explanation` into groups of 3 and invoke separately.
+- `setup_section_body` entries: all SETUP.md §4–§7 bodies in one invocation (always separate, as its input context is distinct).
 
 Recipes:
 

@@ -40,8 +40,8 @@
         },
         "category": {
           "type": "string",
-          "pattern": "^C[1-9]$",
-          "description": "Optional C-category code from the dependency plan (e.g. 'C1', 'C8'). Used by the writer to group constants under labelled section headers. Omit for runtime constants (LOOP_BUDGET etc.) that are not derived from a classified source element."
+          "enum": ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9"],
+          "description": "Optional C-category code from the dependency plan. Used by the writer to group constants under labelled section headers. Must be exactly one of 'C1'..'C9'. Omit the field entirely (do NOT use placeholder values like '-', 'N/A', or '—') for runtime constants (LOOP_BUDGET etc.) that are not derived from a classified source element."
         },
         "provenance": {
           "type": "object",

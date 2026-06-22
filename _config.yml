@@ -1,0 +1,8 @@
+exclude:
+  - skills/
+  - examples/
+  - mellea-fy/
+  - src/
+  - tests/
+  - node_modules/
+  - site/

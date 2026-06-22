@@ -12,7 +12,7 @@ Please make sure to include any potentially useful information in the issue, so 
 
 - What SHA of Mellea Skills Compiler are you running? If this is not the latest SHA on the main branch, please try if the problem persists with the latest version.
 - Python versions
-
+    
 ## Contributing a change
 
 Contributions to this project are [released][released] to the public under the project's [opensource license](https://github.com/generative-computing/mellea-skills-compiler/blob/main/LICENSE).

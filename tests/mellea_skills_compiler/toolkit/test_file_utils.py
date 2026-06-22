@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from mellea_skills_compiler.toolkit.file_utils import parse_spec_file
+from mellea_skills_compiler.toolkit.file_utils import (
+    load_skill_pipeline,
+    parse_spec_file,
+)
 
 
 class TestParseSkillMd:
@@ -217,3 +220,102 @@ Body content."""
                 parse_spec_file(path)
         finally:
             path.unlink()
+
+
+def _make_pipeline_package(root: Path, name: str, pipeline_source: str) -> Path:
+    """Materialise a synthetic <name>/pipeline.py package under `root`.
+
+    Returns the package directory (a child of `root` named `name`).
+    """
+    pkg_dir = root / name
+    pkg_dir.mkdir(parents=True, exist_ok=True)
+    (pkg_dir / "__init__.py").write_text("")
+    (pkg_dir / "pipeline.py").write_text(pipeline_source)
+    return pkg_dir
+
+
+class TestLoadSkillPipeline:
+    """Test cases for load_skill_pipeline — entry-point resolution.
+
+    Regression target: skills with helper `run_*` functions defined alongside
+    `run_pipeline` previously had the smoke check pick the alphabetically-
+    first match (e.g. `run_assessment_method` < `run_pipeline`), which
+    caused TypeError on the fixture's `user_input=...` kwargs because the
+    helper had a different signature.
+    """
+
+    def test_prefers_run_pipeline_over_alphabetically_earlier_helper(self):
+        """run_assessment_method sorts before run_pipeline; resolver must pick run_pipeline."""
+        source = (
+            "def run_assessment_method(org_context, refs):\n"
+            "    return ('helper', org_context, refs)\n"
+            "\n"
+            "def run_pipeline(user_input, doc=''):\n"
+            "    return ('canonical', user_input, doc)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg_dir = _make_pipeline_package(Path(tmp), "synthetic_a_helper_pkg", source)
+            fn = load_skill_pipeline(pkg_dir)
+            # The canonical entry point takes user_input by kwarg and returns the canonical marker
+            assert fn.__name__ == "run_pipeline"
+            assert fn(user_input="hello") == ("canonical", "hello", "")
+
+    def test_falls_back_to_first_run_function_when_no_run_pipeline(self):
+        """If pipeline.py only defines run_other, that's the entry point."""
+        source = (
+            "def run_assessment_method(arg):\n"
+            "    return ('only-helper', arg)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg_dir = _make_pipeline_package(Path(tmp), "synthetic_no_canonical_pkg", source)
+            fn = load_skill_pipeline(pkg_dir)
+            assert fn.__name__ == "run_assessment_method"
+
+    def test_prefers_run_pipeline_over_run_zzz_helper(self):
+        """run_zzz sorts after run_pipeline; verifies the fix isn't accidentally a sort-direction flip."""
+        source = (
+            "def run_pipeline(user_input):\n"
+            "    return ('canonical', user_input)\n"
+            "\n"
+            "def run_zzz_helper(x):\n"
+            "    return ('helper', x)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg_dir = _make_pipeline_package(Path(tmp), "synthetic_z_helper_pkg", source)
+            fn = load_skill_pipeline(pkg_dir)
+            assert fn.__name__ == "run_pipeline"
+
+    def test_prefers_local_run_pipeline_over_imported(self):
+        """An imported run_* (e.g. from a sibling module) must not shadow a locally-defined run_pipeline."""
+        source = (
+            "from .helpers import run_helper  # noqa: F401\n"
+            "\n"
+            "def run_pipeline(user_input):\n"
+            "    return ('canonical', user_input)\n"
+        )
+        helpers = "def run_helper(x):\n    return ('imported', x)\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg_dir = _make_pipeline_package(Path(tmp), "synthetic_with_import_pkg", source)
+            (pkg_dir / "helpers.py").write_text(helpers)
+            fn = load_skill_pipeline(pkg_dir)
+            assert fn.__name__ == "run_pipeline"
+            assert fn.__module__.endswith("pipeline")
+
+    def test_raises_when_pipeline_module_missing(self):
+        """Missing pipeline.py raises with a helpful message."""
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg_dir = Path(tmp) / "missing_pipeline_pkg"
+            pkg_dir.mkdir()
+            (pkg_dir / "__init__.py").write_text("")
+            # No pipeline.py
+            with pytest.raises(Exception, match="pipeline.py"):
+                load_skill_pipeline(pkg_dir)
+
+    def test_raises_when_no_run_function_defined(self):
+        """A pipeline.py with no run_* function raises 'No run_* function found'."""
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg_dir = _make_pipeline_package(
+                Path(tmp), "synthetic_no_run_pkg", "x = 1\n"
+            )
+            with pytest.raises(Exception, match="No run_"):
+                load_skill_pipeline(pkg_dir)

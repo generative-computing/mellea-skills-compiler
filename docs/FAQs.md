@@ -1,5 +1,10 @@
 # Frequently Asked Questions
 
+!!! tip "Question not answered?"
+    If you find that you have questions that should be
+    covered here, feel free to reach out to us by raising an issue
+    in the github repo.
+
 ## General
 
 ### What is the Mellea Skills Compiler?
@@ -32,7 +37,7 @@ Mellea is named after the honey mushroom (_Armillaria mellea_) — a metaphor fo
 
 The user-facing workflow is two commands — `compile` then `certify`:
 
-1. **Compile** — A `.md` specification is decomposed into a typed Mellea pipeline package with Pydantic schemas, extraction slots, validators, and orchestration code. You can compile via the CLI (`mellea-skills compile <spec>`) or via the `/mellea-fy` command inside Claude Code. See [`src/mellea_skills_compiler/examples/`](src/mellea_skills_compiler/examples/) for pre-compiled examples.
+1. **Compile** — A `.md` specification is decomposed into a typed Mellea pipeline package with Pydantic schemas, extraction slots, validators, and orchestration code. You can compile via the CLI (`mellea-skills compile <spec>`) or via the `/mellea-fy` command inside Claude Code. See [`examples/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/examples) for pre-compiled examples.
 
 2. **Certify** — A single `mellea-skills certify` invocation does three things end-to-end: AI Atlas Nexus identifies applicable risks from the Granite Guardian, NIST AI RMF, and Credo UCF taxonomies and emits a `PolicyManifest` (JSON); Guardian hooks configured from that manifest monitor every LLM generation as fixtures execute; each governance requirement is classified as AUTOMATED, PARTIAL, or MANUAL based on runtime evidence, producing a certification report with evidence chains.
 
@@ -42,7 +47,7 @@ The user-facing workflow is two commands — `compile` then `certify`:
 
 ### What is `/mellea-fy`?
 
-A Claude Code slash command that performs the LLM-driven specification decomposition. Given a `.md` skill specification, it produces a complete Mellea pipeline package alongside the spec. The command definition lives in [`mellea-fy/`](mellea-fy/). The `mellea-skills compile` CLI wraps `/mellea-fy` and adds deterministic plumbing on either side (companion-directory mirroring, grounding pre-population, runtime-defaults injection, structural lints, fixture smoke check). See [`mellea-fy/README.md`](mellea-fy/README.md) for details.
+A Claude Code slash command that performs the LLM-driven specification decomposition. Given a `.md` skill specification, it produces a complete Mellea pipeline package alongside the spec. The command definition lives in [`mellea-fy/`](mellea-fy/). The `mellea-skills compile` CLI wraps `/mellea-fy` and adds deterministic plumbing on either side (companion-directory mirroring, grounding pre-population, runtime-defaults injection, structural lints, fixture smoke check). See [`mellea-fy/README.md`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/mellea-fy/README.md) for details.
 
 ### What is AI Atlas Nexus?
 
@@ -166,7 +171,7 @@ Yes. `mellea-skills compile <spec>` produces a standalone Mellea pipeline packag
 mellea-skills run <package_dir> --fixture <fixture_id>
 ```
 
-Each compiled `<name>_mellea/` directory ships a `fixtures/` subdirectory; the fixture id matches the filename (without `.py`). See [`docs/README.md`](docs/README.md) for end-to-end examples.
+Each compiled `<name>_mellea/` directory ships a `fixtures/` subdirectory; the fixture id matches the filename (without `.py`). See [`docs/TUTORIAL.md`](docs/TUTORIAL.md) for end-to-end examples.
 
 ### What format are audit trails in?
 
@@ -215,7 +220,7 @@ Yes — there is an experimental `mellea-skills export <package_path> <target>` 
 
 The compiled Mellea package is bundled inside each export so the result is self-contained.
 
-Out-of-the-box export in this research preview is limited to the three targets above. There is **no** built-in export path for OpenClaw, NanoClaw, CrewAI, Letta, AutoGen, smolagents, OpenAI Agents SDK, or other harnesses — for those you write the wrapper yourself, and how much glue that is depends on how far the target's idioms are from a typed Python function call. See [`docs/EXPORTING.md`](docs/EXPORTING.md) for the full breakdown of the export pipeline (5-stage validate → load → translate → emit → lint), per-target modality support, and what hand-wrapping a non-supported harness looks like.
+Out-of-the-box export in this research preview is limited to the three targets above. There is **no** built-in export path for OpenClaw, NanoClaw, CrewAI, Letta, AutoGen, smolagents, OpenAI Agents SDK, or other harnesses — for those you write the wrapper yourself, and how much glue that is depends on how far the target's idioms are from a typed Python function call. See [`EXPORTING.md`](EXPORTING.md) for the full breakdown of the export pipeline (5-stage validate → load → translate → emit → lint), per-target modality support, and what hand-wrapping a non-supported harness looks like.
 
 ### Why is export experimental?
 
@@ -223,7 +228,7 @@ The exporter runs end-to-end and is covered by tests, but output file layouts, a
 
 ### What about other harnesses (OpenClaw, NanoClaw, CrewAI, Letta, AutoGen, smolagents, OpenAI Agents SDK)?
 
-Not currently export targets. The compiler can detect some of these as input dialects (see [`mellea-fy-inventory.md`](src/mellea_skills_compiler/compile/claude/commands/mellea-fy-inventory.md)) — that lets you compile a skill _from_ one of those formats, not export _to_ it. If you need to run a compiled skill under one of these harnesses today, you write the wrapper yourself. Adding more native export targets is roadmap, not a current feature.
+Not currently export targets. The compiler can detect some of these as input dialects (see [`mellea-fy-inventory.md`](../.claude/commands/mellea-fy-inventory.md)) — that lets you compile a skill _from_ one of those formats, not export _to_ it. If you need to run a compiled skill under one of these harnesses today, you write the wrapper yourself. Adding more native export targets is roadmap, not a current feature.
 
 ---
 

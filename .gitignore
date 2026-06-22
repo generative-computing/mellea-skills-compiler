@@ -176,3 +176,5 @@ cython_debug/
 .vscode
 .DS_Store
 .python-version
+
+node_modules

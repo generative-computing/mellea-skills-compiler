@@ -1,6 +1,6 @@
 {
   "format_version": "1.0",
   "backend": "ollama",
-  "model_id": "granite3.3:8b",
+  "model_id": "granite4.1:3b",
   "_comment": "Default LLM backend and model used by compiled skills at runtime. Edit this file to change the defaults for every skill you compile. To override for a single compile, run 'mellea-skills compile <spec> --backend <name> --model-id <id>'. Currently only 'ollama' is supported as the backend."
 }

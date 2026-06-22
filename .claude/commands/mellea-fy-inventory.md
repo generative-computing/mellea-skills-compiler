@@ -93,9 +93,15 @@ Every element gets a category (`C1`–`C9`) or `—` (no external dependency):
 
 ### Two-pass processing
 
-**Pass 1 — Section discovery**: lightweight LLM invocation per file producing candidate element boundaries `{start_line, end_line, rough_kind}`. `rough_kind` is one of `{rule, check, constant, tool_ref, schema, prose, other}` — not a tag yet. Output schema is one class (`SectionBoundary`) with primitive fields.
+**Pass 1 — Section discovery**: Discover candidate element boundaries across all source files.
 
-**Pass 2 — Element refinement**: single LLM invocation processing all candidate boundaries and returning `List[InventoryElement]`. Each element in the list is the full element record: `tag`, `category`, `content_summary`, metadata. The `List[InventoryElement]` schema uses one class — KB5 schema priming concerns do not apply to melleafy compilation calls (KB5 governs Mellea pipeline sessions inside compiled skills, not the compilation process itself).
+For **single-file runtimes** (agent_skills_std, openclaw): one lightweight LLM invocation producing candidate boundaries `{start_line, end_line, rough_kind}`.
+
+For **multi-file runtimes** (CrewAI, LangGraph, AutoGen, OpenAI Agents SDK, smolagents): dispatch one lightweight LLM invocation **per file in parallel** (all files simultaneously in a single turn). Each invocation returns candidate boundaries for its file. Since inter-file dependencies do not exist at this stage (Pass 1 is pure section discovery per file), all invocations can be issued concurrently using tool-call parallelism.
+
+**Output per invocation**: `{start_line, end_line, rough_kind}` tuples where `rough_kind` is one of `{rule, check, constant, tool_ref, schema, prose, other}` — not a tag yet. Output schema is one class (`SectionBoundary`) with primitive fields.
+
+**Pass 2 — Element refinement**: After all Pass 1 results are collected, issue a **single LLM invocation** processing all candidate boundaries and returning `List[InventoryElement]`. Each element in the list is the full element record: `tag`, `category`, `content_summary`, metadata. The `List[InventoryElement]` schema uses one class — KB5 schema priming concerns do not apply to melleafy compilation calls (KB5 governs Mellea pipeline sessions inside compiled skills, not the compilation process itself).
 
 **Retry protocol** (when refinement produces invalid output):
 

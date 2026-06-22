@@ -1,0 +1,111 @@
+[project]
+site_name = "Mellea skills compiler"
+site_description = "Agent specification certification pipeline: from skill specs to governed, certified Mellea pipelines"
+site_author = "IBM Research" 
+site_url = "https://generative-computing.github.io/mellea-skills-compiler"
+repo_url = "https://github.com/generative-computing/mellea-skills-compiler"
+docs_dir = "docs"
+site_dir = "site"
+watch = ["README.md"]
+
+nav = [
+  {"Home" = "README.md"},
+  {"Getting started" = [
+    {Installation = "INSTALLATION.md"},
+    {"Quick start" = "QUICK_START.md"},
+    {"CLI reference" = "CLI.md"}, 
+     {"From Stubs to Running" = "FROM_STUBS_TO_RUNNING.md"},
+     {Exporting = "EXPORTING.md"}
+  ]},
+   {"Tutorials" = [
+     {"Four Skills, Five Minutes Each" = "TUTORIAL.md"},
+  ]},
+  {FAQs = "FAQs.md"},
+  {Examples ="EXAMPLES.md"},
+  {Concepts = [
+    {"Main concepts" = "CONCEPTS.md"},
+  {"Next Steps" = "NEXT_STEPS.md"}]},
+  {Dialects = [
+    {Overview = "dialects/README.md"},
+    {"Claude Code" = "dialects/claude-code.md"},
+{LangGraph = "dialects/langgraph.md"},
+    {CrewAI = "dialects/crewai.md"},
+{OpenClaw = "dialects/openclaw.md"},
+{Hybrid = "dialects/hybrid.md"},
+{Letta = "dialects/letta.md"},
+{"Agent Skills Standard" = "dialects/agent-skills-std.md"},
+  ]},
+  {Community = [{Contributing = "CONTRIBUTING.md"}]},
+  {Reference = [{"API Reference" = "API.md"}]}
+]
+
+[[project.theme.palette]] 
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[project.theme]
+custom_dir = "overrides"
+font.text = "IBM Plex Sans Light"
+font.code = "IBM Plex Mono"
+features = ["navigation.path", "navigation.footer"]
+
+[project.plugins.mkdocstrings.handlers.python]
+inventories = ["https://docs.python.org/3/objects.inv"]
+paths = ["src"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "google"
+inherited_members = true
+show_source = false
+
+[project.markdown_extensions.zensical.extensions.macros]
+module_name = "macros"
+include_dir = "includes"
+
+[project.markdown_extensions.pymdownx.snippets]
+
+[project.markdown_extensions.toc]
+permalink = true
+
+[project.markdown_extensions.pymdownx.emoji]
+emoji_index = "zensical.extensions.emoji.twemoji" 
+emoji_generator = "zensical.extensions.emoji.to_svg"
+
+[project.markdown_extensions.abbr]
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.footnotes]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.pymdownx.arithmatex]
+generic = true
+[project.markdown_extensions.pymdownx.betterem]
+[project.markdown_extensions.pymdownx.caret]
+[project.markdown_extensions.pymdownx.details]
+
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.keys]
+[project.markdown_extensions.pymdownx.magiclink]
+[project.markdown_extensions.pymdownx.mark]
+[project.markdown_extensions.pymdownx.smartsymbols]
+[project.markdown_extensions.pymdownx.superfences]
+custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" }
+]
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+combine_header_slug = true
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
+[project.markdown_extensions.pymdownx.tilde]
+

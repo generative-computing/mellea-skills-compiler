@@ -237,17 +237,17 @@ Use `surrounding_context`, `finding_context`, `source_text`, `doc_context`, etc.
 from mellea.backends.model_options import ModelOption
 
 result = m.instruct(
-    "Analyse this security report.",
+    "Analyse this security report:\n{{ report }}",
+    user_variables={"report": str(report_text)},
     model_options={ModelOption.SYSTEM_PROMPT: PREFIX_TEXT},
-    grounding_context={"report": report_text},
     format=SecurityReport,
 )
 
 # WRONG — prefix= is an output prefix, not a system prompt
 result = m.instruct(
-    "Analyse this security report.",
+    "Analyse this security report:\n{{ report }}",
+    user_variables={"report": str(report_text)},
     prefix=PREFIX_TEXT,
-    grounding_context={"report": report_text},
     format=SecurityReport,
 )
 ```

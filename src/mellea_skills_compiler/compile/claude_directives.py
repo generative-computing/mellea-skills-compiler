@@ -1,5 +1,4 @@
 import json
-import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -7,48 +6,6 @@ from mellea_skills_compiler.toolkit.logging import configure_logger
 
 
 LOGGER = configure_logger()
-
-# Rule OUT-2 — package name derivation; Rule OUT-6 — companion-directory mirror.
-# Kept here so the pre-mellea-fy mirror step can resolve the destination
-# without invoking the slash command.
-_COMPANION_DIRS = ("scripts", "references", "assets")
-
-
-def derive_package_name(spec_path: Path, frontmatter: dict | None) -> str:
-    """Apply Rule OUT-2 (lowercase, hyphens/spaces → underscores, append `_mellea`).
-
-    For .md sources, prefer the frontmatter `name:` field; fall back to the
-    parent directory name. For directory inputs (multi-file runtimes), use
-    the directory name.
-    """
-    if spec_path.is_dir():
-        raw = spec_path.name
-    else:
-        raw = (frontmatter or {}).get("name") or spec_path.parent.name
-    name = str(raw).lower().replace("-", "_").replace(" ", "_")
-    while "__" in name:
-        name = name.replace("__", "_")
-    name = name.strip("_") or "skill"
-    return f"{name}_mellea"
-
-
-def mirror_companion_dirs(skill_dir: Path, package_dir: Path) -> list[str]:
-    """Rule OUT-6 — mirror companion directories from skill root into the package.
-
-    Runs deterministically before mellea-fy so the LLM sees the mirrored
-    assets in <package_name>/ when it generates code, reinforcing the
-    package-relative path-resolution invariant. Returns the list of
-    directory names actually mirrored (for logging).
-    """
-    package_dir.mkdir(parents=True, exist_ok=True)
-    mirrored: list[str] = []
-    for asset_dir in _COMPANION_DIRS:
-        src = skill_dir / asset_dir
-        if src.is_dir():
-            dst = package_dir / asset_dir
-            shutil.copytree(src, dst, dirs_exist_ok=True)
-            mirrored.append(asset_dir)
-    return mirrored
 
 
 # Defaults for the LLM backend and model that compiled skills use at runtime.
@@ -163,7 +120,9 @@ def write_runtime_directive(
     return path
 
 
-def build_system_prompt(backend: str, model_id: str, source: str) -> str:
+def build_system_prompt(
+    backend: str, model_id: str, source: str, package_name: str
+) -> str:
     """Assemble the instruction string passed to the mellea-fy slash command.
 
     Combines the existing autonomous-run directive with the resolved backend
@@ -172,27 +131,41 @@ def build_system_prompt(backend: str, model_id: str, source: str) -> str:
     --settings). This tells the LLM to emit the IR JSON instead of trying to
     write the rendered source itself, so the first attempt is correct rather
     than denied-then-retried.
+
+    ``package_name`` is the wrapper-derived Rule OUT-2 name (e.g.
+    ``weather_mellea``) substituted into the prompt body so the LLM uses the
+    same name the wrapper computes for ``mirror_dir_contents_to_target`` and the
+    post-session ``*_mellea`` discovery. Previously the prompt carried the
+    literal placeholder ``<package_name>`` and the LLM re-derived the name
+    from the frontmatter — a long/complex name (e.g.
+    ``gdpr-breach-sentinel-oliver-schmidt-prietz``) could be mis-transcribed
+    and produce a stray sibling directory.
     """
     wrapper_rendered_lines = "\n".join(
-        f"  - <package_name>/{p}" for p in _WRAPPER_RENDERED_PATHS
+        f"  - {package_name}/{p}" for p in _WRAPPER_RENDERED_PATHS
     )
     return (
         "Run the complete 10-step pipeline (Steps 0 through 7) autonomously from start to finish. "
         "Do NOT pause between steps, do NOT ask for user confirmation to proceed, and do NOT stop "
         "after any individual step completes. Invoke each sub-command in sequence and continue "
         "immediately to the next step.\n\n"
-        "The following paths are rendered by the compile pipeline from the JSON you emit "
-        "in <package_name>/intermediate/ — DO NOT write or edit them yourself; the Write "
-        "and Edit tools are denied for these paths and the wrapper will render them "
-        "deterministically after you exit:\n"
+        f"The compiled package directory name is exactly `{package_name}`. "
+        f"Use this exact string wherever the slash-command directives reference "
+        f"`<package_name>`; do NOT re-derive it from the frontmatter. The wrapper "
+        f"has already applied Rule OUT-2 and the post-session discovery expects "
+        f"this exact directory name.\n\n"
+        f"The following paths are rendered by the compile pipeline from the JSON you emit "
+        f"in {package_name}/intermediate/ — DO NOT write or edit them yourself; the Write "
+        f"and Edit tools are denied for these paths and the wrapper will render them "
+        f"deterministically after you exit:\n"
         f"{wrapper_rendered_lines}\n"
-        "Emit the corresponding *_emission.json files under <package_name>/intermediate/ "
-        "conforming to .claude/schemas/*_emission.schema.json instead.\n\n"
+        f"Emit the corresponding *_emission.json files under {package_name}/intermediate/ "
+        f"conforming to .claude/schemas/*_emission.schema.json instead.\n\n"
         f"Runtime defaults (source: {source}). The values below MUST appear in "
-        "config_emission.json so the wrapper renders them into <package_name>/config.py:\n"
+        f"config_emission.json so the wrapper renders them into {package_name}/config.py:\n"
         f"  BACKEND = {backend!r}\n"
         f"  MODEL_ID = {model_id!r}\n"
-        "Do not invent alternative values, and do not omit either constant. "
-        "The post-compile lint will verify config.py against the recorded values "
-        "at <package_name>/intermediate/runtime_directive.json."
+        f"Do not invent alternative values, and do not omit either constant. "
+        f"The post-compile lint will verify config.py against the recorded values "
+        f"at {package_name}/intermediate/runtime_directive.json."
     )

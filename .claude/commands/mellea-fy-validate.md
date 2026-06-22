@@ -14,13 +14,19 @@ Run as: `melleafy lint <package_path>` (standalone), or automatically at the end
 
 **`parseable`**: every `.py` file in the generated package passes `ast.parse()` without error. Then, the package entry module (`<package_name>.pipeline`) must import cleanly via `importlib.import_module()` in a subprocess. This catches wrong external import paths (e.g. `mellea.stdlib.strategies` vs the real `mellea.stdlib.sampling`) that `ast.parse()` cannot detect.
 
-Implementation: run `python -c "import <package_name>.pipeline"` as a subprocess from the package's parent directory. A `ModuleNotFoundError` or `ImportError` is a lint failure, not a missing-dependency advisory.
+Implementation:
 
-If this lint fails, Step 7 halts. Tier 2 and Tier 3 don't run. The failure report contains only syntax errors and import errors (nothing else is meaningful before parsing).
+1. **Parse all .py files in parallel**: For every `.py` file in `<package_name>/`, attempt `ast.parse()` concurrently. Collect ALL parse errors across all files before halting (do not fail on the first error). This gives the repair loop the complete error list for all failing files in one run, reducing repair iterations.
+
+2. **Then, import check**: run `python -c "import <package_name>.pipeline"` as a subprocess from the package's parent directory. A `ModuleNotFoundError` or `ImportError` is a lint failure, not a missing-dependency advisory.
+
+If this lint fails, Step 7 halts. Tier 2 and Tier 3 don't run. The failure report contains all collected syntax errors and import errors (nothing else is meaningful before parsing).
 
 ### Tier 2 — Structural lints (collect all, halt before Tier 3)
 
-Run in parallel. Each is independent. All tier-2 lints run to completion even if one fails; results are collected then the tier verdict is determined.
+**Run all 13 lints in parallel.** Each lint is independent and can be executed concurrently. Dispatch all 13 lint operations simultaneously in a single turn (not sequentially, one per turn). All tier-2 lints run to completion even if one fails; results are collected then the tier verdict is determined.
+
+Do not wait for one lint to finish before starting the next — issue all 13 lint checks at once using available parallelism.
 
 **`cross-reference`**: every `element_mapping.json` target symbol exists in the generated package; every external call in `pipeline.py` / `tools.py` has a corresponding `dependency_plan.json` entry. Sub-checks:
 

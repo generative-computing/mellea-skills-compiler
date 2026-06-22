@@ -17,6 +17,7 @@ fixture failures require human review per `mellea-fy-validate.md`.
 from __future__ import annotations
 
 import json
+import re
 import time
 import traceback
 from dataclasses import asdict, dataclass, field
@@ -32,6 +33,78 @@ from mellea_skills_compiler.toolkit.logging import configure_logger
 
 
 LOGGER = configure_logger()
+
+
+# Known mismatches between Python import names and PyPI package names.
+# Extend as new mismatches are observed in compiled skills. The minimum entry
+# point is one direction: import-name -> PyPI-name; the lookup is applied
+# during _is_declared_dependency only when a direct/normalised match fails.
+_IMPORT_TO_PYPI: Dict[str, str] = {
+    "docx": "python-docx",
+    "yaml": "pyyaml",
+    "cv2": "opencv-python",
+    "PIL": "pillow",
+    "sklearn": "scikit-learn",
+    "bs4": "beautifulsoup4",
+    "magic": "python-magic",
+    "dotenv": "python-dotenv",
+    "Crypto": "pycryptodome",
+}
+
+
+def _declared_dependency_names(skill_dir: Path) -> Optional[set]:
+    """Return the set of canonical dep names from skill_dir/pyproject.toml.
+
+    Returns ``None`` if pyproject.toml is missing or unreadable — the caller
+    treats that as 'cannot determine declared deps' and falls through to the
+    failed-classification path.
+    """
+    pyproject = skill_dir / "pyproject.toml"
+    if not pyproject.is_file():
+        return None
+    try:
+        import tomllib  # Python 3.11+
+    except ImportError:  # pragma: no cover — project requires 3.11+
+        return None
+    try:
+        data = tomllib.loads(pyproject.read_text())
+    except Exception:  # noqa: BLE001 — malformed TOML treated as 'unknown'
+        return None
+    deps = data.get("project", {}).get("dependencies", []) or []
+    names: set = set()
+    for dep in deps:
+        if not isinstance(dep, str):
+            continue
+        # PEP 508 head extraction: name [extras] [version-spec] [; markers]
+        head = re.split(r"[\s<>=!~\[;]", dep, maxsplit=1)[0].strip().lower()
+        if head:
+            names.add(head)
+            names.add(head.replace("-", "_"))
+            names.add(head.replace("_", "-"))
+    return names
+
+
+def _is_declared_dependency(missing_module: str, skill_dir: Path) -> bool:
+    """True if ``missing_module`` corresponds to a dep in skill_dir/pyproject.toml.
+
+    Matching strategy: lowercase + hyphen/underscore normalisation, then a
+    small hardcoded import-name -> PyPI-name table for known mismatches
+    (e.g. ``docx`` -> ``python-docx``, ``yaml`` -> ``pyyaml``).
+    """
+    declared = _declared_dependency_names(skill_dir)
+    if not declared:
+        return False
+    name = missing_module.lower()
+    candidates = {name, name.replace("_", "-"), name.replace("-", "_")}
+    mapped = _IMPORT_TO_PYPI.get(missing_module) or _IMPORT_TO_PYPI.get(name)
+    if mapped:
+        mapped_lower = mapped.lower()
+        candidates |= {
+            mapped_lower,
+            mapped_lower.replace("-", "_"),
+            mapped_lower.replace("_", "-"),
+        }
+    return bool(declared & candidates)
 
 
 @dataclass
@@ -58,15 +131,38 @@ class SmokeRunResult:
         return 0
 
 
-def _classify_exception(exc: BaseException) -> Optional[str]:
-    """Return a non-None 'skipped' reason if the exception indicates backend unreachable.
+def _classify_exception(
+    exc: BaseException, skill_dir: Optional[Path] = None
+) -> Optional[str]:
+    """Return a non-None 'skipped' reason if the exception is environmental.
 
-    Detection covers the common forms: stdlib socket/connection errors, httpx/
-    requests library variants (by class name to avoid hard imports), HTTP
-    auth failures, and timeouts.
+    Two classes of skip:
+
+    1. Backend unreachable — stdlib socket/connection errors, httpx/requests
+       library variants (by class name to avoid hard imports), HTTP auth
+       failures, and timeouts.
+    2. Declared dependency missing from the compile-process venv — a
+       ``ModuleNotFoundError`` whose missing module corresponds to a dep
+       declared in ``skill_dir/pyproject.toml``. The skill compiles fine;
+       the user just needs ``pip install -e .`` before runtime verification.
+       Distinguished from a real code bug (LLM imports something it didn't
+       declare), which is left to fall through to the failed path.
     """
     cls_name = type(exc).__name__
     cls_module = type(exc).__module__
+
+    # Declared-dependency-missing — environmental, not a code bug.
+    # Checked first so a ModuleNotFoundError that LOOKS network-like (e.g.
+    # ConnectionError from a missing urllib3) doesn't get misclassified.
+    if isinstance(exc, ModuleNotFoundError) and skill_dir is not None:
+        missing = (getattr(exc, "name", None) or "").split(".")[0]
+        if missing and _is_declared_dependency(missing, skill_dir):
+            return (
+                f"declared dependency {missing!r} not installed in the "
+                f"compile-process venv. The skill's pyproject.toml declares "
+                f"it; run `pip install -e .` in the skill directory and "
+                f"re-run the smoke check to verify runtime behaviour."
+            )
 
     # stdlib network errors
     if isinstance(exc, (ConnectionError, ConnectionRefusedError, ConnectionAbortedError, ConnectionResetError)):
@@ -88,7 +184,11 @@ def _classify_exception(exc: BaseException) -> Optional[str]:
     return None
 
 
-def _run_one_fixture(pipeline_fn, fixture: Dict[str, Any]) -> SmokeFixtureResult:
+def _run_one_fixture(
+    pipeline_fn,
+    fixture: Dict[str, Any],
+    skill_dir: Optional[Path] = None,
+) -> SmokeFixtureResult:
     fixture_id = fixture.get("id", "<unknown>")
     started = time.time()
     try:
@@ -99,7 +199,7 @@ def _run_one_fixture(pipeline_fn, fixture: Dict[str, Any]) -> SmokeFixtureResult
             pipeline_fn(context)
     except BaseException as exc:  # noqa: BLE001 — we re-classify all
         duration = time.time() - started
-        skipped_reason = _classify_exception(exc)
+        skipped_reason = _classify_exception(exc, skill_dir=skill_dir)
         if skipped_reason:
             LOGGER.warning(
                 "Fixture smoke-check skipped — %s. Re-run `mellea-skills validate <pkg> --run` "
@@ -139,9 +239,16 @@ def run_smoke_check(package_dir: Path, all_fixtures: bool = False) -> SmokeRunRe
 
     targets = fixtures if all_fixtures else fixtures[:1]
 
+    # The skill root sits one level above the compiled package; pyproject.toml
+    # lives at the skill root (Rule OUT-3). Pass it through so ModuleNotFoundError
+    # classification can distinguish declared-dep-missing from real-bug.
+    skill_dir = package_dir.parent
+
     fixture_results: List[SmokeFixtureResult] = []
     for fixture in targets:
-        fixture_results.append(_run_one_fixture(pipeline_fn, fixture))
+        fixture_results.append(
+            _run_one_fixture(pipeline_fn, fixture, skill_dir=skill_dir)
+        )
 
     if any(r.verdict == "failed" for r in fixture_results):
         overall = "failed"

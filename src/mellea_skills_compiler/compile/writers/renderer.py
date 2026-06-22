@@ -1,5 +1,4 @@
-"""Wrapper-side invocation of the deterministic writers in `.claude/melleafy/writers/`.
-
+"""
 The writers (`config_writer.py`, `fixtures_writer.py`, ...) were originally
 documented as "the LLM follows them" — but the slash command runs with
 `--allowed-tools Read,Write,Edit` and cannot execute Python. So in practice
@@ -29,76 +28,32 @@ render(), and either compares-and-warns or writes-authoritatively.
 from __future__ import annotations
 
 import difflib
-import importlib.util
 import json
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import List
 
-from mellea_skills_compiler.compile import CLAUDE_DIR
+from mellea_skills_compiler.compile.models import RenderResult, WriterSpec
+from mellea_skills_compiler.compile.writers import config_writer, fixtures_writer
 from mellea_skills_compiler.toolkit.logging import configure_logger
 
 
 LOGGER = configure_logger()
 
-
-@dataclass(frozen=True)
-class WriterSpec:
-    """One renderable artifact: emission JSON in → Python source on disk out.
-
-    `output_kind` controls how the writer is invoked:
-      - "file" (default): writer module exposes `render(emission) -> str` and
-        the renderer writes the returned text to `output_relpath`.
-      - "directory": writer module exposes `write(emission, dir_path) -> list[Path]`
-        and the renderer wipes `output_relpath` (preserving the dir itself)
-        before invoking, so the writer is the sole producer of the dir's contents.
-    """
-
-    name: str  # human-readable label, e.g. "config.py"
-    emission_relpath: str  # e.g. "intermediate/config_emission.json"
-    output_relpath: str  # e.g. "config.py" or "fixtures"
-    writer_path: Path  # absolute path to the .claude/melleafy/writers/*.py module
-    output_kind: str = "file"  # "file" | "directory"
-
-
-@dataclass
-class RenderResult:
-    name: str
-    status: (
-        str  # "match" | "diff" | "missing-emission" | "missing-output" | "writer-error"
-    )
-    detail: Optional[str] = None
-    diff_lines_added: int = 0
-    diff_lines_removed: int = 0
-
-
-def _load_writer_module(writer_path: Path):
-    """Import a writer module from a path and return the module object."""
-    spec = importlib.util.spec_from_file_location(writer_path.stem, writer_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"could not load writer from {writer_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def _load_writer(writer_path: Path) -> Callable[[dict], str]:
-    """Return the file-mode writer's `render(emission) -> str` function."""
-    module = _load_writer_module(writer_path)
-    if not hasattr(module, "render"):
-        raise AttributeError(f"writer {writer_path} has no render() function")
-    return module.render
-
-
-def _load_writer_dir(writer_path: Path) -> Callable[[dict, Path], list]:
-    """Return the directory-mode writer's `write(emission, out_dir)` function."""
-    module = _load_writer_module(writer_path)
-    if not hasattr(module, "write"):
-        raise AttributeError(
-            f"writer {writer_path} has no write(emission, out_dir) function "
-            f"required for directory-mode WriterSpec"
-        )
-    return module.write
+DEFAULT_WRITER_SPECS = [
+    WriterSpec(
+        name="config.py",
+        emission_relpath="intermediate/config_emission.json",
+        output_relpath="config.py",
+        writer=config_writer,
+    ),
+    WriterSpec(
+        name="fixtures/",
+        emission_relpath="intermediate/fixtures_emission.json",
+        output_relpath="fixtures",
+        output_kind="directory",
+        writer=fixtures_writer,
+    ),
+]
 
 
 def _render_one(package_dir: Path, spec: WriterSpec, *, enforce: bool) -> RenderResult:
@@ -136,13 +91,13 @@ def _render_file(
 ) -> RenderResult:
     """Single-file writer dispatch (config.py shape)."""
     try:
-        render_fn = _load_writer(spec.writer_path)
+        render_fn = spec.writer.render
         rendered = render_fn(emission)
     except Exception as exc:  # noqa: BLE001
         return RenderResult(
             name=spec.name,
             status="writer-error",
-            detail=f"writer {spec.writer_path.name} raised: {exc}",
+            detail=f"writer {spec.writer.__name__} raised: {exc}",
         )
 
     if not output_path.exists():
@@ -216,12 +171,12 @@ def _render_directory(
         on-disk, log a warning. Do not modify on-disk files.
     """
     try:
-        write_fn = _load_writer_dir(spec.writer_path)
+        write_fn = spec.writer.write
     except Exception as exc:  # noqa: BLE001
         return RenderResult(
             name=spec.name,
             status="writer-error",
-            detail=f"writer {spec.writer_path.name} dir-mode load failed: {exc}",
+            detail=f"writer {spec.writer.__name__} load failed: {exc}",
         )
 
     if enforce:
@@ -297,9 +252,7 @@ def _wipe_dir(path: Path) -> None:
     shutil.rmtree(path)
 
 
-def render_writers(
-    package_dir: Path, specs: List[WriterSpec], *, enforce: bool = False
-) -> List[RenderResult]:
+def render_writers(package_dir: Path, *, enforce: bool = False) -> List[RenderResult]:
     """Render every writer in `specs` against the package and log outcomes.
 
     With `enforce=False` (default for migration phase), only logs WARN on diff
@@ -307,7 +260,7 @@ def render_writers(
     authoritative source for the artifact.
     """
     results: List[RenderResult] = []
-    for spec in specs:
+    for spec in DEFAULT_WRITER_SPECS:
         try:
             result = _render_one(package_dir, spec, enforce=enforce)
         except Exception as exc:  # noqa: BLE001
@@ -344,29 +297,3 @@ def _log_result(result: RenderResult, *, enforce: bool) -> None:
         LOGGER.warning("[writer:%s] %s", result.name, result.detail)
     elif result.status == "writer-error":
         LOGGER.warning("[writer:%s] %s", result.name, result.detail)
-
-
-def default_writer_specs(repo_root) -> List[WriterSpec]:
-    """Wrapper-rendered artifacts. Order matters only for log readability.
-
-    Add new specs as each migration step lands. Each spec must satisfy:
-      - file-mode writer (`output_kind="file"`): module exposes `render(emission) -> str`
-      - dir-mode writer  (`output_kind="directory"`): module exposes
-        `write(emission, out_dir) -> list[Path]`
-    """
-    writers_dir = repo_root / ".claude" / "melleafy" / "writers"
-    return [
-        WriterSpec(
-            name="config.py",
-            emission_relpath="intermediate/config_emission.json",
-            output_relpath="config.py",
-            writer_path=writers_dir / "config_writer.py",
-        ),
-        WriterSpec(
-            name="fixtures/",
-            emission_relpath="intermediate/fixtures_emission.json",
-            output_relpath="fixtures",
-            writer_path=writers_dir / "fixtures_writer.py",
-            output_kind="directory",
-        ),
-    ]

@@ -108,14 +108,18 @@ Record every dialect override with `dialect_override_applied: "<runtime>:<row>"`
 
 ## When LLM judgement is invoked
 
-Step 2 is mechanical wherever possible. LLM invocation is bounded to:
+Step 2 is mechanical wherever possible. LLM invocation is bounded to specific narrowly-scoped decisions:
 
 - `VALIDATE_OUTPUT` semantic-vs-executable classification when phrase-match heuristic is inconclusive
 - `CONVERSE` realisation selection when element phrasing doesn't match the three rules
 - `DETERMINISTIC` placement when length is borderline and call graph is unclear
 - `EXTRACT` two-step eligibility in rare cases where schema analysis is ambiguous
 
-Each invocation is scoped to a single element. Output goes into `intermediate/element_mapping_judgment_calls.json`.
+**Parallelization strategy**: Instead of issuing one LLM invocation per element requiring judgment, **collect all judgment-requiring elements in a single pass**, then **dispatch all judgment calls in parallel** (all at once in a single turn using tool-call parallelism). Each judgment call invocation is scoped to a single element; all such invocations can proceed independently since they share no dependencies.
+
+After all parallel judgment calls complete, merge their results back into the mapping entries before finalising `element_mapping.json`.
+
+Output goes into `intermediate/element_mapping_judgment_calls.json`.
 
 ---
 

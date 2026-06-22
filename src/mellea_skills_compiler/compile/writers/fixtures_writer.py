@@ -14,8 +14,6 @@ The model never writes Python source for fixtures directly. This makes drift
 shapes (pytest-style tests, INPUT-only modules, etc.) structurally unreachable.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from pathlib import Path

@@ -4,8 +4,6 @@ Input must conform to .claude/schemas/config_emission.schema.json.
 Output is ready to write directly to <package_name>/config.py.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any
@@ -59,10 +57,21 @@ def render(emission: dict[str, Any] | str) -> str:
             groups[cat] = []
         groups[cat].append(constant)
 
-    # Emit C1..C9 in numeric order, ungrouped constants last.
+    # Emit C1..C9 in numeric order; unrecognised category values (anything
+    # outside the documented C1..C9 vocab) come next, sorted lexicographically;
+    # ungrouped constants (no category) come last. The schema constrains
+    # category to ^C[1-9]$ but the LLM has been observed emitting placeholders
+    # like '—' for "unclassified"; rather than crashing on int(c[1:]), the
+    # writer treats those as a soft-error and groups them under their own
+    # raw-value section header.
+    def _category_sort_key(c: str) -> tuple[int, int | str]:
+        if len(c) == 2 and c[0] == "C" and c[1].isdigit() and c[1] != "0":
+            return (0, int(c[1:]))
+        return (1, c)
+
     ordered_cats: list[str | None] = sorted(
         (k for k in groups if k is not None),
-        key=lambda c: int(c[1:]),  # type: ignore[index]
+        key=_category_sort_key,
     )
     if None in groups:
         ordered_cats.append(None)

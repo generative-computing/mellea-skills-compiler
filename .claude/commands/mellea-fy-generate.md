@@ -82,7 +82,7 @@ _JSON the model emits:_
     },
     {
       "name": "MODEL_ID",
-      "value": "granite3.3:8b",
+      "value": "granite4.1:3b",
       "type": "str",
       "category": "C8"
     },
@@ -106,7 +106,7 @@ PREFIX_TEXT: Final[str] = """You are an AI assistant.\nYou help users with resea
 
 # === C8: Runtime Environment ===
 BACKEND: Final[str] = 'ollama'
-MODEL_ID: Final[str] = 'granite3.3:8b'
+MODEL_ID: Final[str] = 'granite4.1:3b'
 
 LOOP_BUDGET: Final[int] = 3
 ```
@@ -187,7 +187,8 @@ Apply this per-mode distinction at the call site in `pipeline.py` too: every bra
 - `with start_session(BACKEND, MODEL_ID) as m:` context manager
 - Calls slots, requirements, and mobjects from other files
 - `DECIDE` logic: Python `if/elif/else` wrapping Mellea calls
-- MUST convert all non-string `grounding_context` values to `str()`
+- MUST thread the user input / per-call value into `m.instruct(description=...)` via `user_variables` + a `{{ key }}` Jinja placeholder in the description text — e.g. `m.instruct("Classify: {{ user_query }} ...", user_variables={"user_query": str(user_query)}, ...)`. Reserve `grounding_context` for document or reference material the description text explicitly cites — that is the channel the docs reserve for it (see https://docs.mellea.ai/how-to/working-with-data, which pairs `user_variables={"query": ...}` with `grounding_context={"doc0": doc0, ...}`). The per-backend prompt template (e.g. `mellea/templates/prompts/granite/Instruction.jinja2`) renders the `grounding_context` block under the header *"Write the response by aligning with the facts and items in the following grounding context"* — that framing fits supporting documents, not the value the model must directly extract from or classify; with `format=PydanticModel` constrained decoding, putting the primary input there produces silent extraction failures.
+- MUST convert any non-string `grounding_context` value with `str()`.
 - MUST use `format=PydanticModel` for every `m.instruct()` that produces structured output
 - MUST parse the thunk after every `m.instruct(format=Model)` before accessing any field or calling any Pydantic method. `m.instruct()` returns a `ComputedModelOutputThunk` — NOT a Pydantic model. Direct field access (`thunk.field_name`) or `.model_dump()` raises `AttributeError`. Always include `_parse_instruct_result` and `_safe_parse_with_fallback` helpers in `pipeline.py` and call them immediately after every `m.instruct(format=Model)` call:
 
@@ -286,6 +287,13 @@ Note: the `openai-agents` package is NOT added to dependencies for Agents SDK so
 
 Step 5 fills every skeleton placeholder with real code. For `config.py`, the model emits JSON and the writer renders Python source (invariant 1).
 
+**Parallelization strategy**: Step 5 is structured in **three phases** to maximize throughput:
+- **Phase A (parallel)**: Emit all 7 independent files in a single turn using parallel tool calls: schemas.py, config.py, requirements.py, slots.py, tools.py/constrained_slots.py, mobjects.py, loader.py. These files have no inter-file dependencies at generation time.
+- **Phase B (sequential, after A completes)**: Generate pipeline.py (references all Phase A symbols).
+- **Phase C (sequential, after B completes)**: Generate main.py (references pipeline.py).
+
+In repair mode, only re-generate the files listed in `intermediate/step_7_report.json` failure entries; unchanged files pass through without re-generation.
+
 ### Step 5 invariants
 
 Read once; apply throughout all file generation.
@@ -323,17 +331,27 @@ Before generating any body, include in the context:
 
 ### Per-file body generation order
 
-Generate bodies in this order (dependency order):
+**Phase A (parallel batch — single turn with parallel tool calls):**
 
-1. `schemas.py` — Pydantic models first (all other files reference them)
-2. `config.py` — emit JSON conforming to `.claude/schemas/config_emission.schema.json`; the writer at `.claude/melleafy/writers/config_writer.py` renders the Python source (slots.py references `LOOP_BUDGET`, `PREFIX_TEXT`, etc.)
-3. `requirements.py` — requirement functions (pipeline.py references them)
-4. `slots.py` — `@generative` slot bodies
-5. `tools.py` / `constrained_slots.py` — tool implementations
-6. `mobjects.py` — mified object definitions
-7. `loader.py` — file loader functions
-8. `pipeline.py` — the orchestrating pipeline (references all above)
-9. `main.py` — CLI entry point
+Generate all of these simultaneously in one turn. They are mutually independent at generation time:
+
+1. `schemas.py` — Pydantic models (referenced by Phase B)
+2. `config.py` — emit JSON conforming to `.claude/schemas/config_emission.schema.json`; the writer at `.claude/melleafy/writers/config_writer.py` renders the Python source
+3. `requirements.py` — requirement functions (referenced by Phase B)
+4. `slots.py` — `@generative` slot bodies (referenced by Phase B)
+5. `tools.py` / `constrained_slots.py` — tool implementations (referenced by Phase B)
+6. `mobjects.py` — mified object definitions (referenced by Phase B)
+7. `loader.py` — file loader functions (referenced by Phase B)
+
+**Phase B (sequential, after Phase A):**
+
+8. `pipeline.py` — the orchestrating pipeline (references all Phase A symbols)
+
+**Phase C (sequential, after Phase B):**
+
+9. `main.py` — CLI entry point (references pipeline.py)
+
+Within Phase A, each file should be generated with its own LLM invocation, dispatched in parallel using the tool-call parallelism available in your response. Do not wait for one file to complete before starting the next — issue all Phase A invocations in the same turn.
 
 ### Remediation loop bodies (when REMEDIATE elements exist)
 
@@ -349,9 +367,10 @@ while not verdict.passed and remediation_count < MAX_REMEDIATION_ITERATIONS:
     # Modification step: generate a fix
     with start_session(BACKEND, MODEL_ID) as m_fix:
         fix = m_fix.instruct(
-            "Generate a minimal patch to address the identified issue.",
-            grounding_context={
-                "current_code": patched_code,
+            "Generate a minimal patch for this code:\n{{ current_code }}\n\n"
+            "Issue to address:\n{{ verdict }}",
+            user_variables={
+                "current_code": str(patched_code),
                 "verdict": str(verdict.model_dump()),
             },
             format=CodeFix,
@@ -365,8 +384,12 @@ while not verdict.passed and remediation_count < MAX_REMEDIATION_ITERATIONS:
     # Re-evaluation step
     with start_session(BACKEND, MODEL_ID) as m_eval:
         verdict = _parse_instruct_result(
-            m_eval.instruct("Re-evaluate...", grounding_context={"code": patched_code}, format=Verdict),
-            Verdict
+            m_eval.instruct(
+                "Re-evaluate this code:\n{{ code }}",
+                user_variables={"code": str(patched_code)},
+                format=Verdict,
+            ),
+            Verdict,
         )
 ```
 

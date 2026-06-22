@@ -2,11 +2,13 @@
 
 import json
 import time
+from pathlib import Path
 
 import pytest
 
 from mellea_skills_compiler.compile.smoke_check import (
     _classify_exception,
+    _is_declared_dependency,
     _run_one_fixture,
     run_smoke_check,
 )
@@ -239,3 +241,124 @@ class TestRunSmokeCheck:
 
         result = run_smoke_check(tmp_path, all_fixtures=False)
         assert result.exit_code == 0
+
+
+# ─── TestDeclaredDependencyClassification ───
+
+
+def _make_skill_dir(tmp_path, deps: list) -> Path:
+    """Materialise a minimal skill dir with a pyproject.toml declaring `deps`."""
+    skill = tmp_path / "test_skill"
+    skill.mkdir()
+    deps_block = ",\n    ".join(f'"{d}"' for d in deps)
+    pyproject = f"""[build-system]
+requires = ["setuptools>=68.0"]
+
+[project]
+name = "test-skill"
+version = "0.1.0"
+dependencies = [
+    {deps_block}
+]
+"""
+    (skill / "pyproject.toml").write_text(pyproject)
+    return skill
+
+
+class TestIsDeclaredDependency:
+    """Test cases for _is_declared_dependency()."""
+
+    def test_direct_name_match(self, tmp_path):
+        skill = _make_skill_dir(tmp_path, ["pydantic>=2.0"])
+        assert _is_declared_dependency("pydantic", skill) is True
+
+    def test_known_import_to_pypi_mapping_docx(self, tmp_path):
+        """`docx` (import) maps to `python-docx` (PyPI) — the matter-intake case."""
+        skill = _make_skill_dir(tmp_path, ["python-docx>=1.1"])
+        assert _is_declared_dependency("docx", skill) is True
+
+    def test_known_import_to_pypi_mapping_yaml(self, tmp_path):
+        skill = _make_skill_dir(tmp_path, ["pyyaml>=6"])
+        assert _is_declared_dependency("yaml", skill) is True
+
+    def test_known_import_to_pypi_mapping_sklearn(self, tmp_path):
+        skill = _make_skill_dir(tmp_path, ["scikit-learn>=1.0"])
+        assert _is_declared_dependency("sklearn", skill) is True
+
+    def test_underscore_hyphen_normalisation(self, tmp_path):
+        skill = _make_skill_dir(tmp_path, ["python_dotenv>=1.0"])
+        assert _is_declared_dependency("dotenv", skill) is True
+
+    def test_undeclared_returns_false(self, tmp_path):
+        skill = _make_skill_dir(tmp_path, ["pydantic>=2.0"])
+        assert _is_declared_dependency("nonexistent_package", skill) is False
+
+    def test_missing_pyproject_returns_false(self, tmp_path):
+        skill = tmp_path / "no_pyproject"
+        skill.mkdir()
+        assert _is_declared_dependency("docx", skill) is False
+
+    def test_malformed_pyproject_returns_false(self, tmp_path):
+        skill = tmp_path / "bad_pyproject"
+        skill.mkdir()
+        (skill / "pyproject.toml").write_text("not valid [[[ toml")
+        assert _is_declared_dependency("docx", skill) is False
+
+    def test_empty_dependencies_returns_false(self, tmp_path):
+        skill = tmp_path / "empty_deps"
+        skill.mkdir()
+        (skill / "pyproject.toml").write_text(
+            '[project]\nname = "x"\nversion = "0"\ndependencies = []\n'
+        )
+        assert _is_declared_dependency("docx", skill) is False
+
+
+class TestClassifyExceptionWithSkillDir:
+    """ModuleNotFoundError classification with the new skill_dir signature."""
+
+    def test_modulenotfound_declared_classified_as_skipped(self, tmp_path):
+        """The matter-intake case: docx missing but declared as python-docx."""
+        skill = _make_skill_dir(tmp_path, ["python-docx>=1.1", "pydantic>=2.0"])
+        exc = ModuleNotFoundError("No module named 'docx'")
+        exc.name = "docx"  # ModuleNotFoundError carries the missing name
+        reason = _classify_exception(exc, skill_dir=skill)
+        assert reason is not None
+        assert "docx" in reason
+        assert "pip install -e ." in reason
+
+    def test_modulenotfound_undeclared_falls_through(self, tmp_path):
+        """If the LLM imports something it didn't declare, that's a real bug."""
+        skill = _make_skill_dir(tmp_path, ["pydantic>=2.0"])
+        exc = ModuleNotFoundError("No module named 'sneaky_undeclared'")
+        exc.name = "sneaky_undeclared"
+        reason = _classify_exception(exc, skill_dir=skill)
+        assert reason is None  # falls through to failed-classification path
+
+    def test_modulenotfound_without_skill_dir_falls_through(self):
+        """When the classifier has no skill_dir context, fall through to failed."""
+        exc = ModuleNotFoundError("No module named 'docx'")
+        exc.name = "docx"
+        reason = _classify_exception(exc, skill_dir=None)
+        assert reason is None
+
+    def test_modulenotfound_with_submodule(self, tmp_path):
+        """`No module named 'docx.shared'` should match the top-level `docx`."""
+        skill = _make_skill_dir(tmp_path, ["python-docx>=1.1"])
+        exc = ModuleNotFoundError("No module named 'docx.shared'")
+        exc.name = "docx.shared"
+        reason = _classify_exception(exc, skill_dir=skill)
+        assert reason is not None
+        assert "docx" in reason
+
+    def test_existing_connection_error_classification_preserved(self, tmp_path):
+        """The new code path must not regress backend-unreachable detection."""
+        skill = _make_skill_dir(tmp_path, ["pydantic>=2.0"])
+        reason = _classify_exception(ConnectionError("nope"), skill_dir=skill)
+        assert reason is not None
+        assert reason.startswith("backend unreachable: ConnectionError")
+
+    def test_existing_signature_still_works(self):
+        """_classify_exception(exc) without skill_dir kwarg still works (legacy)."""
+        reason = _classify_exception(ConnectionError("nope"))
+        assert reason is not None
+        assert reason.startswith("backend unreachable: ConnectionError")
