@@ -1,14 +1,19 @@
 name: Documentation
 on:
-  push:
+  pull_request:
+    types:
+      - closed
     branches:
       - main
+
 permissions:
   contents: read
   pages: write
   id-token: write
+
 jobs:
   deploy:
+    if: github.event.pull_request.merged == true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
