@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from mellea_skills_compiler.enums import CoverageLevel
+from mellea_skills_compiler.enums import CoverageLevel, GuardianScore
 from mellea_skills_compiler.models import (
     ComplianceSummary,
     PolicyManifest,
@@ -49,7 +49,7 @@ def _extract_guardian_evidence(entries: list[dict]) -> list[str]:
         for v in e.get("guardian_verdicts", []):
             total_verdicts += 1
             risks_checked.add(v["risk"])
-            if v["label"] == "Yes":
+            if v["label"] == GuardianScore.YES:
                 flagged += 1
 
     evidence = [
@@ -213,7 +213,7 @@ def generate_certification_report(
     for e in gen_posts:
         for v in e.get("guardian_verdicts", []):
             risk_stats[v["risk"]]["checks"] += 1
-            if v["label"] == "Yes":
+            if v["label"] == GuardianScore.YES:
                 risk_stats[v["risk"]]["flagged"] += 1
 
     if risk_stats:

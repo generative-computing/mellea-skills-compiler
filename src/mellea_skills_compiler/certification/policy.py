@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
-from mellea_skills_compiler.enums import GovernanceTaxonomy, InferenceEngineType
+from mellea_skills_compiler.enums import (
+    GovernanceTaxonomy,
+    InferenceEngineType,
+    NexusRiskSource,
+)
 from mellea_skills_compiler.inference import InferenceService
 from mellea_skills_compiler.models import GovernanceAction, NexusRisk, PolicyManifest
 from mellea_skills_compiler.toolkit.logging import configure_logger
@@ -15,12 +19,30 @@ from mellea_skills_compiler.toolkit.logging import configure_logger
 LOGGER = configure_logger()
 
 
+def _get_fail_safe_risks():
+    return [
+        NexusRisk(
+            name=risk,
+            description="",
+            guardian_prompt=risk,
+            source=NexusRiskSource.DEFAULT_FALLBACK,
+            is_native=True,
+            taxonomy=GovernanceTaxonomy.IBM_GRANITE_GUARDIAN,
+        )
+        for risk in [
+            "harm",
+            "social_bias",
+            "jailbreak",
+        ]
+    ]
+
+
 def generate_policy_manifest(
     use_case: str,
     nexus,
     model: Optional[str] = None,
     inference_engine: InferenceEngineType = InferenceEngineType.OLLAMA,
-    governance_taxonomies: Optional[list[str]] = None,
+    governance_taxonomies: Optional[List[str]] = None,
 ) -> PolicyManifest:
     """Identify applicable risks and governance actions to produce a multi-taxonomy policy manifest.
 
@@ -37,9 +59,6 @@ def generate_policy_manifest(
     if not governance_taxonomies:
         governance_taxonomies = GovernanceTaxonomy.list()
 
-    # ── 1. Runtime risk checks ────────────
-    LOGGER.info("Identifying risks for use case: %.100s...", use_case)
-
     # Create Inference engine instance
     risk_inference_engine = InferenceService(inference_engine).risk(
         model, parameters={"temperature": 0}
@@ -53,55 +72,59 @@ def generate_policy_manifest(
     )
 
     identified_risks = risk_lists.get("risks", [])
-    LOGGER.info("AI Atlas Nexus: %d risks identified", len(identified_risks))
+    LOGGER.info(f"AI Atlas Nexus risks: {len(identified_risks)}")
 
-    nexus_risks = []
-    nexus_additional_risks = []
-    all_governance_risk_names = []
+    risks = []
+    additional_risks = []
 
     for risk in identified_risks:
-        desc = risk.description or ""
-
-        guardian_prompt = desc.strip()
-        is_native = False
-
-        all_governance_risk_names.append(risk.name)
+        description = guardian_prompt = getattr(risk, "description", "").strip()
 
         # sort the risks, granite guardian and other
         if risk.isDefinedByTaxonomy == GovernanceTaxonomy.IBM_GRANITE_GUARDIAN:
-            if risk.tag:
-                guardian_prompt = risk.tag
-                is_native = True
-
-            nexus_risks.append(
+            guardian_prompt = risk.tag if risk.tag else guardian_prompt
+            is_native = True if risk.tag else False
+            risks.append(
                 NexusRisk(
                     name=risk.name,
-                    description=desc,
+                    description=description,
                     guardian_prompt=guardian_prompt,
+                    source=NexusRiskSource.AI_ATLAS_NEXUS,
                     is_native=is_native,
                     taxonomy=risk.isDefinedByTaxonomy,
                 )
-            )
-            tier = "native" if is_native else "custom"
-            LOGGER.info(
-                "  [Guardian] %s (%s) → %s", risk.name, tier, guardian_prompt[:60]
             )
         else:
-            nexus_additional_risks.append(
+            additional_risks.append(
                 NexusRisk(
                     name=risk.name,
-                    description=desc,
+                    description=description,
                     guardian_prompt=guardian_prompt,
-                    is_native=is_native,
+                    source=NexusRiskSource.AI_ATLAS_NEXUS,
+                    is_native=False,
                     taxonomy=risk.isDefinedByTaxonomy,
                 )
             )
+
+    if not risks:
+        LOGGER.warning(
+            "AI Atlas Nexus returned no Granite Guardian risks for this use case. "
+            "Falling back to default native risks: ['harm', 'social_bias', 'jailbreak']. "
+            "These are generic fail-safe defaults, NOT derived from use-case analysis. "
+        )
+        risks = _get_fail_safe_risks()
+
+    LOGGER.info("Guardian risks: %d", len(risks))
+    for risk in risks:
+        LOGGER.info(
+            f"  [Guardian] {risk.name} ({"native" if risk.is_native else "custom"}) → {risk.guardian_prompt[:60]}"
+        )
 
     # -- 2. Use the actions which are directly linked the risks
     identified_risks_governance_actions = risk_lists.get("mixed_control_items", [])
-    all_governance_actions: list[GovernanceAction] = []
+    governance_actions: list[GovernanceAction] = []
     for governance_item in identified_risks_governance_actions:
-        all_governance_actions.append(
+        governance_actions.append(
             GovernanceAction(
                 id=governance_item.id,
                 name=governance_item.name or governance_item.id,
@@ -112,16 +135,16 @@ def generate_policy_manifest(
                 categorized_as=governance_item.isCategorizedAs,
             )
         )
+    LOGGER.info("Governance actions: %d", len(governance_actions))
 
     return PolicyManifest(
         use_case=use_case,
         taxonomy=governance_taxonomies,
-        risks=nexus_risks,
-        additional_risks=nexus_additional_risks,
-        governance_actions=all_governance_actions,
-        governance_taxonomies_used=governance_taxonomies,
-        governance_risks_identified=all_governance_risk_names,
-        model_used=risk_inference_engine.model_name_or_path,
+        risks=risks,
+        additional_risks=additional_risks,
+        governance_actions=governance_actions,
+        governance_taxonomies=governance_taxonomies,
+        model=risk_inference_engine.model_name_or_path,
     )
 
 
@@ -135,12 +158,12 @@ def generate_policy_markdown(manifest: PolicyManifest) -> str:
       - Guardrail configuration table
       - Audit trail specification
     """
-    all_taxonomies = manifest.governance_taxonomies_used
+    all_taxonomies = manifest.governance_taxonomies
     lines = [
         f"# Policy: {manifest.use_case}",
         "",
         f"**Generated**: {manifest.generated_at}  ",
-        f"**Risk identification model**: {manifest.model_used}  ",
+        f"**Risk identification model**: {manifest.model}  ",
         f"**Taxonomies**: {', '.join(all_taxonomies)}",
     ]
     lines.extend(["", "---", ""])
@@ -261,12 +284,11 @@ def generate_policy_markdown(manifest: PolicyManifest) -> str:
     return "\n".join(lines)
 
 
-def load_policy_manifest(audit_dir: Path) -> PolicyManifest:
+def load_policy_manifest(manifest_path: Path) -> PolicyManifest:
     """Search for policy_manifest.json in standard locations.
 
     Checks the skill root first (portable), then the audit directory.
     """
-    manifest_path = audit_dir / "policy_manifest.json"
     if manifest_path.is_file():
         try:
             return PolicyManifest.from_json(str(manifest_path))
@@ -275,4 +297,4 @@ def load_policy_manifest(audit_dir: Path) -> PolicyManifest:
                 f"Failed to load policy manifest from {manifest_path}: {str(e)}",
             )
 
-    raise Exception(f"No policy_manifest.json found in {audit_dir}")
+    raise Exception(f"Policy manifest not available at {manifest_path}.")

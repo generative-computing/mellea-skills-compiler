@@ -57,6 +57,6 @@ pytest -s
 ## Test Structure
 
 - `tests/mellea_skills_compiler/toolkit/test_file_utils.py` - Tests for file parsing utilities
-- `tests/mellea_skills_compiler/certification/test_nexus_policy.py` - Tests for policy manifest and Nexus integration
+- `tests/mellea_skills_compiler/certification/test_policy.py` - Tests for policy manifest and Nexus integration
 - `tests/mellea_skills_compiler/certification/test_compliance.py` - Tests for compliance classification and reporting
 - `tests/mellea_skills_compiler/guardian/test_audit_trail.py` - Tests for audit trail plugin

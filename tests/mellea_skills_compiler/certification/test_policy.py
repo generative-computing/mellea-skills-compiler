@@ -1,4 +1,4 @@
-"""Unit tests for mellea_skills_compiler.certification.nexus_policy module."""
+"""Unit tests for mellea_skills_compiler.certification.policy module."""
 
 import json
 import tempfile
@@ -18,6 +18,7 @@ class TestNexusRisk:
             name="Jailbreak",
             description="Attempts to bypass safety guidelines",
             guardian_prompt="jailbreak",
+            source="ai-atlas-nexus",
             is_native=True,
         )
 
@@ -32,6 +33,7 @@ class TestNexusRisk:
         risk = NexusRisk(
             name="Custom Risk",
             description="A custom risk description",
+            source="ai-atlas-nexus",
             guardian_prompt="A custom risk description Custom concern",
             is_native=False,
         )
@@ -83,6 +85,7 @@ class TestPolicyManifest:
                 name="Test Risk",
                 description="Test description",
                 guardian_prompt="test",
+                source="ai-atlas-nexus",
                 is_native=True,
             )
         ]
@@ -102,8 +105,7 @@ class TestPolicyManifest:
             risks=risks,
             additional_risks=[],
             governance_actions=actions,
-            governance_taxonomies_used=["nist-ai-rmf"],
-            governance_risks_identified=["Risk1"],
+            governance_taxonomies=["nist-ai-rmf"],
         )
 
         assert manifest.use_case == "Test use case"
@@ -118,12 +120,14 @@ class TestPolicyManifest:
                 name="Risk1",
                 description="Desc1",
                 guardian_prompt="prompt1",
+                source="ai-atlas-nexus",
                 is_native=True,
             ),
             NexusRisk(
                 name="Risk2",
                 description="Desc2",
                 guardian_prompt="prompt2",
+                source="ai-atlas-nexus",
                 is_native=False,
             ),
         ]
@@ -135,7 +139,7 @@ class TestPolicyManifest:
             additional_risks=[],
         )
 
-        guardian_risks = manifest.guardian_risks
+        guardian_risks = manifest.risk_prompts
         assert guardian_risks == ["prompt1", "prompt2"]
 
     def test_risk_names_property(self):
@@ -144,16 +148,19 @@ class TestPolicyManifest:
             NexusRisk(
                 name="Risk1",
                 description="Desc1",
+                source="ai-atlas-nexus",
                 guardian_prompt="prompt1",
             ),
             NexusRisk(
                 name="Risk2",
                 description="Desc2",
+                source="ai-atlas-nexus",
                 guardian_prompt="prompt2",
             ),
             NexusRisk(
                 name="Custom Risk",
                 description="A custom risk description",
+                source="ai-atlas-nexus",
                 guardian_prompt="A custom risk description Custom concern",
                 is_native=False,
             ),
@@ -178,6 +185,7 @@ class TestPolicyManifest:
         risk = NexusRisk(
             name="TestRisk",
             description="Test",
+            source="ai-atlas-nexus",
             guardian_prompt="test",
         )
 
@@ -200,6 +208,7 @@ class TestPolicyManifest:
         risk = NexusRisk(
             name="TestRisk",
             description="Test",
+            source="ai-atlas-nexus",
             guardian_prompt="test",
         )
 
@@ -221,6 +230,7 @@ class TestPolicyManifest:
         risk = NexusRisk(
             name="TestRisk",
             description="Test",
+            source="ai-atlas-nexus",
             guardian_prompt="test",
         )
 
@@ -255,6 +265,7 @@ class TestPolicyManifest:
                     "name": "TestRisk",
                     "description": "Test description",
                     "guardian_prompt": "test",
+                    "source": "ai-atlas-nexus",
                     "is_native": True,
                     "taxonomy": GovernanceTaxonomy.IBM_GRANITE_GUARDIAN,
                 }
@@ -269,10 +280,9 @@ class TestPolicyManifest:
                     "via_risk": "TestRisk",
                 }
             ],
-            "governance_taxonomies_used": ["nist-ai-rmf"],
-            "governance_risks_identified": ["Risk1"],
+            "governance_taxonomies": ["nist-ai-rmf"],
             "generated_at": datetime.now(UTC).isoformat(),
-            "model_used": "test-model",
+            "model": "test-model",
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:

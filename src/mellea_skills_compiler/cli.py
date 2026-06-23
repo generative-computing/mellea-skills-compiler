@@ -211,9 +211,9 @@ def run(
     """
 
     try:
-        from mellea_skills_compiler.certification.pipeline import skill_pipeline
+        from mellea_skills_compiler.certification.pipeline import run_pipeline
 
-        skill_pipeline(
+        run_pipeline(
             Path(pipeline_dir), fixture, enforce=enforce, no_guardian=no_guardian
         )
     except Exception as e:
@@ -345,7 +345,7 @@ def certify(
             InferenceEngineType[inference_engine],
         )
     except Exception as e:
-        LOGGER.error(str(e))
+        LOGGER.error(f"Certify command failed - {str(e)}")
         raise typer.Exit(code=1)
 
 

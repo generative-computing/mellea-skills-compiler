@@ -292,17 +292,20 @@ class TestGenerateCertificationReport:
                 NexusRisk(
                     name="Risk1",
                     description="Desc1",
+                    source="ai-atlas-nexus",
                     guardian_prompt="prompt1",
                 ),
                 NexusRisk(
                     name="Risk2",
                     description="Desc2",
+                    source="ai-atlas-nexus",
                     guardian_prompt="prompt2",
                 ),
                 NexusRisk(
                     name="Custom Risk",
                     description="A custom risk description",
                     guardian_prompt="A custom risk description Custom concern",
+                    source="ai-atlas-nexus",
                     is_native=False,
                 ),
             ],
@@ -331,16 +334,19 @@ class TestGenerateCertificationReport:
                 NexusRisk(
                     name="Risk1",
                     description="Desc1",
+                    source="ai-atlas-nexus",
                     guardian_prompt="prompt1",
                 ),
                 NexusRisk(
                     name="Risk2",
                     description="Desc2",
+                    source="ai-atlas-nexus",
                     guardian_prompt="prompt2",
                 ),
                 NexusRisk(
                     name="Custom Risk",
                     description="A custom risk description",
+                    source="ai-atlas-nexus",
                     guardian_prompt="A custom risk description Custom concern",
                     is_native=False,
                 ),
@@ -364,16 +370,19 @@ class TestGenerateCertificationReport:
                 NexusRisk(
                     name="Risk1",
                     description="Desc1",
+                    source="ai-atlas-nexus",
                     guardian_prompt="prompt1",
                 ),
                 NexusRisk(
                     name="Risk2",
                     description="Desc2",
+                    source="ai-atlas-nexus",
                     guardian_prompt="prompt2",
                 ),
                 NexusRisk(
                     name="Custom Risk",
                     description="A custom risk description",
+                    source="ai-atlas-nexus",
                     guardian_prompt="A custom risk description Custom concern",
                     is_native=False,
                 ),

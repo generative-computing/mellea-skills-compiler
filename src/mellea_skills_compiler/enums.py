@@ -54,3 +54,24 @@ class CoverageLevel(Enum):
     AUTOMATED = "AUTOMATED"
     PARTIAL = "PARTIAL"
     MANUAL = "MANUAL"
+
+
+class GuardianMode(StrEnum):
+    DISABLED = "disabled"
+    ENFORCE = "enforce"
+    AUDIT = "audit"
+
+    def __str__(self):
+        return self.name
+
+
+class NexusRiskSource(StrEnum):
+    DEFAULT_FALLBACK = "default-fallback"
+    AI_ATLAS_NEXUS = "ai-atlas-nexus"
+
+
+class GuardianScore(StrEnum):
+    YES = "Yes"
+    NO = "No"
+    FAILED = "Failed"
+    ERROR = "Error"
