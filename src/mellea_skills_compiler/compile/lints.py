@@ -1260,6 +1260,16 @@ def lint_fixture_pydantic_coercion(package_dir: Path) -> LintResult:
     pydantic_classes = _find_pydantic_classes_in_schemas(schemas_py)
     pydantic_params = _pydantic_typed_run_pipeline_params(pipeline_py, pydantic_classes)
 
+    # Credit entry coercion: a param guarded by ``if isinstance(p, dict): p = Cls(**p)``
+    # at run_pipeline entry is safe to receive a bare-dict fixture input (fix option
+    # (b) in this lint's own message), so do not flag it. Lazy import to avoid a
+    # circular import with the repairs module.
+    from mellea_skills_compiler.compile.repairs import params_coerced_at_entry
+
+    coerced = params_coerced_at_entry(pipeline_py)
+    if coerced:
+        pydantic_params = {p: c for p, c in pydantic_params.items() if p not in coerced}
+
     if not pydantic_params:
         return result
 
@@ -2323,7 +2333,80 @@ def lint_parseable(package_dir: Path) -> LintResult:
 # ─── Runner ───
 
 
+_KNOWN_SESSION_METHODS = {
+    "instruct", "ainstruct", "act", "aact", "chat", "achat", "query", "aquery",
+    "validate", "avalidate", "transform", "atransform", "clone", "reset",
+    "cleanup", "powerup", "last_prompt",
+}
+
+
+def lint_session_method_exists(package_dir: Path) -> LintResult:
+    """Reject calls to MelleaSession methods that do not exist.
+
+    The LLM writer sometimes invents a session method (observed: ``m.react(...)``
+    with fabricated ``tools=``/``loop_budget=`` kwargs). Such code passes structural
+    checks and only dies at smoke with ``AttributeError: 'MelleaSession' object has
+    no attribute 'react'``. Catching it at Step 7 lets the repair loop fix it (use a
+    real method such as ``m.instruct`` / ``m.act``) before smoke.
+    """
+    result = LintResult(lint_id="session-method-exists", verdict="pass")
+    pipeline_py = package_dir / "pipeline.py"
+    if not pipeline_py.is_file():
+        result.verdict = "skipped"
+        result.skipped_reason = "pipeline.py not found"
+        return result
+    try:
+        tree = ast.parse(pipeline_py.read_text(encoding="utf-8"))
+    except SyntaxError:
+        result.verdict = "skipped"
+        result.skipped_reason = "pipeline.py not parseable"
+        return result
+
+    session_vars: set = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.With):
+            for item in node.items:
+                ctx = item.context_expr
+                if (
+                    isinstance(ctx, ast.Call)
+                    and isinstance(ctx.func, ast.Name)
+                    and ctx.func.id == "start_session"
+                    and isinstance(item.optional_vars, ast.Name)
+                ):
+                    session_vars.add(item.optional_vars.id)
+    if not session_vars:
+        return result
+
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id in session_vars
+            and node.func.attr not in _KNOWN_SESSION_METHODS
+            and not node.func.attr.startswith("_")
+        ):
+            result.failures.append(
+                LintFailure(
+                    file="pipeline.py",
+                    line=node.lineno,
+                    column=node.col_offset,
+                    message=(
+                        f"`{node.func.value.id}.{node.func.attr}(...)` calls a "
+                        f"MelleaSession method that does not exist. Use a real "
+                        f"session method (e.g. m.instruct, m.act, m.chat, m.query). "
+                        f"Hallucinated methods raise AttributeError at smoke-check time."
+                    ),
+                    rule_ref="session-method-exists",
+                )
+            )
+    if result.failures:
+        result.verdict = "fail"
+    return result
+
+
 ALL_LINTS: Tuple[Callable[[Path], LintResult], ...] = (
+    lint_session_method_exists,
     lint_fixtures_loader_contract,
     lint_bundled_asset_path_resolution,
     lint_runtime_defaults_bound,

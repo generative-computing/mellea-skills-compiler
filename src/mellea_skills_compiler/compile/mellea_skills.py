@@ -148,6 +148,19 @@ def validate(package_dir: Path, *, no_run: bool, all_fixtures: bool) -> None:
         raise Exception(f"Package directory does not exist: {package_dir}")
 
     from mellea_skills_compiler.compile.lints import run_lints
+    from mellea_skills_compiler.compile.repairs import (
+        coerce_pydantic_params_at_entry,
+        escape_grounding_context_values,
+    )
+
+    # Deterministic pre-lint repairs (contract conformance):
+    #  - make run_pipeline tolerant of bare-dict fixture inputs for Pydantic-typed
+    #    params (otherwise the fixture-shape mismatch raises AttributeError at smoke);
+    #  - wrap grounding_context values so incidental Jinja syntax in the data
+    #    ({% csrf_token %} in code under review, {{ }} in fetched docs) is rendered
+    #    literally instead of raising TemplateSyntaxError / UndefinedError.
+    coerce_pydantic_params_at_entry(package_dir)
+    escape_grounding_context_values(package_dir)
 
     lint_result = run_lints(package_dir)
     if lint_result.failed:
