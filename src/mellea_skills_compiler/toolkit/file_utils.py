@@ -1,6 +1,7 @@
 import importlib
 import re
 import shutil
+import stat
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -230,5 +231,28 @@ def mirror_dir_contents_to_target(
             mirrored.append(source.name)
         except Exception as e:
             LOGGER.warning(f"Failed to mirror {source.name}: {e}")
+
+    # Ensure bundled script assets stay executable. Compiled tools invoke
+    # companion scripts by path (e.g. subprocess.run([".../foo.sh", ...])),
+    # which requires the executable bit. Source skills frequently ship scripts
+    # without +x (and shutil.copy2 preserves that), so a mirrored `.sh` /
+    # shebang script raises PermissionError at runtime. Set +x here so the
+    # mirrored scripts are runnable regardless of the source mode bits.
+    for path in target_dir.rglob("*"):
+        if not path.is_file():
+            continue
+        is_script = path.suffix == ".sh"
+        if not is_script:
+            try:
+                with path.open("rb") as fh:
+                    is_script = fh.read(2) == b"#!"
+            except OSError:
+                is_script = False
+        if is_script:
+            try:
+                mode = path.stat().st_mode
+                path.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            except OSError as e:
+                LOGGER.warning(f"Failed to set +x on mirrored script {path.name}: {e}")
 
     return mirrored

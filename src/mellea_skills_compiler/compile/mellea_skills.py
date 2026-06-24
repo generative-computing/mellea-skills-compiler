@@ -139,6 +139,12 @@ def _derive_mellea_package_name(spec_path: Path, frontmatter: Optional[Dict]) ->
     while "__" in name:
         name = name.replace("__", "_")
     name = name.strip("_") or "skill"
+    # Rule OUT-2 guard: a Python package/module name cannot start with a digit
+    # (e.g. skill id "1password" -> "1password_mellea" is an invalid identifier and
+    # the package is unimportable). Prefix an underscore so the name is a valid
+    # identifier while staying recognisable.
+    if name[0].isdigit():
+        name = f"_{name}"
     return f"{name}_mellea"
 
 
