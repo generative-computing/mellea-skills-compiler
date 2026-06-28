@@ -534,7 +534,7 @@ def compile(
         if process and process.poll() is None:
             process.kill()
             process.wait()
-        raise Exception(f"Mellea-fy skill compilation failed: {str(e)}") from e
+        raise Exception(f"Mellea-fy skill compilation failed - {str(e)}") from e
     finally:
         proxy_server.shutdown()
 
