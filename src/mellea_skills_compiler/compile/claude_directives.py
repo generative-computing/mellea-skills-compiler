@@ -4,7 +4,6 @@ from typing import Optional
 
 from mellea_skills_compiler.toolkit.logging import configure_logger
 
-
 LOGGER = configure_logger()
 
 
@@ -121,7 +120,7 @@ def write_runtime_directive(
 
 
 def build_system_prompt(
-    backend: str, model_id: str, source: str, package_name: str
+    backend: str, model_id: str, source: str, mellea_package_dir: Path
 ) -> str:
     """Assemble the instruction string passed to the mellea-fy slash command.
 
@@ -132,40 +131,36 @@ def build_system_prompt(
     write the rendered source itself, so the first attempt is correct rather
     than denied-then-retried.
 
-    ``package_name`` is the wrapper-derived Rule OUT-2 name (e.g.
+    ``mellea_package_dir`` is the wrapper-derived Rule OUT-2 path (e.g.
     ``weather_mellea``) substituted into the prompt body so the LLM uses the
-    same name the wrapper computes for ``mirror_dir_contents_to_target`` and the
-    post-session ``*_mellea`` discovery. Previously the prompt carried the
-    literal placeholder ``<package_name>`` and the LLM re-derived the name
-    from the frontmatter — a long/complex name (e.g.
-    ``gdpr-breach-sentinel-oliver-schmidt-prietz``) could be mis-transcribed
-    and produce a stray sibling directory.
+    same path the wrapper computes for ``mirror_dir_contents_to_target`` and the
+    post-session ``*_mellea`` discovery.
     """
     wrapper_rendered_lines = "\n".join(
-        f"  - {package_name}/{p}" for p in _WRAPPER_RENDERED_PATHS
+        f"  - {mellea_package_dir}/{p}" for p in _WRAPPER_RENDERED_PATHS
     )
     return (
         "Run the complete 10-step pipeline (Steps 0 through 7) autonomously from start to finish. "
         "Do NOT pause between steps, do NOT ask for user confirmation to proceed, and do NOT stop "
         "after any individual step completes. Invoke each sub-command in sequence and continue "
         "immediately to the next step.\n\n"
-        f"The compiled package directory name is exactly `{package_name}`. "
-        f"Use this exact string wherever the slash-command directives reference "
-        f"`<package_name>`; do NOT re-derive it from the frontmatter. The wrapper "
+        f"The compiled package directory path is exactly `{mellea_package_dir}`. "
+        f"Use this exact path wherever the slash-command directives reference "
+        f"`<mellea_package_dir>`; do NOT re-derive it from the frontmatter. The wrapper "
         f"has already applied Rule OUT-2 and the post-session discovery expects "
-        f"this exact directory name.\n\n"
+        f"this exact directory path.\n\n"
         f"The following paths are rendered by the compile pipeline from the JSON you emit "
-        f"in {package_name}/intermediate/ — DO NOT write or edit them yourself; the Write "
+        f"in {mellea_package_dir}/intermediate/ — DO NOT write or edit them yourself; the Write "
         f"and Edit tools are denied for these paths and the wrapper will render them "
         f"deterministically after you exit:\n"
         f"{wrapper_rendered_lines}\n"
-        f"Emit the corresponding *_emission.json files under {package_name}/intermediate/ "
+        f"Emit the corresponding *_emission.json files under {mellea_package_dir}/intermediate/ "
         f"conforming to .claude/schemas/*_emission.schema.json instead.\n\n"
         f"Runtime defaults (source: {source}). The values below MUST appear in "
-        f"config_emission.json so the wrapper renders them into {package_name}/config.py:\n"
+        f"config_emission.json so the wrapper renders them into {mellea_package_dir}/config.py:\n"
         f"  BACKEND = {backend!r}\n"
         f"  MODEL_ID = {model_id!r}\n"
         f"Do not invent alternative values, and do not omit either constant. "
         f"The post-compile lint will verify config.py against the recorded values "
-        f"at {package_name}/intermediate/runtime_directive.json."
+        f"at {mellea_package_dir}/intermediate/runtime_directive.json."
     )

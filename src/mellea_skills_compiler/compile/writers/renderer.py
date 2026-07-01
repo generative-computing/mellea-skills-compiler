@@ -271,6 +271,12 @@ def render_writers(package_dir: Path, *, enforce: bool = False) -> List[RenderRe
             )
         results.append(result)
         _log_result(result, enforce=enforce)
+
+    if enforce and any([result.status == "missing-emission" for result in results]):
+        raise Exception(
+            "Rendering was unsuccessful because the necessary emission file(s) are missing. Please check the logs for more details."
+        )
+
     return results
 
 

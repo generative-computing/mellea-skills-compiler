@@ -406,7 +406,7 @@ def compile(
 
     # Build claude system prompt
     system_prompt = build_system_prompt(
-        chosen_backend, chosen_model_id, defaults_source, mellea_package_name
+        chosen_backend, chosen_model_id, defaults_source, mellea_package_dir
     )
 
     # Start compilation process
@@ -534,7 +534,7 @@ def compile(
         if process and process.poll() is None:
             process.kill()
             process.wait()
-        raise Exception(f"Mellea-fy skill compilation failed: {str(e)}") from e
+        raise Exception(f"Mellea-fy skill compilation failed - {str(e)}") from e
     finally:
         proxy_server.shutdown()
 

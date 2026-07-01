@@ -54,6 +54,7 @@ def translate_claude_code(loaded: "LoadedContext") -> "TranslationPlan":
         pattern=sig.pattern,
         params=sig.params,
         export_version=export_version,
+        has_policy_manifest=loaded.policy_manifest_path is not None,
     )
 
     skill_md = _render_skill_md(
@@ -66,6 +67,7 @@ def translate_claude_code(loaded: "LoadedContext") -> "TranslationPlan":
     pyproject_toml = _render_pyproject_toml(
         skill_name=skill_name,
         package_name=package_name,
+        has_policy_manifest=loaded.policy_manifest_path is not None,
     )
 
     readme = _render_readme(
@@ -73,6 +75,7 @@ def translate_claude_code(loaded: "LoadedContext") -> "TranslationPlan":
         package_name=package_name,
         modality=modality,
         sig=sig,
+        has_policy_manifest=loaded.policy_manifest_path is not None,
     )
 
     adapter_files: list["AdapterFile"] = [
@@ -97,6 +100,7 @@ def translate_claude_code(loaded: "LoadedContext") -> "TranslationPlan":
 # Field resolution
 # ---------------------------------------------------------------------------
 
+
 def _to_snake(s: str) -> str:
     s = re.sub(r"[^a-zA-Z0-9_]", "_", s)
     s = re.sub(r"_+", "_", s).strip("_").lower()
@@ -105,6 +109,7 @@ def _to_snake(s: str) -> str:
 
 def _export_version() -> str:
     from mellea_skills_compiler.export.exporter import EXPORT_VERSION
+
     return EXPORT_VERSION
 
 
@@ -135,6 +140,7 @@ def _get_description(manifest: dict) -> str:
 # scripts/run.sh renderers
 # ---------------------------------------------------------------------------
 
+
 def _render_run_sh(
     *,
     modality: str,
@@ -144,6 +150,7 @@ def _render_run_sh(
     pattern: str,
     params: list[dict],
     export_version: str,
+    has_policy_manifest: bool = False,
 ) -> str:
     dispatch = {
         "synchronous_oneshot": _run_sh_synchronous_oneshot,
@@ -157,6 +164,7 @@ def _render_run_sh(
         pattern=pattern,
         params=params,
         export_version=export_version,
+        has_policy_manifest=has_policy_manifest,
     )
 
 
@@ -189,6 +197,22 @@ def _invocation_args(pattern: str, params: list[dict]) -> str:
     return args
 
 
+def _guardian_inline_snippet() -> str:
+    return (
+        "import os\n"
+        "from pathlib import Path\n"
+        "from mellea_skills_compiler.models import PolicyManifest\n"
+        "from mellea_skills_compiler.plugins.guardian import GuardianAuditPlugin\n"
+        "from mellea_skills_compiler.plugins.audit import AuditTrailPlugin\n"
+        "_manifest_path = Path(os.environ.get('ADAPTER_DIR', '.')) / 'policy_manifest.json'\n"
+        "if _manifest_path.exists():\n"
+        "    guardian_plugin = GuardianAuditPlugin(PolicyManifest.from_json(_manifest_path))\n"
+        "    guardian_plugin.register()\n"
+        "    audit_plugin = AuditTrailPlugin(log_path=Path('audit_trail.jsonl'), guardian_plugin=guardian_plugin)\n"
+        "    audit_plugin.register()\n"
+    )
+
+
 def _run_sh_synchronous_oneshot(
     *,
     package_name: str,
@@ -197,20 +221,26 @@ def _run_sh_synchronous_oneshot(
     pattern: str,
     params: list[dict],
     export_version: str,
+    has_policy_manifest: bool = False,
 ) -> str:
     inv_args = _invocation_args(pattern, params)
     header = _bash_header(export_version)
+    guardian = _guardian_inline_snippet() if has_policy_manifest else ""
     return (
         header
         + "\n"
-        + "exec python -c \"\n"
+        + 'exec python -c "\n'
         + "import json, sys\n"
         + f"from {package_name}.{entry_module} import {entry_function}\n"
+        + guardian
         + "try:\n"
         + f"    result = {entry_function}({inv_args})\n"
         + "except Exception as exc:\n"
         + "    print(json.dumps({'status': 'error', 'message': str(exc)}), file=sys.stderr)\n"
         + "    sys.exit(1)\n"
+        + "finally:\n"
+        + "    guardian_plugin.deregister()\n"
+        + "    audit_plugin.deregister()\n"
         + "if hasattr(result, 'model_dump'):\n"
         + "    output = result.model_dump()\n"
         + "elif result is None:\n"
@@ -218,7 +248,7 @@ def _run_sh_synchronous_oneshot(
         + "else:\n"
         + "    output = str(result)\n"
         + "print(json.dumps({'status': 'ok', 'output': output}))\n"
-        + "\" -- \"$@\"\n"
+        + '" -- "$@"\n'
     )
 
 
@@ -244,19 +274,22 @@ def _run_sh_streaming(
     pattern: str,
     params: list[dict],
     export_version: str,
+    has_policy_manifest: bool = False,
 ) -> str:
     header = _bash_header(export_version)
     call_line = _streaming_call(entry_function, pattern, params)
+    guardian = _guardian_inline_snippet() if has_policy_manifest else ""
     return (
         header
         + "\n"
         + "python -u - \"$@\" <<'PYEOF'\n"
         + "import sys, asyncio, json\n"
         + f"from {package_name}.{entry_module} import {entry_function}\n"
+        + guardian
         + "\n"
         + "async def main():\n"
         + call_line
-        + "        print(chunk, end=\"\", flush=True)\n"
+        + '        print(chunk, end="", flush=True)\n'
         + "    print()\n"
         + "\n"
         + "asyncio.run(main())\n"
@@ -272,18 +305,21 @@ def _run_sh_conversational_session(
     pattern: str,
     params: list[dict],
     export_version: str,
+    has_policy_manifest: bool = False,
 ) -> str:
     header = _bash_header(export_version)
+    guardian = _guardian_inline_snippet() if has_policy_manifest else ""
     return (
         header
         + "\n"
         + "python - \"$@\" <<'PYEOF'\n"
         + "import sys, json, argparse, inspect\n"
         + f"from {package_name}.{entry_module} import {entry_function}\n"
+        + guardian
         + "\n"
         + "parser = argparse.ArgumentParser()\n"
-        + "parser.add_argument(\"--input\", required=True)\n"
-        + "parser.add_argument(\"--session\", default=\"[]\")\n"
+        + 'parser.add_argument("--input", required=True)\n'
+        + 'parser.add_argument("--session", default="[]")\n'
         + "args = parser.parse_args()\n"
         + "\n"
         + "prior_turns = json.loads(args.session)\n"
@@ -297,10 +333,10 @@ def _run_sh_conversational_session(
         + "        output = result.model_dump()\n"
         + "    else:\n"
         + "        output = str(result)\n"
-        + "    print(json.dumps({\"status\": \"ok\", \"output\": output,\n"
-        + "                      \"session\": [*prior_turns, {\"input\": args.input, \"output\": output}]}))\n"
+        + '    print(json.dumps({"status": "ok", "output": output,\n'
+        + '                      "session": [*prior_turns, {"input": args.input, "output": output}]}))\n'
         + "except Exception as exc:\n"
-        + "    print(json.dumps({\"status\": \"error\", \"message\": str(exc)}), file=sys.stderr)\n"
+        + '    print(json.dumps({"status": "error", "message": str(exc)}), file=sys.stderr)\n'
         + "    sys.exit(1)\n"
         + "PYEOF\n"
     )
@@ -309,6 +345,7 @@ def _run_sh_conversational_session(
 # ---------------------------------------------------------------------------
 # SKILL.md
 # ---------------------------------------------------------------------------
+
 
 def _render_skill_md(
     *,
@@ -366,7 +403,16 @@ def _skill_md_arg_note(sig: "ParsedSignature", modality: str) -> str:
 # pyproject.toml
 # ---------------------------------------------------------------------------
 
-def _render_pyproject_toml(*, skill_name: str, package_name: str) -> str:
+
+def _render_pyproject_toml(
+    *, skill_name: str, package_name: str, has_policy_manifest: bool = False
+) -> str:
+    deps = []
+    if has_policy_manifest:
+        deps.append(
+            '    "mellea-skills-compiler@git+https://github.com/generative-computing/mellea-skills-compiler.git",\n'
+        )
+
     return (
         "[build-system]\n"
         'requires = ["setuptools>=68"]\n'
@@ -377,7 +423,7 @@ def _render_pyproject_toml(*, skill_name: str, package_name: str) -> str:
         'version = "0.1.0"\n'
         f'description = "Claude Code adapter for {skill_name} Mellea pipeline"\n'
         'requires-python = ">=3.11"\n'
-        "dependencies = []\n"
+        "dependencies = [\n" + "".join(deps) + "]\n"
         "\n"
         "[tool.setuptools.packages.find]\n"
         'where = ["."]\n'
@@ -408,10 +454,10 @@ _MODALITY_INVOCATION_EXAMPLE = {
     "synchronous_oneshot": "bash scripts/run.sh <arg1> [arg2 ...]",
     "streaming": "bash scripts/run.sh <arg1> [arg2 ...]",
     "conversational_session": (
-        "bash scripts/run.sh --input \"your message here\"\n"
+        'bash scripts/run.sh --input "your message here"\n'
         "# With session history:\n"
-        "bash scripts/run.sh --input \"follow-up\" "
-        "--session '[{\"input\": \"previous\", \"output\": \"response\"}]'"
+        'bash scripts/run.sh --input "follow-up" '
+        '--session \'[{"input": "previous", "output": "response"}]\''
     ),
 }
 
@@ -422,12 +468,30 @@ def _render_readme(
     package_name: str,
     modality: str,
     sig: "ParsedSignature",
+    has_policy_manifest: bool = False,
 ) -> str:
     display_name = skill_name.replace("_", " ").title()
-    modality_note = _MODALITY_NOTES.get(modality, _MODALITY_NOTES["synchronous_oneshot"])
+    modality_note = _MODALITY_NOTES.get(
+        modality, _MODALITY_NOTES["synchronous_oneshot"]
+    )
     invocation_example = _MODALITY_INVOCATION_EXAMPLE.get(
         modality, _MODALITY_INVOCATION_EXAMPLE["synchronous_oneshot"]
     )
+
+    install_cmd = "pip install -e ."
+
+    guardian_section = ""
+    if has_policy_manifest:
+        guardian_section = (
+            "\n## Guardian audit\n\n"
+            "This bundle was exported from a certified skill. Guardian audit-mode is active at runtime.\n\n"
+            "The audit log is written to `audit/runtime_audit.jsonl` in this directory. "
+            "Ensure the process has write access:\n\n"
+            "```bash\n"
+            "mkdir -p audit\n"
+            "```\n\n"
+            "To suppress Guardian at runtime, remove `policy_manifest.json` from this directory.\n"
+        )
 
     return (
         f"# {display_name} — Claude Code Adapter\n"
@@ -437,8 +501,9 @@ def _render_readme(
         f"## Installation\n"
         f"\n"
         f"```bash\n"
-        f"pip install -e .\n"
+        f"{install_cmd}\n"
         f"```\n"
+        f"{guardian_section}"
         f"\n"
         f"## Registration\n"
         f"\n"
@@ -482,6 +547,7 @@ def _render_readme(
 # Deployment guidance
 # ---------------------------------------------------------------------------
 
+
 def _deployment_guidance(modality: str, skill_name: str) -> str:
     guides = {
         "synchronous_oneshot": (
@@ -497,4 +563,6 @@ def _deployment_guidance(modality: str, skill_name: str) -> str:
             "Pass `--session` JSON array across calls to maintain conversation history."
         ),
     }
-    return guides.get(modality, f"Install with `pip install -e .` and register the skill.")
+    return guides.get(
+        modality, f"Install with `pip install -e .` and register the skill."
+    )

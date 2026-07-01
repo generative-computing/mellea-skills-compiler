@@ -38,19 +38,22 @@ class Invocation:
 @dataclass
 class ParsedSignature:
     """Parsed from manifest entry_signature string."""
+
     function_name: str
-    params: list[dict]          # [{name, type, required, default}, ...]
+    params: list[dict]  # [{name, type, required, default}, ...]
     return_type: str
-    pattern: str                # "no_args" | "dict_unpack" | "single_positional"
+    pattern: str  # "no_args" | "dict_unpack" | "single_positional"
 
 
 @dataclass
 class LoadedContext:
     invocation: Invocation
     manifest: dict
-    package_source_dir: Path        # root that contains melleafy.json (skill root)
-    python_package_dir: Path        # actual importable Python package directory
-    supporting_asset_dirs: list[Path]  # dirs to copy alongside the package (e.g. scripts/)
+    package_source_dir: Path  # root that contains melleafy.json (skill root)
+    python_package_dir: Path  # actual importable Python package directory
+    supporting_asset_dirs: list[
+        Path
+    ]  # dirs to copy alongside the package (e.g. scripts/)
     entry_module: str
     sig: ParsedSignature
     load_warnings: list[str] = field(default_factory=list)
@@ -70,6 +73,7 @@ class TranslationPlan:
     bundled_package_name: str
     warnings: list[str] = field(default_factory=list)
     deployment_guidance: str = ""
+    has_policy_manifest: bool = False
 
 
 @dataclass
@@ -97,7 +101,10 @@ def stage1_validate(inv: Invocation) -> dict:
         ]
         found = [c for c in candidates if c.exists()]
         if not found:
-            _halt(2, f"melleafy.json not found in {inv.package_path} or any *_mellea/ subdirectory")
+            _halt(
+                2,
+                f"melleafy.json not found in {inv.package_path} or any *_mellea/ subdirectory",
+            )
         manifest_path = found[0]
 
     try:
@@ -116,10 +123,16 @@ def stage1_validate(inv: Invocation) -> dict:
         _halt(2, f"manifest_version '{raw_mv}' is not a valid semver string")
 
     if inv.target not in SUPPORTED_TARGETS:
-        _halt(2, f"Unsupported target '{inv.target}'. Supported: {sorted(SUPPORTED_TARGETS)}")
+        _halt(
+            2,
+            f"Unsupported target '{inv.target}'. Supported: {sorted(SUPPORTED_TARGETS)}",
+        )
 
-    if inv.out_path is not None and not inv.force and inv.out_path.exists() and (
-        not inv.out_path.is_dir() or any(inv.out_path.iterdir())
+    if (
+        inv.out_path is not None
+        and not inv.force
+        and inv.out_path.exists()
+        and (not inv.out_path.is_dir() or any(inv.out_path.iterdir()))
     ):
         _halt(3, f"Output path {inv.out_path} is non-empty. Pass --force to overwrite.")
 
@@ -136,7 +149,9 @@ def stage2_load(inv: Invocation, manifest: dict) -> LoadedContext:
     warnings: list[str] = []
 
     # Accept entry_signature (preferred) or run_pipeline_signature (emitted by melleafy v4.3.x).
-    sig_str = manifest.get("entry_signature") or manifest.get("run_pipeline_signature", "")
+    sig_str = manifest.get("entry_signature") or manifest.get(
+        "run_pipeline_signature", ""
+    )
     if not sig_str:
         _halt(2, "manifest missing 'entry_signature'")
 
@@ -158,10 +173,17 @@ def stage2_load(inv: Invocation, manifest: dict) -> LoadedContext:
         # Collect skill-root sibling dirs that are supporting assets (e.g. scripts/).
         # Under the current layout, intermediate/ and fixtures/ live inside
         # <package_name>/ so won't appear here; kept in skip set for old-layout compat.
-        _SKIP_DIRS = {package_name, "intermediate", "fixtures", "__pycache__",
-                      ".venv", ".git"}
+        _SKIP_DIRS = {
+            package_name,
+            "intermediate",
+            "fixtures",
+            "__pycache__",
+            ".venv",
+            ".git",
+        }
         supporting_asset_dirs = [
-            d for d in skill_root.iterdir()
+            d
+            for d in skill_root.iterdir()
             if d.is_dir() and d.name not in _SKIP_DIRS and not d.name.startswith(".")
         ]
     else:
@@ -169,8 +191,12 @@ def stage2_load(inv: Invocation, manifest: dict) -> LoadedContext:
         supporting_asset_dirs = []
 
     # Policy manifest (optional)
-    policy_path = skill_root / "policy_manifest.json"
-    policy_manifest_path = policy_path if policy_path.exists() else None
+    policy_manifest_path = None
+    audit_dirs = list(skill_root.parent.glob("audit_*"))
+    for audit_dir in reversed(audit_dirs):
+        if (audit_dir / "policy_manifest.json").exists():
+            policy_manifest_path = audit_dir / "policy_manifest.json"
+            break
 
     return LoadedContext(
         invocation=inv,
@@ -241,12 +267,14 @@ def _parse_entry_signature(sig_str: str) -> ParsedSignature:
             else:
                 name = name_type
                 ptype = "Any"
-            params.append({
-                "name": name,
-                "type": ptype,
-                "required": not has_default,
-                "default": part.split("=", 1)[1].strip() if has_default else None,
-            })
+            params.append(
+                {
+                    "name": name,
+                    "type": ptype,
+                    "required": not has_default,
+                    "default": part.split("=", 1)[1].strip() if has_default else None,
+                }
+            )
 
     # Determine pattern (Rule 3d-1)
     required = [p for p in params if p["required"]]
@@ -274,16 +302,22 @@ def stage3_translate(loaded: LoadedContext) -> TranslationPlan:
     """Build TranslationPlan from LoadedContext. Dispatches to target module."""
     if loaded.invocation.target == "langgraph":
         from mellea_skills_compiler.export.targets.langgraph import translate_langgraph
-        return translate_langgraph(loaded)
+
+        plan = translate_langgraph(loaded)
     elif loaded.invocation.target == "claude-code":
         from mellea_skills_compiler.export.targets.claude_code import (
             translate_claude_code,
         )
-        return translate_claude_code(loaded)
+
+        plan = translate_claude_code(loaded)
     elif loaded.invocation.target == "mcp":
         from mellea_skills_compiler.export.targets.mcp import translate_mcp
-        return translate_mcp(loaded)
-    _halt(2, f"No translator for target '{loaded.invocation.target}'")
+
+        plan = translate_mcp(loaded)
+    else:
+        _halt(2, f"No translator for target '{loaded.invocation.target}'")
+    plan.has_policy_manifest = loaded.policy_manifest_path is not None
+    return plan
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +407,9 @@ def _build_reverse_manifest(plan: TranslationPlan, loaded: LoadedContext) -> dic
         "source_manifest": loaded.manifest,
         "warnings": plan.warnings + loaded.load_warnings,
         "policy_manifest_bundled": loaded.policy_manifest_path is not None,
-        "guardian_configured": False,
+        "guardian_configured": (
+            "audit" if loaded.policy_manifest_path is not None else False
+        ),
     }
 
 
@@ -395,33 +431,58 @@ def _build_export_notes(plan: TranslationPlan, loaded: LoadedContext) -> str:
             lines.append(f"- {w}")
         lines.append("")
     if plan.deployment_guidance:
-        lines += ["## Deployment guidance", "", plan.deployment_guidance, ""]
+        guidance = plan.deployment_guidance
+        if loaded.policy_manifest_path is not None:
+            guidance = (
+                "Install `mellea-skills-compiler` before running: `pip install git+https://github.com/generative-computing/mellea-skills-compiler.git`. "
+                + guidance
+            )
+        lines += ["## Deployment guidance", "", guidance, ""]
     target = loaded.invocation.target
+    guardian = loaded.policy_manifest_path is not None
+    install_step = (
+        "Install dependencies: `pip install -e . && pip install git+https://github.com/generative-computing/mellea-skills-compiler.git`"
+        if guardian
+        else "Install dependencies: `pip install -e .`"
+    )
     if target == "langgraph":
         next_steps = [
             "1. Review `graph.py` — the generated node calls `run_pipeline` directly.",
-            "2. Install dependencies: `pip install -e .`",
+            f"2. {install_step}",
             "3. Invoke: `python -c \"from graph import graph; print(graph.invoke({'input': {}})['output'])\"`",
             "4. For LangGraph Platform: deploy using `langgraph.json`.",
         ]
     elif target == "mcp":
         next_steps = [
             "1. Review `server.py` — the generated tool wraps `run_pipeline`.",
-            "2. Install dependencies: `pip install -e .`",
+            f"2. {install_step}",
             "3. Register with an MCP client using `mcp.json`.",
             "4. Invoke via the MCP client or: `python server.py`.",
         ]
     elif target == "claude-code":
         next_steps = [
             "1. Review `scripts/run.sh` — the generated script calls `run_pipeline`.",
-            "2. Install dependencies: `pip install -e .`",
+            f"2. {install_step}",
             "3. Make executable: `chmod +x scripts/run.sh`",
             "4. Register under `.claude/skills/` and invoke via `bash scripts/run.sh <args>`.",
         ]
     else:
         next_steps = [
-            "1. Install dependencies: `pip install -e .`",
+            f"1. {install_step}",
             "2. Consult the generated README.md for invocation instructions.",
+        ]
+    if guardian:
+        lines += [
+            "## Guardian audit",
+            "",
+            "This bundle was exported from a certified skill. Guardian audit-mode is active.",
+            "",
+            "- **Audit log**: `<bundle_dir>/audit/runtime_audit.jsonl`",
+            "- **Write access**: the process running the entry point must have write permission to the"
+            " `audit/` directory adjacent to the bundle. Create it if it does not exist:",
+            "  `mkdir -p <bundle_dir>/audit`",
+            "- To suppress Guardian at runtime, remove `policy_manifest.json` from the bundle directory.",
+            "",
         ]
     lines += ["## Next steps", ""] + next_steps
     return "\n".join(lines) + "\n"
@@ -430,6 +491,7 @@ def _build_export_notes(plan: TranslationPlan, loaded: LoadedContext) -> str:
 def _write_halt_reason(partial: Path, exc_info: Any) -> None:
     try:
         import traceback
+
         tb = "".join(traceback.format_exception(*exc_info))
         (partial / "HALT_REASON.md").write_text(f"# Export halted\n\n```\n{tb}\n```\n")
     except Exception:
@@ -441,7 +503,9 @@ def _write_halt_reason(partial: Path, exc_info: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-def stage5_lint(result: EmitResult, loaded: LoadedContext, plan: TranslationPlan) -> None:
+def stage5_lint(
+    result: EmitResult, loaded: LoadedContext, plan: TranslationPlan
+) -> None:
     """Basic structural lint on emitted files. Halts with exit code 4 on failure."""
     failures: list[str] = []
     target = loaded.invocation.target
@@ -454,15 +518,17 @@ def stage5_lint(result: EmitResult, loaded: LoadedContext, plan: TranslationPlan
             try:
                 tree = ast.parse(graph_py.read_text())
                 assigns = [
-                    n for n in ast.walk(tree)
+                    n
+                    for n in ast.walk(tree)
                     if isinstance(n, ast.Assign)
                     and any(
-                        isinstance(t, ast.Name) and t.id == "graph"
-                        for t in n.targets
+                        isinstance(t, ast.Name) and t.id == "graph" for t in n.targets
                     )
                 ]
                 if not assigns:
-                    failures.append("graph.py: no module-level `graph = ...` assignment found")
+                    failures.append(
+                        "graph.py: no module-level `graph = ...` assignment found"
+                    )
             except SyntaxError as e:
                 failures.append(f"graph.py: syntax error — {e}")
     elif target == "claude-code":
@@ -486,7 +552,10 @@ def stage5_lint(result: EmitResult, loaded: LoadedContext, plan: TranslationPlan
                     for n in ast.walk(tree)
                 )
                 if not has_fastmcp_import:
-                    failures.append("server.py: missing 'from mcp.server.fastmcp import FastMCP'")
+                    failures.append(
+                        "server.py: missing 'from mcp.server.fastmcp import FastMCP'"
+                    )
+
                 def _has_mcp_tool_decorator(node: ast.AST) -> bool:
                     if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         return False
@@ -499,9 +568,13 @@ def stage5_lint(result: EmitResult, loaded: LoadedContext, plan: TranslationPlan
                                 return True
                     return False
 
-                has_tool_decorator = any(_has_mcp_tool_decorator(n) for n in ast.walk(tree))
+                has_tool_decorator = any(
+                    _has_mcp_tool_decorator(n) for n in ast.walk(tree)
+                )
                 if not has_tool_decorator:
-                    failures.append("server.py: no @mcp.tool() decorated function found")
+                    failures.append(
+                        "server.py: no @mcp.tool() decorated function found"
+                    )
             except SyntaxError as e:
                 failures.append(f"server.py: syntax error — {e}")
         mcp_json = result.out_path / "mcp.json"
@@ -510,15 +583,32 @@ def stage5_lint(result: EmitResult, loaded: LoadedContext, plan: TranslationPlan
         else:
             try:
                 import json as _json
+
                 data = _json.loads(mcp_json.read_text())
                 if "mcpServers" not in data:
                     failures.append("mcp.json: missing 'mcpServers' key")
             except Exception as e:
                 failures.append(f"mcp.json: invalid JSON — {e}")
 
+    if loaded.policy_manifest_path is not None:
+        entry_files = {
+            "langgraph": result.out_path / "graph.py",
+            "mcp": result.out_path / "server.py",
+            "claude-code": result.out_path / "scripts" / "run.sh",
+        }
+        entry_file = entry_files.get(target)
+        if entry_file and entry_file.exists():
+            if "GuardianAuditPlugin" not in entry_file.read_text():
+                failures.append(
+                    f"{entry_file.name}: policy_manifest.json present but "
+                    f"'GuardianAuditPlugin' not found in generated entry point"
+                )
+
     pkg_dir = result.out_path / plan.bundled_package_name
     if not pkg_dir.is_dir():
-        failures.append(f"Bundled package directory '{plan.bundled_package_name}' not found")
+        failures.append(
+            f"Bundled package directory '{plan.bundled_package_name}' not found"
+        )
 
     if (result.out_path / "melleafy-export.json").stat().st_size == 0:
         failures.append("melleafy-export.json is empty")
@@ -549,13 +639,21 @@ def run_export(inv: Invocation) -> EmitResult:
     if inv.out_path is None:
         manifest_dir = _resolve_manifest_dir(inv.package_path)
         if manifest_dir is None:
-            _halt(2, f"Cannot derive output path: melleafy.json not found under {inv.package_path}")
+            _halt(
+                2,
+                f"Cannot derive output path: melleafy.json not found under {inv.package_path}",
+            )
         try:
-            pkg_name = json.loads((manifest_dir / "melleafy.json").read_text()).get("package_name", "")
+            pkg_name = json.loads((manifest_dir / "melleafy.json").read_text()).get(
+                "package_name", ""
+            )
         except Exception:
             pkg_name = ""
         if not pkg_name:
-            _halt(2, "Cannot derive output path: manifest missing 'package_name'. Pass out_path explicitly.")
+            _halt(
+                2,
+                "Cannot derive output path: manifest missing 'package_name'. Pass out_path explicitly.",
+            )
         inv.out_path = manifest_dir / f"{pkg_name}-{inv.target}"
 
     manifest = stage1_validate(inv)

@@ -10,6 +10,7 @@ Pipeline:
   6. Certification report
 """
 
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -86,7 +87,6 @@ def ingest_one(
     use_case = skill_to_use_case(parsed, sensitivity)
     log.info("Step 3: Use-case description:")
     log.info("  %s", use_case)
-    log.info("")
 
     if dry_run:
         log.info("=== Dry-run complete ===")
@@ -102,13 +102,13 @@ def ingest_one(
     log.info("Step 4: Identifying risks via AI Atlas Nexus...")
 
     # Certification artifacts go into the skill's audit/ directory
-    audit_dir = spec_path.parent / "audit"
+    audit_dir = (
+        spec_path.parent / f"audit_{datetime.now().strftime("%d-%m-%Y_%H-%M-%S")}"
+    )
     audit_dir.mkdir(exist_ok=True)
 
     # Genereate policy manifest
-    manifest = policy.generate_policy_manifest(
-        use_case, nexus, model, inference_engine
-    )
+    manifest = policy.generate_policy_manifest(use_case, nexus, model, inference_engine)
     manifest_path = audit_dir / "policy_manifest.json"
     manifest.to_json(manifest_path)
 
@@ -117,11 +117,6 @@ def ingest_one(
     policy_path = audit_dir / "POLICY.md"
     policy_path.write_text(policy_md)
 
-    log.info("  Guardian risks: %d", len(manifest.risks))
-    for r in manifest.risks:
-        tier = "native" if r.is_native else "custom"
-        log.info("    - %s (%s)", r.name, tier)
-    log.info("  Governance actions: %d", len(manifest.governance_actions))
     log.info("Policy manifest: %s", manifest_path)
     log.info("Policy document: %s", policy_path)
 

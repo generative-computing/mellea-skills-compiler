@@ -140,7 +140,7 @@ def run_pipeline(
 
                 # Configure plugins from manifest
                 LOGGER.info(
-                    f"Configuring Guardian hooks from Policy Manifest [{guardian_mode} mode]...",
+                    f"Configuring Guardian hooks from Policy Manifest...",
                 )
                 guardian_plugin: GuardianPlugin = GuardianPluginFactory.create(
                     guardian_mode, manifest
@@ -313,7 +313,7 @@ def full_pipeline(
     # ── Step 3: Configure plugins from manifest ───────────────────────
     print()
     LOGGER.info(
-        f"Configuring Guardian hooks from Policy Manifest [{guardian_mode} mode]...",
+        f"Configuring Guardian hooks from Policy Manifest...",
     )
     guardian_plugin: GuardianPlugin = GuardianPluginFactory.create(
         guardian_mode, manifest, guardian_model, inference_engine
