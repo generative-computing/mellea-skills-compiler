@@ -28,7 +28,7 @@
     },
     {
       "name": "MODEL_ID",
-      "value": "granite3.3:8b",
+      "value": "granite4.1:3B",
       "type": "str",
       "category": "C8"
     },

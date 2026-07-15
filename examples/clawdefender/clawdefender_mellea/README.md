@@ -44,7 +44,7 @@ result: SecurityScanResult = run_pipeline(
 | `audit`        | Workspace-wide skill and script audit            | No                           |
 | `scan_skill`   | Recursive directory scan                         | No                           |
 | `install`      | Safe skill installation via `npx clawhub` + scan | No                           |
-| `auto`         | LLM classifies intent + LLM formats output       | Yes (Ollama `granite3.3:8b`) |
+| `auto`         | LLM classifies intent + LLM formats output       | Yes (Ollama `granite4.1:3B`) |
 
 All explicit modes are fully deterministic — they invoke the bundled bash scripts directly with no LLM involvement.
 

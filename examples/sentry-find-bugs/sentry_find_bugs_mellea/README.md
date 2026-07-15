@@ -63,7 +63,7 @@ Injection · XSS · Authentication · Authorization/IDOR · CSRF · Race conditi
 ## Requirements
 
 - Python ≥ 3.11
-- ollama running with `granite3.3:8b` pulled
+- ollama running with `granite4.1:3B` pulled
 - git CLI on PATH
 - gh CLI (GitHub CLI) authenticated (for automatic default-branch detection)
 

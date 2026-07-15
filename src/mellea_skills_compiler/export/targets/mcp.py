@@ -54,6 +54,7 @@ def translate_mcp(loaded: "LoadedContext") -> "TranslationPlan":
         is_async=is_async,
         declared_env_vars=manifest.get("declared_env_vars", []),
         has_policy_manifest=loaded.policy_manifest_path is not None,
+        enforce=loaded.invocation.enforce,
     )
 
     mcp_json = _render_mcp_json(
@@ -207,6 +208,7 @@ def _render_server_py(
     is_async: bool,
     declared_env_vars: list,
     has_policy_manifest: bool = False,
+    enforce: bool = False,
 ) -> str:
     param_list = _render_param_list(sig)
     passthrough = _render_passthrough(sig)
@@ -222,18 +224,19 @@ def _render_server_py(
 
     guardian_block = ""
     if has_policy_manifest:
+        plugin_class = "GuardianEnforcePlugin" if enforce else "GuardianAuditPlugin"
         guardian_block = (
             "from pathlib import Path\n"
             "from mellea_skills_compiler.models import PolicyManifest\n"
-            "from mellea_skills_compiler.plugins.guardian import GuardianAuditPlugin\n"
+            f"from mellea_skills_compiler.plugins.guardian import {plugin_class}\n"
             "from mellea_skills_compiler.plugins.audit import AuditTrailPlugin\n"
             "\n"
             '_manifest_path = Path(__file__).parent / "policy_manifest.json"\n'
             "if _manifest_path.exists():\n"
             "    _manifest = PolicyManifest.from_json(str(_manifest_path))\n"
-            "    guardian_plugin = GuardianAuditPlugin(_manifest)\n"
+            f"    guardian_plugin = {plugin_class}(_manifest)\n"
             "    guardian_plugin.register()\n"
-            "    AuditTrailPlugin(log_path=Path('audit_trail.jsonl'), guardian_plugin=guardian_plugin).register()\n"
+            '    AuditTrailPlugin(log_path=Path(__file__).parent / "audit" / "runtime_audit.jsonl", guardian_plugin=guardian_plugin).register()\n'
             "\n"
         )
 
@@ -333,7 +336,7 @@ def _render_mcp_json(
 def _render_pyproject_toml(
     *, tool_name: str, package_name: str, has_policy_manifest: bool = False
 ) -> str:
-    deps = ['    "mcp>=1.2.0",\n']
+    deps = ['    "mcp>=1.2.0",\n', '    "mellea[hooks]>=0.3.2",\n']
     if has_policy_manifest:
         deps.append(
             '    "mellea-skills-compiler@git+https://github.com/generative-computing/mellea-skills-compiler.git",\n'

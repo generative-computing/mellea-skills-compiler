@@ -14,7 +14,7 @@ Pre-compiled, runnable examples for a curated subset of these skills live under 
 
 Each skill is classified by what's required to run a fixture against the compiled package:
 
-- **T1** — Runs out of the box. No stubs to fill, no external services, no credentials. Only the project baseline (Ollama + `granite3.3:8b`) is required.
+- **T1** — Runs out of the box. No stubs to fill, no external services, no credentials. Only the project baseline (Ollama + `granite4.1:3B`) is required.
 - **T2** — Runs after filling 1–2 stubs (`raise NotImplementedError(...)` in `constrained_slots.py`) or supplying a small bundled artifact. Other branches of the pipeline run unchanged.
 - **T3** — Requires external integration before *any* fixture can complete: a service login, an API key, an installed CLI, or a runtime helper that ships outside the package.
 

@@ -26,7 +26,7 @@ class InferenceEngineType(Enum):
 class InferenceModel(StrEnum):
     """Default model identifiers"""
 
-    OLLAMA_RISK_MODEL = "granite3.3:8b"
+    OLLAMA_RISK_MODEL = "granite4.1:3b"
     OLLAMA_GUARDIAN_MODEL = "ibm/granite3.3-guardian:8b"
     CLAUDE_MODEL = "sonnet"
 

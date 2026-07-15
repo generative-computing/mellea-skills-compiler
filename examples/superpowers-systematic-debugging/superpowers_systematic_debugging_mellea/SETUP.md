@@ -14,7 +14,7 @@ Requires Python 3.11 or later.
 
 ## §3 Model backend
 
-This skill uses the **Ollama** backend with the **granite3.3:8b** model.
+This skill uses the **Ollama** backend with the **granite4.1:3B** model.
 
 ### Install Ollama
 
@@ -23,7 +23,7 @@ This skill uses the **Ollama** backend with the **granite3.3:8b** model.
 curl -fsSL https://ollama.com/install.sh | sh
 
 # Pull the model
-ollama pull granite3.3:8b
+ollama pull granite4.1:3B
 
 # Verify Ollama is running
 ollama list
@@ -68,4 +68,4 @@ for make_fixture in ALL_FIXTURES:
     print(f"  summary: {report.summary[:80]}")
 ```
 
-This requires Ollama running with `granite3.3:8b` pulled.
+This requires Ollama running with `granite4.1:3B` pulled.

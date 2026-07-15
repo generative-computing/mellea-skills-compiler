@@ -24,7 +24,7 @@ Expected output includes `usage: sentry-find-bugs [--diff DIFF] [--output-format
 
 ## §3 Model backend
 
-This package targets **ollama** with model **`granite3.3:8b`**.
+This package targets **ollama** with model **`granite4.1:3B`**.
 
 **Install and start ollama** (if not already running):
 
@@ -34,19 +34,19 @@ brew install ollama
 ollama serve &
 
 # Pull the required model
-ollama pull granite3.3:8b
+ollama pull granite4.1:3B
 ```
 
 Verify the model is available:
 
 ```bash
-ollama list | grep granite3.3:8b
+ollama list | grep granite4.1:3B
 ```
 
 These values are baked into `config.py`:
 
 - `BACKEND = 'ollama'`
-- `MODEL_ID = 'granite3.3:8b'`
+- `MODEL_ID = 'granite4.1:3B'`
 
 To use a different backend or model, edit `config.py` or re-run melleafy with `--backend` and `--model-id` overrides.
 
@@ -133,5 +133,5 @@ python -m pytest sentry_find_bugs_mellea/fixtures/clean_secure_parameterized.py 
 
 **Prerequisites for fixtures**:
 
-- ollama running with `granite3.3:8b` loaded
+- ollama running with `granite4.1:3B` loaded
 - `constrained_slots.py` stubs may raise `NotImplementedError` — the pipeline handles this gracefully, so fixtures run without implementing stubs

@@ -52,11 +52,11 @@ Requires Python ≥ 3.11 and `mellea[hooks] ≥ 0.4.2`.
 
 ## §4 Backend configuration
 
-The skill uses Ollama with `granite3.3:8b` by default. Ensure Ollama is running locally:
+The skill uses Ollama with `granite4.1:3B` by default. Ensure Ollama is running locally:
 
 ```bash
 ollama serve &
-ollama pull granite3.3:8b
+ollama pull granite4.1:3B
 ```
 
 Verify:

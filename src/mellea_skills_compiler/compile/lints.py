@@ -2320,11 +2320,109 @@ def lint_parseable(package_dir: Path) -> LintResult:
 
 
 
+# ─── Lint: fixture-data-files-exist ───
+
+
+# File extensions that mark a fixture input value as a *data file* the pipeline
+# would read. A fixture input pointing at one of these that is not bundled in the
+# package cannot run.
+_FIXTURE_DATA_EXTS = (
+    ".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".txt", ".md",
+    ".yaml", ".yml", ".xml", ".html", ".parquet",
+)
+
+# Substrings in a parameter name that suggest the value is a file path.
+_FILE_PARAM_HINTS = ("path", "file", "filename", "source", "input", "doc", "dir")
+
+
+def _missing_fixture_data_path(key: str, value: Any, package_dir: Path) -> bool:
+    """True iff `value` looks like a relative data-file path absent from the package.
+
+    Conservative to avoid false positives: the value must end in a known data-file
+    extension, contain no spaces/newlines, not be a URL or JSON literal, and either
+    contain a path separator or be passed to a file-ish parameter. Absolute paths
+    are ignored (caller-supplied). Resolution mirrors the smoke-check (which runs
+    fixtures from the package dir): the file must exist under `package_dir`.
+    """
+    if not isinstance(value, str) or not value:
+        return False
+    v = value.strip()
+    if " " in v or "\n" in v:
+        return False
+    low = v.lower()
+    if low.startswith(("http://", "https://", "s3://", "gs://", "{", "[")):
+        return False
+    if not low.endswith(_FIXTURE_DATA_EXTS):
+        return False
+    keyl = str(key).lower()
+    looks_pathish = ("/" in v) or any(h in keyl for h in _FILE_PARAM_HINTS)
+    if not looks_pathish:
+        return False
+    p = Path(v)
+    if p.is_absolute():
+        return False
+    return not (package_dir / p).exists()
+
+
+def lint_fixture_data_files_exist(package_dir: Path) -> LintResult:
+    """A fixture must not reference a relative data file absent from the package.
+
+    File-input skills pass paths as fixture inputs (e.g. ``examples/x.json``). If
+    the referenced file is not bundled in the package, the fixture cannot run — the
+    smoke-check raises an opaque ``FileNotFoundError`` and an installed skill would
+    too. Fail fast here, naming the fixture, input key, and missing path, instead of
+    surfacing it only at runtime. Reads ``intermediate/fixtures_emission.json`` (the
+    fixture inputs the package was rendered from). General to any file-input skill;
+    absolute paths and non-path-like strings are ignored.
+    """
+    result = LintResult(lint_id="fixture-data-files-exist", verdict="pass")
+
+    emission = package_dir / "intermediate" / "fixtures_emission.json"
+    if not emission.exists():
+        result.verdict = "skipped"
+        result.skipped_reason = "intermediate/fixtures_emission.json not found"
+        return result
+    try:
+        data = json.loads(emission.read_text())
+    except (OSError, json.JSONDecodeError) as exc:  # noqa: BLE001
+        result.verdict = "skipped"
+        result.skipped_reason = f"could not read fixtures_emission.json: {exc}"
+        return result
+
+    fixtures = data.get("fixtures") or []
+    result.files_checked = len(fixtures)
+    rel = str(emission.relative_to(package_dir))
+    for fixture in fixtures:
+        fid = fixture.get("id", "<unknown>")
+        for key, value in (fixture.get("inputs") or {}).items():
+            if _missing_fixture_data_path(key, value, package_dir):
+                result.failures.append(
+                    LintFailure(
+                        file=rel,
+                        line=None,
+                        column=None,
+                        message=(
+                            f"fixture {fid!r} input {key!r} references a relative "
+                            f"data file {value!r} that is not bundled in the package. "
+                            f"The fixture cannot run (the smoke-check would raise "
+                            f"FileNotFoundError, as would an installed skill). Bundle "
+                            f"the file in the package, or have the fixture pass the "
+                            f"data inline instead of a path."
+                        ),
+                        rule_ref="Rule 4-1 (mellea-fy-fixtures.md)",
+                    )
+                )
+    if result.failures:
+        result.verdict = "fail"
+    return result
+
+
 # ─── Runner ───
 
 
 ALL_LINTS: Tuple[Callable[[Path], LintResult], ...] = (
     lint_fixtures_loader_contract,
+    lint_fixture_data_files_exist,
     lint_bundled_asset_path_resolution,
     lint_runtime_defaults_bound,
     lint_session_method_arity,

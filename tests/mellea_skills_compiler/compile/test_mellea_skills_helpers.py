@@ -168,33 +168,33 @@ class TestResolveRuntimeDefaults:
     def test_uses_defaults_file_when_no_override(self, tmp_path, monkeypatch):
         self._write_defaults(
             tmp_path,
-            json.dumps({"backend": "ollama", "model_id": "granite3.3:8b"}),
+            json.dumps({"backend": "ollama", "model_id": "granite4.1:3B"}),
         )
         monkeypatch.chdir(tmp_path)
 
         backend, model_id, source = resolve_runtime_defaults(None, None)
 
         assert backend == "ollama"
-        assert model_id == "granite3.3:8b"
+        assert model_id == "granite4.1:3B"
         assert "defaults file" in source
 
     def test_cli_backend_override_wins(self, tmp_path, monkeypatch):
         self._write_defaults(
             tmp_path,
-            json.dumps({"backend": "ollama", "model_id": "granite3.3:8b"}),
+            json.dumps({"backend": "ollama", "model_id": "granite4.1:3B"}),
         )
         monkeypatch.chdir(tmp_path)
 
         backend, model_id, source = resolve_runtime_defaults("vllm", None)
 
         assert backend == "vllm"
-        assert model_id == "granite3.3:8b"
+        assert model_id == "granite4.1:3B"
         assert "command-line override" in source
 
     def test_cli_both_overrides_win(self, tmp_path, monkeypatch):
         self._write_defaults(
             tmp_path,
-            json.dumps({"backend": "ollama", "model_id": "granite3.3:8b"}),
+            json.dumps({"backend": "ollama", "model_id": "granite4.1:3B"}),
         )
         monkeypatch.chdir(tmp_path)
 
@@ -211,7 +211,7 @@ class TestResolveRuntimeDefaults:
         backend, model_id, source = resolve_runtime_defaults(None, None)
 
         assert backend == "ollama"
-        assert model_id == "granite3.3:8b"
+        assert model_id == "granite4.1:3B"
         assert "built-in fallback" in source
 
     def test_falls_back_to_builtin_when_file_malformed(self, tmp_path, monkeypatch):
@@ -225,7 +225,7 @@ class TestResolveRuntimeDefaults:
         # string because the try/except short-circuits before the source
         # is updated.
         assert backend == "ollama"
-        assert model_id == "granite3.3:8b"
+        assert model_id == "granite4.1:3B"
         assert "built-in fallback" in source
 
     def test_falls_back_to_builtin_when_file_missing_keys(self, tmp_path, monkeypatch):
@@ -239,7 +239,7 @@ class TestResolveRuntimeDefaults:
         backend, model_id, source = resolve_runtime_defaults(None, None)
 
         assert backend == "ollama"
-        assert model_id == "granite3.3:8b"
+        assert model_id == "granite4.1:3B"
         assert "defaults file" in source
 
 
@@ -250,7 +250,7 @@ class TestWriteRuntimeDirective:
         intermediate = tmp_path / "intermediate"
 
         path = write_runtime_directive(
-            intermediate, "ollama", "granite3.3:8b", "defaults file (...)"
+            intermediate, "ollama", "granite4.1:3B", "defaults file (...)"
         )
 
         assert path == intermediate / "runtime_directive.json"
@@ -258,14 +258,14 @@ class TestWriteRuntimeDirective:
         data = json.loads(path.read_text())
         assert data["format_version"] == "1.0"
         assert data["backend"] == "ollama"
-        assert data["model_id"] == "granite3.3:8b"
+        assert data["model_id"] == "granite4.1:3B"
         assert data["source"] == "defaults file (...)"
 
     def test_creates_intermediate_dir_if_missing(self, tmp_path):
         intermediate = tmp_path / "deep" / "nested" / "intermediate"
         assert not intermediate.exists()
 
-        write_runtime_directive(intermediate, "ollama", "granite3.3:8b", "src")
+        write_runtime_directive(intermediate, "ollama", "granite4.1:3B", "src")
 
         assert intermediate.exists()
         assert (intermediate / "runtime_directive.json").exists()
@@ -273,7 +273,7 @@ class TestWriteRuntimeDirective:
     def test_returns_path_to_written_file(self, tmp_path):
         intermediate = tmp_path / "intermediate"
 
-        path = write_runtime_directive(intermediate, "ollama", "granite3.3:8b", "src")
+        path = write_runtime_directive(intermediate, "ollama", "granite4.1:3B", "src")
 
         assert isinstance(path, Path)
         assert path.exists()
@@ -282,7 +282,7 @@ class TestWriteRuntimeDirective:
     def test_overwrites_existing_directive(self, tmp_path):
         intermediate = tmp_path / "intermediate"
 
-        write_runtime_directive(intermediate, "ollama", "granite3.3:8b", "first")
+        write_runtime_directive(intermediate, "ollama", "granite4.1:3B", "first")
         path = write_runtime_directive(intermediate, "vllm", "mistral-7b", "second")
 
         data = json.loads(path.read_text())
@@ -296,24 +296,24 @@ class TestBuildSystemPrompt:
 
     def test_includes_backend_value(self):
         prompt = build_system_prompt(
-            "ollama", "granite3.3:8b", "defaults file", "weather_mellea"
+            "ollama", "granite4.1:3B", "defaults file", "weather_mellea"
         )
         assert "ollama" in prompt
 
     def test_includes_model_id_value(self):
         prompt = build_system_prompt(
-            "ollama", "granite3.3:8b", "defaults file", "weather_mellea"
+            "ollama", "granite4.1:3B", "defaults file", "weather_mellea"
         )
-        assert "granite3.3:8b" in prompt
+        assert "granite4.1:3B" in prompt
 
     def test_includes_source(self):
         prompt = build_system_prompt(
-            "ollama", "granite3.3:8b", "defaults file (xyz.json)", "weather_mellea"
+            "ollama", "granite4.1:3B", "defaults file (xyz.json)", "weather_mellea"
         )
         assert "defaults file (xyz.json)" in prompt
 
     def test_includes_autonomous_run_directive(self):
-        prompt = build_system_prompt("ollama", "granite3.3:8b", "src", "weather_mellea")
+        prompt = build_system_prompt("ollama", "granite4.1:3B", "src", "weather_mellea")
         assert "Run the complete 10-step pipeline" in prompt
 
     def test_quotes_values_with_repr(self):
@@ -321,10 +321,10 @@ class TestBuildSystemPrompt:
         # rather than splatted in bare. The repr of "o'l'l'ama" wraps it
         # in double quotes (Python's repr picks the safer quote style).
         prompt = build_system_prompt(
-            "o'l'l'ama", "granite3.3:8b", "src", "weather_mellea"
+            "o'l'l'ama", "granite4.1:3B", "src", "weather_mellea"
         )
         assert repr("o'l'l'ama") in prompt
-        assert repr("granite3.3:8b") in prompt
+        assert repr("granite4.1:3B") in prompt
 
     def test_injects_package_name_literally(self):
         """The wrapper-computed package_name appears verbatim in the prompt."""

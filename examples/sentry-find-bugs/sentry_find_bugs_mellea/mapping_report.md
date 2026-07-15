@@ -178,7 +178,7 @@ Note: `map_014` and `map_015` were **amended** (not removed) — their `final_ta
 
 ### 8. Runtime-specific constructs not reproduced
 
-**`agent_skills_std` dialect — `model:` frontmatter key**: The spec does not declare a `model:` field. If present in an agent_skills_std spec, melleafy reads it as a C8 override for `MODEL_ID`. Because it is absent here, `MODEL_ID` is sourced from the compile pipeline's runtime defaults (`granite3.3:8b`).
+**`agent_skills_std` dialect — `model:` frontmatter key**: The spec does not declare a `model:` field. If present in an agent_skills_std spec, melleafy reads it as a C8 override for `MODEL_ID`. Because it is absent here, `MODEL_ID` is sourced from the compile pipeline's runtime defaults (`granite4.1:3B`).
 
 **`agent_skills_std` dialect — `activeHours:` / `isolatedSession:`**: These OpenClaw-specific directives are not declared in the source spec and are not reproduced. If required, configure them at the host runtime layer.
 

@@ -119,12 +119,12 @@ Example skills: https://github.com/generative-computing/mellea-skills-compiler/t
 
 ### Ollama Models
 
-We recommend downloading the Ollama models `granite3.3:8b` and `ibm/granite3.3-guardian:8b` beforehand, as they are set as defaults.
+We recommend downloading the Ollama models `granite4.1:3b` and `ibm/granite3.3-guardian:8b` beforehand, as they are set as defaults.
 
 For Risk Identification
 
 ```
-ollama pull granite3.3:8b
+ollama pull granite4.1:3b
 ```
 
 For Risk Assessment
@@ -180,9 +180,68 @@ See [`mellea-fy/README.md`](https://github.com/generative-computing/mellea-skill
 Run skill pipeline for a given fxiture
 
 ```bash
-mellea-skills run <Your-local-path>/skills/weather/weather_mellea --fixture rain_check   # provide path to the compiled skill directory and the fixture name
-mellea-skills run <Your-local-path>/skills/weather/weather_mellea --enforce              # Block execution when Guardian detects risks (default: audit-only)
-mellea-skills run <Your-local-path>/skills/weather/weather_mellea --no_guardian          # Skip Guardian checks even if a policy manifest exists.
+mellea-skills run <Your-local-path>/weather/weather_mellea --input "Whats the weather like in Dublin?" # provide a raw string as an input
+mellea-skills run <Your-local-path>/weather/weather_mellea --input file://<Your-local-path>/input.json  # provide a JSON file as an input
+mellea-skills run <Your-local-path>/weather/weather_mellea --input -  # provide input as stdin for each required parameters
+mellea-skills run <Your-local-path>/weather/weather_mellea --fixture rain_check   # provide a fixture name as an input
+mellea-skills run <Your-local-path>/weather/weather_mellea --enforce              # Block execution when Guardian detects risks (default: audit-only)
+mellea-skills run <Your-local-path>/weather/weather_mellea --no-guardian          # Skip Guardian checks even if a policy manifest exists.
+```
+
+#### Input Format Examples
+
+1. Raw String
+
+For skills with a single parameter, you can pass a plain string directly:
+```
+mellea-skills run skills/weather/weather_mellea --input "What's the weather like in Dublin?"
+```
+
+2. JSON String
+
+For skills with multiple parameters, pass a JSON object with parameter names as keys:
+```
+mellea-skills run skills/sentry/sentry_mellea --input '{"query": "What's the weather like in Dublin right now?"}'
+```
+
+3. File Input (JSON)
+
+Use file:// prefix to read structured JSON from a file:
+```
+mellea-skills run skills/weather/weather_mellea --input file://input.json
+```
+input.json:
+```
+{
+  "query": "What's the weather like in Dublin right now?"
+}
+```
+
+4. File Input (YAML)
+
+YAML files are also supported via file:// prefix:
+```
+mellea-skills run skills/example/example_mellea --input file://input.yaml
+```
+input.yaml:
+```
+query: What's the weather like in Dublin right now?
+```
+
+5. Interactive Stdin Input
+
+Use - to prompt for each parameter interactively:
+```bash
+mellea-skills run skills/weather/weather_mellea --input -
+# This will prompt:
+Enter query: What's the weather like in Dublin right now?
+```
+
+6. Fixture Input (Alternative to --input)
+
+Use a pre-defined fixture instead of --input:
+```bash
+mellea-skills run skills/weather/weather_mellea --fixture current_weather_city
 ```
 
 ### Run Full Certification Pipeline for Mellea skill
@@ -193,7 +252,7 @@ Run end-to-end certification — risk identification via AI Atlas Nexus, Guardia
 mellea-skills certify <Your-local-path>/skills/weather/weather_mellea                      # provide path to the compiled skill directory
 mellea-skills certify <Your-local-path>/skills/weather/weather_mellea --enforce            # Block on risk detection
 mellea-skills certify <Your-local-path>/skills/weather/weather_mellea --fixture rain_check # Run specific fixture - rain_check
-mellea-skills certify <Your-local-path>/skills/weather/weather_mellea --model granite3.3:8b --guardian-model ibm/granite3.3-guardian:8b --inference-engine ollama    # Using different risk model, guardian model and inference engine
+mellea-skills certify <Your-local-path>/skills/weather/weather_mellea --model granite4.1:3b --guardian-model ibm/granite3.3-guardian:8b --inference-engine ollama    # Using different risk model, guardian model and inference engine
 ```
 
 ### Export Compiled Mellea Skill
@@ -222,7 +281,7 @@ skills/weather/audit/
 
 ## Example Outputs
 
-The [`examples/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/examples) directory contains pre-compiled, validated Mellea pipeline packages — runnable end-to-end against the project's Ollama + `granite3.3:8b` baseline. Each is a curated reference snapshot of what `mellea-skills compile` produces under the current architecture.
+The [`examples/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/examples) directory contains pre-compiled, validated Mellea pipeline packages — runnable end-to-end against the project's Ollama + `granite4.1:3b` baseline. Each is a curated reference snapshot of what `mellea-skills compile` produces under the current architecture.
 
 | Skill                                                                          | Tier    | Archetype                  | Description                                                                                                                                    |
 | ------------------------------------------------------------------------------ | ------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |

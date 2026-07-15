@@ -1,6 +1,6 @@
 {
   "format_version": "1.0",
   "backend": "ollama",
-  "model_id": "granite3.3:8b",
+  "model_id": "granite4.1:3B",
   "source": "defaults file (.claude/data/runtime_defaults.json)"
 }

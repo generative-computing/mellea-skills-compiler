@@ -2,7 +2,7 @@
 
 ## Example Outputs
 
-The [`examples/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/examples) directory contains pre-compiled, validated Mellea pipeline packages — runnable end-to-end against the project's Ollama + `granite3.3:8b` baseline. Each is a curated reference snapshot of what `mellea-skills compile` produces under the current architecture.
+The [`examples/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/examples) directory contains pre-compiled, validated Mellea pipeline packages — runnable end-to-end against the project's Ollama + `granite4.1:3b` baseline. Each is a curated reference snapshot of what `mellea-skills compile` produces under the current architecture.
 
 | Skill                                                                          | Tier    | Archetype                  | Description                                                                                                                                    |
 | ------------------------------------------------------------------------------ | ------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |

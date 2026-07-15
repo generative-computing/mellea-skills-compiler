@@ -27,7 +27,7 @@ The `--install` tool mode additionally requires **Node.js and npm** (for `npx cl
 
 ## §3 Model Backend
 
-This package uses **Ollama** as the default backend with model `granite3.3:8b`.
+This package uses **Ollama** as the default backend with model `granite4.1:3B`.
 
 The backend is used for the `auto` check mode only (LLM intent classification and output formatting). All explicit check modes (`validate`, `check_url`, `check_prompt`, `sanitize`, `audit`, `scan_skill`, `install`) run deterministically without any LLM calls.
 
@@ -38,7 +38,7 @@ The backend is used for the `auto` check mode only (LLM intent classification an
 curl -fsSL https://ollama.com/install.sh | sh
 
 # Pull the model
-ollama pull granite3.3:8b
+ollama pull granite4.1:3B
 
 # Start the Ollama server (if not already running)
 ollama serve

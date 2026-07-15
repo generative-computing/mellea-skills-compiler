@@ -24,6 +24,10 @@ from mellea_skills_compiler.certification.classification import (
     classify_governance_requirements,
 )
 from mellea_skills_compiler.certification.data import get_data_path
+from mellea_skills_compiler.certification.input_resolver import (
+    InputResolutionError,
+    resolve_input,
+)
 from mellea_skills_compiler.certification.policy import (
     generate_policy_manifest,
     generate_policy_markdown,
@@ -35,7 +39,6 @@ from mellea_skills_compiler.certification.report import (
 )
 from mellea_skills_compiler.enums import (
     GuardianMode,
-    GuardianScore,
     InferenceEngineType,
     NexusRiskSource,
     SpecFileFormat,
@@ -92,7 +95,8 @@ def _get_fixture(fixture_id, fixtures):
 
 def run_pipeline(
     pipeline_dir: Path,
-    fixture_id: str,
+    fixture_id: Optional[str] = None,
+    input: Optional[str] = None,
     enforce: bool = False,
     no_guardian: bool = False,
 ) -> RunResult:
@@ -167,11 +171,16 @@ def run_pipeline(
         # Load fixtures from the pipeline directory
         fixtures = load_fixtures(pipeline_dir)
 
-        # Get the desired fixture
-        fixture = _get_fixture(fixture_id, fixtures)
+        # Resolve input from possible sources
+        fixture = resolve_input(
+            pipeline_fn=pipeline_fn,
+            fixture_id=fixture_id,
+            input=input,
+            fixtures=fixtures,
+        )
 
         # run given fixture
-        output = _run_single_fixture(pipeline_fn, fixture)
+        output = _run_single_fixture(pipeline_fn, fixture.dict())
 
         # output
         console.print("\n[bold blue]OUTPUT:[/]")
@@ -180,7 +189,7 @@ def run_pipeline(
         run_result = RunResult(
             guardian_mode=guardian_mode,
             guardian_verdict=guardian_plugin.summary() if guardian_plugin else None,
-            fixture_summary={"name": fixture, "output": output},
+            fixture_summary={"name": fixture.dict(), "output": output},
             audit_summary=audit_plugin.summary() if audit_plugin else None,
         )
 
@@ -194,7 +203,7 @@ def run_pipeline(
         return run_result
 
     except Exception as e:
-        LOGGER.error(f"Pipeline run failed: {str(e)}")
+        LOGGER.error(f"Pipeline run failed - {str(e)}")
     finally:
         if guardian_plugin:
             guardian_plugin.deregister()

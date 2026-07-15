@@ -9,7 +9,7 @@ repos:
         # when "--baseline" without "--use-all-plugins", pre-commit scan with just plugins in baseline file
         # when "--baseline" with "--use-all-plugins", pre-commit scan with all available plugins
         # add "--fail-on-unaudited" to fail pre-commit for unaudited potential secrets
-        args: [ --baseline, .secrets.baseline, --use-all-plugins]
+        args: [--baseline, .secrets.baseline, --use-all-plugins]
         additional_dependencies: [boxsdk<4]
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -29,4 +29,4 @@ repos:
     hooks:
       - id: prettier
         types_or: [markdown]
-        exclude: ^(skills/|examples/)
+        exclude: ^(skills/|examples/|.*\.md$)

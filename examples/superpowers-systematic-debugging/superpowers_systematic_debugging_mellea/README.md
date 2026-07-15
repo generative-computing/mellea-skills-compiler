@@ -87,7 +87,7 @@ class DebuggingReport(BaseModel):
 
 ## Model backend
 
-Runs on `ollama` with `granite3.3:8b` (see `SETUP.md §3` for configuration). Requires a locally running Ollama instance with the model pulled.
+Runs on `ollama` with `granite4.1:3B` (see `SETUP.md §3` for configuration). Requires a locally running Ollama instance with the model pulled.
 
 ## Fixtures
 

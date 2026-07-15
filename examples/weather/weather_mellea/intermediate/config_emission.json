@@ -5,14 +5,20 @@
       "value": "ollama",
       "type": "str",
       "category": "C8",
-      "provenance": {"source_file": "intermediate/runtime_directive.json", "source_lines": "1-6"}
+      "provenance": {
+        "source_file": "intermediate/runtime_directive.json",
+        "source_lines": "1-6"
+      }
     },
     {
       "name": "MODEL_ID",
-      "value": "granite3.3:8b",
+      "value": "granite4.1:3B",
       "type": "str",
       "category": "C8",
-      "provenance": {"source_file": "intermediate/runtime_directive.json", "source_lines": "1-6"}
+      "provenance": {
+        "source_file": "intermediate/runtime_directive.json",
+        "source_lines": "1-6"
+      }
     },
     {
       "name": "LOOP_BUDGET",
@@ -24,77 +30,110 @@
       "value": "weather",
       "type": "str",
       "category": "C1",
-      "provenance": {"source_file": "spec.md", "source_lines": "2-3"}
+      "provenance": {
+        "source_file": "spec.md",
+        "source_lines": "2-3"
+      }
     },
     {
       "name": "SKILL_DESCRIPTION",
       "value": "Get current weather and forecasts via wttr.in",
       "type": "str",
       "category": "C1",
-      "provenance": {"source_file": "spec.md", "source_lines": "2-3"}
+      "provenance": {
+        "source_file": "spec.md",
+        "source_lines": "2-3"
+      }
     },
     {
       "name": "PREFIX_TEXT",
       "value": "You are a weather assistant. You help users get current weather conditions and forecasts using wttr.in. Be concise, factual, and only respond to weather-related queries.",
       "type": "str",
       "category": "C1",
-      "provenance": {"source_file": "spec.md", "source_lines": "1-6"}
+      "provenance": {
+        "source_file": "spec.md",
+        "source_lines": "1-6"
+      }
     },
     {
       "name": "USE_WHEN_EXAMPLES",
       "value": "What's the weather?\nWill it rain today/tomorrow?\nTemperature in [city]\nWeather forecast for the week\nTravel planning weather checks",
       "type": "str",
       "category": "C1",
-      "provenance": {"source_file": "spec.md", "source_lines": "14-20"}
+      "provenance": {
+        "source_file": "spec.md",
+        "source_lines": "14-20"
+      }
     },
     {
       "name": "OUT_OF_SCOPE_CATEGORIES",
       "value": "historical weather data, climate analysis or trends, hyper-local microclimate data, severe weather alerts, aviation/marine weather",
       "type": "str",
       "category": "C2",
-      "provenance": {"source_file": "spec.md", "source_lines": "24-30"}
+      "provenance": {
+        "source_file": "spec.md",
+        "source_lines": "24-30"
+      }
     },
     {
       "name": "WTTR_BASE_URL",
       "value": "wttr.in",
       "type": "str",
       "category": "C8",
-      "provenance": {"source_file": "spec.md", "source_lines": "109-112"}
+      "provenance": {
+        "source_file": "spec.md",
+        "source_lines": "109-112"
+      }
     },
     {
       "name": "WTTR_REQUIRES_API_KEY",
       "value": false,
       "type": "bool",
       "category": "C8",
-      "provenance": {"source_file": "spec.md", "source_lines": "109"}
+      "provenance": {
+        "source_file": "spec.md",
+        "source_lines": "109"
+      }
     },
     {
       "name": "REQUIRED_BINS",
       "value": "curl",
       "type": "str",
       "category": "C8",
-      "provenance": {"source_file": "spec.md", "source_lines": "5-6"}
+      "provenance": {
+        "source_file": "spec.md",
+        "source_lines": "5-6"
+      }
     },
     {
       "name": "WEATHER_PRESET_FULL_CONDITIONS",
       "value": "?format=%l:+%c+%t+(feels+like+%f),+%w+wind,+%h+humidity",
       "type": "str",
       "category": "C6",
-      "provenance": {"source_file": "spec.md", "source_lines": "89-93"}
+      "provenance": {
+        "source_file": "spec.md",
+        "source_lines": "89-93"
+      }
     },
     {
       "name": "WEATHER_PRESET_RAIN_CHECK",
       "value": "?format=%l:+%c+%p",
       "type": "str",
       "category": "C6",
-      "provenance": {"source_file": "spec.md", "source_lines": "95-99"}
+      "provenance": {
+        "source_file": "spec.md",
+        "source_lines": "95-99"
+      }
     },
     {
       "name": "WEATHER_PRESET_WEEK_FORECAST",
       "value": "?format=v2",
       "type": "str",
       "category": "C6",
-      "provenance": {"source_file": "spec.md", "source_lines": "101-105"}
+      "provenance": {
+        "source_file": "spec.md",
+        "source_lines": "101-105"
+      }
     }
   ]
 }

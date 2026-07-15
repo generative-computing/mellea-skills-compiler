@@ -16,18 +16,18 @@ from typing import Dict
 from mellea_skills_compiler.compile.lints import (
     lint_bundled_asset_path_resolution,
     lint_fixture_pydantic_coercion,
-    lint_grounding_context_types,
-    lint_prefix_persona,
-    lint_import_side_effects,
-    lint_import_soundness,
-    lint_parseable,
-    lint_stdlib_arg_types,
     lint_fixtures_loader_contract,
     lint_format_annotation,
+    lint_grounding_context_types,
+    lint_import_side_effects,
+    lint_import_soundness,
     lint_instruct_result_parse_before_access,
+    lint_parseable,
+    lint_prefix_persona,
     lint_runtime_defaults_bound,
     lint_session_boundary,
     lint_session_method_arity,
+    lint_stdlib_arg_types,
     lint_validation_fn_not_called_directly,
     run_lints,
 )
@@ -82,10 +82,7 @@ class TestFixturesLoaderContract:
 
     def test_passes_with_annotated_assignment(self):
         """fixtures/__init__.py with annotated ALL_FIXTURES: list = [] should pass."""
-        content = (
-            "from typing import Callable\n"
-            "ALL_FIXTURES: list[Callable] = []\n"
-        )
+        content = "from typing import Callable\n" "ALL_FIXTURES: list[Callable] = []\n"
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"fixtures/__init__.py": content})
             result = lint_fixtures_loader_contract(pkg)
@@ -102,30 +99,27 @@ class TestFixturesLoaderContract:
                 {"fixtures/__init__.py": 'INPUT = {"foo": "bar"}\n'},
             )
             result = lint_fixtures_loader_contract(pkg)
-            assert result.verdict == "fail", (
-                "INPUT-only fixtures module should fail the loader contract"
-            )
+            assert (
+                result.verdict == "fail"
+            ), "INPUT-only fixtures module should fail the loader contract"
             assert len(result.failures) == 1
             msg = result.failures[0].message
-            assert "ALL_FIXTURES" in msg, (
-                f"Failure message should name ALL_FIXTURES; got: {msg}"
-            )
-            assert "FIXTURES" in msg, (
-                f"Failure message should also name FIXTURES; got: {msg}"
-            )
+            assert (
+                "ALL_FIXTURES" in msg
+            ), f"Failure message should name ALL_FIXTURES; got: {msg}"
+            assert (
+                "FIXTURES" in msg
+            ), f"Failure message should also name FIXTURES; got: {msg}"
 
     def test_fails_with_pytest_test_function(self):
         """fixtures/__init__.py with only def test_x(): ... (security-review drift)."""
-        content = (
-            "def test_something():\n"
-            "    assert True\n"
-        )
+        content = "def test_something():\n" "    assert True\n"
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"fixtures/__init__.py": content})
             result = lint_fixtures_loader_contract(pkg)
-            assert result.verdict == "fail", (
-                "pytest-style fixtures module without ALL_FIXTURES/FIXTURES should fail"
-            )
+            assert (
+                result.verdict == "fail"
+            ), "pytest-style fixtures module without ALL_FIXTURES/FIXTURES should fail"
             assert len(result.failures) == 1
 
     def test_skipped_when_fixtures_init_missing(self):
@@ -136,9 +130,9 @@ class TestFixturesLoaderContract:
             # Some other file but no __init__.py
             (pkg / "fixtures" / "data.txt").write_text("not python\n")
             result = lint_fixtures_loader_contract(pkg)
-            assert result.verdict == "skipped", (
-                f"Missing fixtures/__init__.py should produce skipped, got {result.verdict}"
-            )
+            assert (
+                result.verdict == "skipped"
+            ), f"Missing fixtures/__init__.py should produce skipped, got {result.verdict}"
             assert result.skipped_reason is not None
             assert "fixtures/__init__.py" in result.skipped_reason
 
@@ -148,14 +142,14 @@ class TestFixturesLoaderContract:
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"fixtures/__init__.py": broken})
             result = lint_fixtures_loader_contract(pkg)
-            assert result.verdict == "fail", (
-                f"SyntaxError in fixtures/__init__.py should fail; got {result.verdict}"
-            )
+            assert (
+                result.verdict == "fail"
+            ), f"SyntaxError in fixtures/__init__.py should fail; got {result.verdict}"
             assert len(result.failures) == 1
             failure = result.failures[0]
-            assert failure.line is not None, (
-                "SyntaxError failure should carry a line number"
-            )
+            assert (
+                failure.line is not None
+            ), "SyntaxError failure should carry a line number"
             assert "SyntaxError" in failure.message
 
 
@@ -218,14 +212,14 @@ class TestBundledAssetPathResolution:
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"tools.py": content})
             result = lint_bundled_asset_path_resolution(pkg)
-            assert result.verdict == "fail", (
-                f"Path(repo_root) / 'scripts/...' should fail; got {result.verdict}"
-            )
+            assert (
+                result.verdict == "fail"
+            ), f"Path(repo_root) / 'scripts/...' should fail; got {result.verdict}"
             assert len(result.failures) == 1
             msg = result.failures[0].message
-            assert "Path(__file__).parent" in msg, (
-                f"Failure message should advise Path(__file__).parent; got: {msg}"
-            )
+            assert (
+                "Path(__file__).parent" in msg
+            ), f"Failure message should advise Path(__file__).parent; got: {msg}"
 
     def test_fails_with_repo_root_join_chain(self):
         """Path(repo_root) / 'scripts' / 'bash' should fail."""
@@ -262,8 +256,7 @@ class TestBundledAssetPathResolution:
     def test_passes_with_os_path_join_dunder_file(self):
         """os.path.join(os.path.dirname(__file__), 'scripts') should pass."""
         content = (
-            "import os\n"
-            "p = os.path.join(os.path.dirname(__file__), 'scripts')\n"
+            "import os\n" "p = os.path.join(os.path.dirname(__file__), 'scripts')\n"
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"tools.py": content})
@@ -287,9 +280,9 @@ class TestBundledAssetPathResolution:
                 f"fixtures/ should be excluded from this lint's scope; got {result.verdict} "
                 f"with failures {[f.message for f in result.failures]}"
             )
-            assert result.files_checked == 0, (
-                "fixtures/ files should not be counted as checked"
-            )
+            assert (
+                result.files_checked == 0
+            ), "fixtures/ files should not be counted as checked"
 
     def test_dedups_failures_in_chain(self):
         """A chained Path(repo_root) / 'scripts' / 'bash' / 'x.sh' produces ONE failure."""
@@ -390,9 +383,9 @@ class TestBundledAssetPathResolution:
             result = lint_bundled_asset_path_resolution(pkg)
             assert result.verdict == "fail"
             msg = result.failures[0].message
-            assert "pkg_dir" in msg and "alias" in msg.lower(), (
-                f"Failure message should mention the alias workaround; got: {msg}"
-            )
+            assert (
+                "pkg_dir" in msg and "alias" in msg.lower()
+            ), f"Failure message should mention the alias workaround; got: {msg}"
 
 
 # ─── TestRuntimeDefaultsBound ───
@@ -412,13 +405,10 @@ class TestRuntimeDefaultsBound:
 
     def test_passes_when_config_matches_directive(self):
         """config.py with matching BACKEND/MODEL_ID should pass."""
-        config = (
-            'BACKEND = "ollama"\n'
-            'MODEL_ID = "granite3.3:8b"\n'
-        )
+        config = 'BACKEND = "ollama"\n' 'MODEL_ID = "granite4.1:3B"\n'
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"config.py": config})
-            _write_directive(pkg, "ollama", "granite3.3:8b")
+            _write_directive(pkg, "ollama", "granite4.1:3B")
             result = lint_runtime_defaults_bound(pkg)
             assert result.verdict == "pass", (
                 f"Matching config and directive should pass; got {result.verdict} "
@@ -427,98 +417,92 @@ class TestRuntimeDefaultsBound:
 
     def test_fails_when_backend_diverges(self):
         """config.py BACKEND != directive backend → fail with actionable message."""
-        config = (
-            'BACKEND = "watsonx"\n'
-            'MODEL_ID = "granite3.3:8b"\n'
-        )
+        config = 'BACKEND = "watsonx"\n' 'MODEL_ID = "granite4.1:3B"\n'
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"config.py": config})
-            _write_directive(pkg, "ollama", "granite3.3:8b")
+            _write_directive(pkg, "ollama", "granite4.1:3B")
             result = lint_runtime_defaults_bound(pkg)
-            assert result.verdict == "fail", (
-                f"Backend divergence should fail; got {result.verdict}"
-            )
+            assert (
+                result.verdict == "fail"
+            ), f"Backend divergence should fail; got {result.verdict}"
             assert len(result.failures) == 1
             msg = result.failures[0].message
-            assert "watsonx" in msg, f"Message should name actual value 'watsonx': {msg}"
-            assert "ollama" in msg, f"Message should name expected value 'ollama': {msg}"
-            assert ".claude/data/runtime_defaults.json" in msg, (
-                f"Message should reference .claude/data/runtime_defaults.json: {msg}"
-            )
+            assert (
+                "watsonx" in msg
+            ), f"Message should name actual value 'watsonx': {msg}"
+            assert (
+                "ollama" in msg
+            ), f"Message should name expected value 'ollama': {msg}"
+            assert (
+                ".claude/data/runtime_defaults.json" in msg
+            ), f"Message should reference .claude/data/runtime_defaults.json: {msg}"
 
     def test_fails_when_model_id_diverges(self):
         """config.py MODEL_ID != directive model_id → fail."""
-        config = (
-            'BACKEND = "ollama"\n'
-            'MODEL_ID = "granite3.3:2b"\n'
-        )
+        config = 'BACKEND = "ollama"\n' 'MODEL_ID = "granite3.3:2b"\n'
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"config.py": config})
-            _write_directive(pkg, "ollama", "granite3.3:8b")
+            _write_directive(pkg, "ollama", "granite4.1:3B")
             result = lint_runtime_defaults_bound(pkg)
-            assert result.verdict == "fail", (
-                f"Model ID divergence should fail; got {result.verdict}"
-            )
+            assert (
+                result.verdict == "fail"
+            ), f"Model ID divergence should fail; got {result.verdict}"
             assert len(result.failures) == 1
             msg = result.failures[0].message
             assert "granite3.3:2b" in msg
-            assert "granite3.3:8b" in msg
+            assert "granite4.1:3B" in msg
 
     def test_fails_when_backend_constant_missing(self):
         """config.py without BACKEND → fail with a clear message naming BACKEND."""
-        config = 'MODEL_ID = "granite3.3:8b"\n'
+        config = 'MODEL_ID = "granite4.1:3B"\n'
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"config.py": config})
-            _write_directive(pkg, "ollama", "granite3.3:8b")
+            _write_directive(pkg, "ollama", "granite4.1:3B")
             result = lint_runtime_defaults_bound(pkg)
-            assert result.verdict == "fail", (
-                f"Missing BACKEND constant should fail; got {result.verdict}"
-            )
+            assert (
+                result.verdict == "fail"
+            ), f"Missing BACKEND constant should fail; got {result.verdict}"
             # At least one failure should mention BACKEND missing
-            backend_msgs = [f.message for f in result.failures if "BACKEND" in f.message]
+            backend_msgs = [
+                f.message for f in result.failures if "BACKEND" in f.message
+            ]
             assert backend_msgs, (
                 f"Expected a failure naming missing BACKEND; got: "
                 f"{[f.message for f in result.failures]}"
             )
-            assert any("does not define" in m for m in backend_msgs), (
-                f"Message should say config.py 'does not define' BACKEND; got: {backend_msgs}"
-            )
+            assert any(
+                "does not define" in m for m in backend_msgs
+            ), f"Message should say config.py 'does not define' BACKEND; got: {backend_msgs}"
 
     def test_skipped_when_directive_missing(self):
         """No intermediate/runtime_directive.json → skipped with 'older pipeline' reason."""
-        config = (
-            'BACKEND = "ollama"\n'
-            'MODEL_ID = "granite3.3:8b"\n'
-        )
+        config = 'BACKEND = "ollama"\n' 'MODEL_ID = "granite4.1:3B"\n'
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"config.py": config})
             result = lint_runtime_defaults_bound(pkg)
-            assert result.verdict == "skipped", (
-                f"Missing directive should skip; got {result.verdict}"
-            )
+            assert (
+                result.verdict == "skipped"
+            ), f"Missing directive should skip; got {result.verdict}"
             assert result.skipped_reason is not None
-            assert "older pipeline" in result.skipped_reason, (
-                f"Skip reason should mention 'older pipeline'; got: {result.skipped_reason}"
-            )
+            assert (
+                "older pipeline" in result.skipped_reason
+            ), f"Skip reason should mention 'older pipeline'; got: {result.skipped_reason}"
 
     def test_skipped_when_config_missing(self):
         """No config.py → skipped."""
         with tempfile.TemporaryDirectory() as tmp:
             pkg = Path(tmp)
-            _write_directive(pkg, "ollama", "granite3.3:8b")
+            _write_directive(pkg, "ollama", "granite4.1:3B")
             result = lint_runtime_defaults_bound(pkg)
-            assert result.verdict == "skipped", (
-                f"Missing config.py should skip; got {result.verdict}"
-            )
+            assert (
+                result.verdict == "skipped"
+            ), f"Missing config.py should skip; got {result.verdict}"
             assert result.skipped_reason is not None
             assert "config.py" in result.skipped_reason
 
     def test_skipped_when_directive_malformed_json(self):
         """Malformed JSON in runtime_directive.json → skipped with parse-error reason."""
-        config = (
-            'BACKEND = "ollama"\n'
-            'MODEL_ID = "granite3.3:8b"\n'
-        )
+        config = 'BACKEND = "ollama"\n' 'MODEL_ID = "granite4.1:3B"\n'
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"config.py": config})
             (pkg / "intermediate").mkdir(parents=True, exist_ok=True)
@@ -526,27 +510,25 @@ class TestRuntimeDefaultsBound:
                 "{not valid json"
             )
             result = lint_runtime_defaults_bound(pkg)
-            assert result.verdict == "skipped", (
-                f"Malformed directive JSON should skip; got {result.verdict}"
-            )
+            assert (
+                result.verdict == "skipped"
+            ), f"Malformed directive JSON should skip; got {result.verdict}"
             assert result.skipped_reason is not None
             assert (
                 "could not read" in result.skipped_reason
                 or "runtime_directive.json" in result.skipped_reason
-            ), (
-                f"Skip reason should cite the parse failure; got: {result.skipped_reason}"
-            )
+            ), f"Skip reason should cite the parse failure; got: {result.skipped_reason}"
 
     def test_handles_annotated_assignment(self):
         """config.py using BACKEND: Final[str] = 'ollama' (annotated) should validate."""
         config = (
             "from typing import Final\n"
             'BACKEND: Final[str] = "ollama"\n'
-            'MODEL_ID: Final[str] = "granite3.3:8b"\n'
+            'MODEL_ID: Final[str] = "granite4.1:3B"\n'
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"config.py": config})
-            _write_directive(pkg, "ollama", "granite3.3:8b")
+            _write_directive(pkg, "ollama", "granite4.1:3B")
             result = lint_runtime_defaults_bound(pkg)
             assert result.verdict == "pass", (
                 f"Annotated BACKEND/MODEL_ID assignments should be recognised; "
@@ -556,13 +538,10 @@ class TestRuntimeDefaultsBound:
 
     def test_handles_plain_assignment(self):
         """config.py using BACKEND = 'ollama' (no annotation) should validate."""
-        config = (
-            'BACKEND = "ollama"\n'
-            'MODEL_ID = "granite3.3:8b"\n'
-        )
+        config = 'BACKEND = "ollama"\n' 'MODEL_ID = "granite4.1:3B"\n'
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"config.py": config})
-            _write_directive(pkg, "ollama", "granite3.3:8b")
+            _write_directive(pkg, "ollama", "granite4.1:3B")
             result = lint_runtime_defaults_bound(pkg)
             assert result.verdict == "pass", (
                 f"Plain BACKEND/MODEL_ID assignments should be recognised; "
@@ -579,10 +558,7 @@ class TestRunLints:
 
     def test_overall_pass_when_all_pass(self):
         """A compliant synthetic package should yield overall_verdict == 'pass'."""
-        config = (
-            'BACKEND = "ollama"\n'
-            'MODEL_ID = "granite3.3:8b"\n'
-        )
+        config = 'BACKEND = "ollama"\n' 'MODEL_ID = "granite4.1:3B"\n'
         tools = (
             "from pathlib import Path\n"
             "p = Path(__file__).parent / 'scripts' / 'bash' / 'x.sh'\n"
@@ -603,7 +579,7 @@ class TestRunLints:
                     "tools.py": tools,
                 },
             )
-            _write_directive(pkg, "ollama", "granite3.3:8b")
+            _write_directive(pkg, "ollama", "granite4.1:3B")
             result = run_lints(pkg)
             assert result.overall_verdict == "pass", (
                 f"Compliant package should pass overall; got {result.overall_verdict} "
@@ -635,19 +611,19 @@ class TestRunLints:
             )
             run_lints(pkg)
             report_path = pkg / "intermediate" / "step_7_report.json"
-            assert report_path.exists(), (
-                f"step_7_report.json should be written at {report_path}"
-            )
+            assert (
+                report_path.exists()
+            ), f"step_7_report.json should be written at {report_path}"
             data = json.loads(report_path.read_text())
-            assert "format_version" in data, (
-                f"Report should carry format_version; keys: {list(data.keys())}"
-            )
+            assert (
+                "format_version" in data
+            ), f"Report should carry format_version; keys: {list(data.keys())}"
             assert "overall_verdict" in data
             assert "lints" in data and isinstance(data["lints"], list)
             for lint_entry in data["lints"]:
-                assert "lint_id" in lint_entry, (
-                    f"Each lint entry needs lint_id; got {lint_entry}"
-                )
+                assert (
+                    "lint_id" in lint_entry
+                ), f"Each lint entry needs lint_id; got {lint_entry}"
                 assert "verdict" in lint_entry
                 assert "failures" in lint_entry
                 assert isinstance(lint_entry["failures"], list)
@@ -658,9 +634,9 @@ class TestRunLints:
             pkg = Path(tmp)  # no intermediate/ to start
             assert not (pkg / "intermediate").exists()
             run_lints(pkg)
-            assert (pkg / "intermediate").is_dir(), (
-                "run_lints should create intermediate/ when absent"
-            )
+            assert (
+                pkg / "intermediate"
+            ).is_dir(), "run_lints should create intermediate/ when absent"
             assert (pkg / "intermediate" / "step_7_report.json").exists()
 
 
@@ -692,8 +668,7 @@ class TestSessionMethodArity:
 
     def test_instruct_positional_description_passes(self):
         content = (
-            "def run():\n"
-            "    m.instruct('describe the task', format=SomeSchema)\n"
+            "def run():\n" "    m.instruct('describe the task', format=SomeSchema)\n"
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": content})
@@ -701,8 +676,7 @@ class TestSessionMethodArity:
 
     def test_instruct_keyword_description_passes(self):
         content = (
-            "def run():\n"
-            "    m.instruct(description='task', format=SomeSchema)\n"
+            "def run():\n" "    m.instruct(description='task', format=SomeSchema)\n"
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": content})
@@ -741,11 +715,7 @@ class TestSessionMethodArity:
             assert "obj" in r.failures[0].message and "query" in r.failures[0].message
 
     def test_non_session_method_call_skipped(self):
-        content = (
-            "def run():\n"
-            "    x = 'hi'.split()\n"
-            "    lst.append(1)\n"
-        )
+        content = "def run():\n" "    x = 'hi'.split()\n" "    lst.append(1)\n"
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": content})
             result = lint_session_method_arity(pkg)
@@ -794,10 +764,7 @@ class TestValidationFnNotCalledDirectly:
     """Test cases for lint_validation_fn_not_called_directly."""
 
     def test_direct_call_on_req_attribute_fails(self):
-        content = (
-            "def check():\n"
-            "    result = req.validation_fn(ctx)\n"
-        )
+        content = "def check():\n" "    result = req.validation_fn(ctx)\n"
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": content})
             result = lint_validation_fn_not_called_directly(pkg)
@@ -807,9 +774,7 @@ class TestValidationFnNotCalledDirectly:
 
     def test_attribute_access_no_call_passes(self):
         content = (
-            "def check():\n"
-            "    if req.validation_fn is not None:\n"
-            "        pass\n"
+            "def check():\n" "    if req.validation_fn is not None:\n" "        pass\n"
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": content})
@@ -827,8 +792,7 @@ class TestValidationFnNotCalledDirectly:
 
     def test_req_validate_passes(self):
         content = (
-            "async def check():\n"
-            "    result = await req.validate(backend, ctx)\n"
+            "async def check():\n" "    result = await req.validate(backend, ctx)\n"
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": content})
@@ -898,9 +862,7 @@ class TestInstructResultParseBeforeAccess:
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
-            assert (
-                lint_instruct_result_parse_before_access(pkg).verdict == "pass"
-            )
+            assert lint_instruct_result_parse_before_access(pkg).verdict == "pass"
 
     def test_passes_with_safe_parse_with_fallback(self):
         pipeline = self._HELPERS + (
@@ -914,9 +876,7 @@ class TestInstructResultParseBeforeAccess:
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
-            assert (
-                lint_instruct_result_parse_before_access(pkg).verdict == "pass"
-            )
+            assert lint_instruct_result_parse_before_access(pkg).verdict == "pass"
 
     def test_passes_with_model_validate_json_value(self):
         pipeline = self._HELPERS + (
@@ -930,9 +890,7 @@ class TestInstructResultParseBeforeAccess:
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
-            assert (
-                lint_instruct_result_parse_before_access(pkg).verdict == "pass"
-            )
+            assert lint_instruct_result_parse_before_access(pkg).verdict == "pass"
 
     def test_fails_with_direct_field_access(self):
         pipeline = (
@@ -975,9 +933,7 @@ class TestInstructResultParseBeforeAccess:
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
-            assert (
-                lint_instruct_result_parse_before_access(pkg).verdict == "fail"
-            )
+            assert lint_instruct_result_parse_before_access(pkg).verdict == "fail"
 
     def test_passes_with_access_on_reassigned_parsed_var(self):
         pipeline = self._HELPERS + (
@@ -991,9 +947,7 @@ class TestInstructResultParseBeforeAccess:
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
-            assert (
-                lint_instruct_result_parse_before_access(pkg).verdict == "pass"
-            )
+            assert lint_instruct_result_parse_before_access(pkg).verdict == "pass"
 
     def test_untracks_thunk_after_rebind(self):
         pipeline = (
@@ -1007,9 +961,7 @@ class TestInstructResultParseBeforeAccess:
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
-            assert (
-                lint_instruct_result_parse_before_access(pkg).verdict == "pass"
-            )
+            assert lint_instruct_result_parse_before_access(pkg).verdict == "pass"
 
     def test_multi_function_scope_isolation(self):
         pipeline = self._HELPERS + (
@@ -1025,9 +977,7 @@ class TestInstructResultParseBeforeAccess:
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
-            assert (
-                lint_instruct_result_parse_before_access(pkg).verdict == "pass"
-            )
+            assert lint_instruct_result_parse_before_access(pkg).verdict == "pass"
 
     def test_walks_slots_and_constrained_slots(self):
         bad = (
@@ -1048,12 +998,8 @@ class TestInstructResultParseBeforeAccess:
 
     def test_skips_unparseable_file(self):
         with tempfile.TemporaryDirectory() as tmp:
-            pkg = _make_package(
-                Path(tmp), {"pipeline.py": "def broken(:\n    pass\n"}
-            )
-            assert (
-                lint_instruct_result_parse_before_access(pkg).verdict == "pass"
-            )
+            pkg = _make_package(Path(tmp), {"pipeline.py": "def broken(:\n    pass\n"})
+            assert lint_instruct_result_parse_before_access(pkg).verdict == "pass"
 
     def test_ignores_instruct_without_format_kwarg(self):
         pipeline = (
@@ -1065,9 +1011,7 @@ class TestInstructResultParseBeforeAccess:
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
-            assert (
-                lint_instruct_result_parse_before_access(pkg).verdict == "pass"
-            )
+            assert lint_instruct_result_parse_before_access(pkg).verdict == "pass"
 
 
 # ─── TestFormatAnnotation ───
@@ -1212,9 +1156,7 @@ class TestFormatAnnotation:
 
     def test_skips_unparseable_file(self):
         with tempfile.TemporaryDirectory() as tmp:
-            pkg = _make_package(
-                Path(tmp), {"pipeline.py": "def broken(:\n    pass\n"}
-            )
+            pkg = _make_package(Path(tmp), {"pipeline.py": "def broken(:\n    pass\n"})
             assert lint_format_annotation(pkg).verdict == "pass"
 
     def test_passes_when_no_pipeline_files_present(self):
@@ -1360,8 +1302,7 @@ _PIPELINE_WITH_PYDANTIC_PARAM = (
 )
 
 _PIPELINE_WITHOUT_PYDANTIC_PARAM = (
-    "def run_pipeline(user_query: str) -> str:\n"
-    "    return user_query\n"
+    "def run_pipeline(user_query: str) -> str:\n" "    return user_query\n"
 )
 
 
@@ -1371,11 +1312,11 @@ class TestFixturePydanticCoercion:
     def test_bare_dict_for_pydantic_param_fails_nil_contract_reproducer(self):
         """The exact nil-contract bug: fixture passes intake as a bare dict."""
         fixture = (
-            'def make_x():\n'
-            '    inputs = {\n'
+            "def make_x():\n"
+            "    inputs = {\n"
             '        "contract_text": "txt",\n'
             '        "intake": {"sport": "Football", "institution": "U.Fla"},\n'
-            '    }\n'
+            "    }\n"
             '    return inputs, "x", "desc"\n'
         )
         with tempfile.TemporaryDirectory() as tmp:
@@ -1396,11 +1337,11 @@ class TestFixturePydanticCoercion:
 
     def test_model_constructor_call_passes(self):
         fixture = (
-            'def make_x():\n'
-            '    inputs = {\n'
+            "def make_x():\n"
+            "    inputs = {\n"
             '        "contract_text": "txt",\n'
             '        "intake": IntakeContext(**{"sport": "F", "institution": "U"}),\n'
-            '    }\n'
+            "    }\n"
             '    return inputs, "x", "desc"\n'
         )
         with tempfile.TemporaryDirectory() as tmp:
@@ -1417,7 +1358,7 @@ class TestFixturePydanticCoercion:
 
     def test_variable_reference_passes(self):
         fixture = (
-            'def make_x():\n'
+            "def make_x():\n"
             '    ctx = IntakeContext(sport="F", institution="U")\n'
             '    inputs = {"contract_text": "txt", "intake": ctx}\n'
             '    return inputs, "x", "desc"\n'
@@ -1436,7 +1377,7 @@ class TestFixturePydanticCoercion:
 
     def test_non_pydantic_param_dict_value_ignored(self):
         fixture = (
-            'def make_x():\n'
+            "def make_x():\n"
             '    inputs = {"user_query": "hello"}\n'
             '    return inputs, "x", "desc"\n'
         )
@@ -1460,7 +1401,7 @@ class TestFixturePydanticCoercion:
             "    return intake.sport if intake else ''\n"
         )
         fixture = (
-            'def make_x():\n'
+            "def make_x():\n"
             '    inputs = {"intake": {"sport": "F", "institution": "U"}}\n'
             '    return inputs, "x", "desc"\n'
         )
@@ -1484,7 +1425,7 @@ class TestFixturePydanticCoercion:
             "    return intake.sport if intake else ''\n"
         )
         fixture = (
-            'def make_x():\n'
+            "def make_x():\n"
             '    inputs = {"intake": {"sport": "F", "institution": "U"}}\n'
             '    return inputs, "x", "desc"\n'
         )
@@ -1514,7 +1455,7 @@ class TestFixturePydanticCoercion:
             "    return bar.a\n"
         )
         fixture = (
-            'def make_x():\n'
+            "def make_x():\n"
             '    inputs = {"bar": {"a": "x", "b": "y"}}\n'
             '    return inputs, "x", "desc"\n'
         )
@@ -1550,7 +1491,7 @@ class TestFixturePydanticCoercion:
 
     def test_schemas_missing_no_false_positive(self):
         fixture = (
-            'def make_x():\n'
+            "def make_x():\n"
             '    inputs = {"intake": {"sport": "F"}}\n'
             '    return inputs, "x", "desc"\n'
         )
@@ -1580,12 +1521,12 @@ class TestFixturePydanticCoercion:
 
     def test_multiple_fixtures_mixed_results(self):
         good = (
-            'def make_g():\n'
+            "def make_g():\n"
             '    inputs = {"intake": IntakeContext(sport="F", institution="U")}\n'
             '    return inputs, "g", "desc"\n'
         )
         bad = (
-            'def make_b():\n'
+            "def make_b():\n"
             '    inputs = {"intake": {"sport": "F", "institution": "U"}}\n'
             '    return inputs, "b", "desc"\n'
         )
@@ -1668,8 +1609,7 @@ class TestGroundingContextTypes:
             result = lint_grounding_context_types(pkg)
             assert result.verdict == "fail"
             assert any(
-                "collection-literal" in f.message.lower()
-                or "list" in f.message.lower()
+                "collection-literal" in f.message.lower() or "list" in f.message.lower()
                 for f in result.failures
             )
 
@@ -1754,9 +1694,7 @@ class TestGroundingContextTypes:
 
     def test_skips_unparseable_files(self):
         with tempfile.TemporaryDirectory() as tmp:
-            pkg = _make_package(
-                Path(tmp), {"pipeline.py": "def broken(:\n    pass\n"}
-            )
+            pkg = _make_package(Path(tmp), {"pipeline.py": "def broken(:\n    pass\n"})
             assert lint_grounding_context_types(pkg).verdict == "pass"
 
     def test_walks_slots_and_constrained_slots(self):
@@ -1792,38 +1730,26 @@ class TestStdlibArgTypes:
     """
 
     def test_passes_with_dict_literal(self):
-        pipeline = (
-            "def f():\n"
-            "    m.instruct('go', grounding_context={'a': 'b'})\n"
-        )
+        pipeline = "def f():\n" "    m.instruct('go', grounding_context={'a': 'b'})\n"
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
             assert lint_stdlib_arg_types(pkg).verdict == "pass"
 
     def test_passes_with_dict_call(self):
-        pipeline = (
-            "def f():\n"
-            "    m.instruct('go', grounding_context=dict(a='b'))\n"
-        )
+        pipeline = "def f():\n" "    m.instruct('go', grounding_context=dict(a='b'))\n"
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
             assert lint_stdlib_arg_types(pkg).verdict == "pass"
 
     def test_passes_with_grounding_context_none(self):
         """`grounding_context=None` is a Mellea idiom; don't flag."""
-        pipeline = (
-            "def f():\n"
-            "    m.instruct('go', grounding_context=None)\n"
-        )
+        pipeline = "def f():\n" "    m.instruct('go', grounding_context=None)\n"
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
             assert lint_stdlib_arg_types(pkg).verdict == "pass"
 
     def test_passes_with_name_dict_annotated(self):
-        pipeline = (
-            "def f(ctx: dict):\n"
-            "    m.instruct('go', grounding_context=ctx)\n"
-        )
+        pipeline = "def f(ctx: dict):\n" "    m.instruct('go', grounding_context=ctx)\n"
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
             assert lint_stdlib_arg_types(pkg).verdict == "pass"
@@ -1840,10 +1766,7 @@ class TestStdlibArgTypes:
 
     def test_passes_with_name_no_annotation(self):
         """Unannotated parameter is ambiguous — must NOT flag."""
-        pipeline = (
-            "def f(ctx):\n"
-            "    m.instruct('go', grounding_context=ctx)\n"
-        )
+        pipeline = "def f(ctx):\n" "    m.instruct('go', grounding_context=ctx)\n"
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
             assert lint_stdlib_arg_types(pkg).verdict == "pass"
@@ -1871,10 +1794,7 @@ class TestStdlibArgTypes:
             assert lint_stdlib_arg_types(pkg).verdict == "pass"
 
     def test_fails_with_string_literal(self):
-        pipeline = (
-            "def f():\n"
-            "    m.instruct('go', grounding_context='oops')\n"
-        )
+        pipeline = "def f():\n" "    m.instruct('go', grounding_context='oops')\n"
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
             result = lint_stdlib_arg_types(pkg)
@@ -1882,18 +1802,14 @@ class TestStdlibArgTypes:
             assert "non-dict literal" in result.failures[0].message
 
     def test_fails_with_int_literal(self):
-        pipeline = (
-            "def f():\n"
-            "    m.instruct('go', grounding_context=42)\n"
-        )
+        pipeline = "def f():\n" "    m.instruct('go', grounding_context=42)\n"
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
             assert lint_stdlib_arg_types(pkg).verdict == "fail"
 
     def test_fails_with_fstring(self):
         pipeline = (
-            "def f(x):\n"
-            "    m.instruct('go', grounding_context=f'hello {x}')\n"
+            "def f(x):\n" "    m.instruct('go', grounding_context=f'hello {x}')\n"
         )
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
@@ -1935,30 +1851,20 @@ class TestStdlibArgTypes:
             assert len(result.failures) == 2
 
     def test_passes_with_no_grounding_context_kwarg(self):
-        pipeline = (
-            "def f():\n"
-            "    m.instruct('go')\n"
-        )
+        pipeline = "def f():\n" "    m.instruct('go')\n"
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
             assert lint_stdlib_arg_types(pkg).verdict == "pass"
 
     def test_skips_unparseable_files(self):
         with tempfile.TemporaryDirectory() as tmp:
-            pkg = _make_package(
-                Path(tmp), {"pipeline.py": "def broken(:\n    pass\n"}
-            )
+            pkg = _make_package(Path(tmp), {"pipeline.py": "def broken(:\n    pass\n"})
             assert lint_stdlib_arg_types(pkg).verdict == "pass"
 
     def test_walks_requirements_and_tools(self):
-        bad = (
-            "def f():\n"
-            "    m.instruct('go', grounding_context='oops')\n"
-        )
+        bad = "def f():\n" "    m.instruct('go', grounding_context='oops')\n"
         with tempfile.TemporaryDirectory() as tmp:
-            pkg = _make_package(
-                Path(tmp), {"requirements.py": bad, "tools.py": bad}
-            )
+            pkg = _make_package(Path(tmp), {"requirements.py": bad, "tools.py": bad})
             result = lint_stdlib_arg_types(pkg)
             assert result.verdict == "fail"
             files = sorted(f.file for f in result.failures)
@@ -1984,7 +1890,7 @@ class TestPrefixPersona:
             "from .schemas import Result\n"
             "def run_pipeline(q):\n"
             "    with start_session('o','m') as m:\n"
-            '        r = m.instruct(q, format=Result, prefix=\'{"value":\')\n'
+            "        r = m.instruct(q, format=Result, prefix='{\"value\":')\n"
             "    return r\n"
         )
         with tempfile.TemporaryDirectory() as tmp:
@@ -2062,8 +1968,6 @@ class TestPrefixPersona:
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
             assert lint_prefix_persona(pkg).verdict == "pass"
-
-
 
 
 # ─── TestParseable ───
@@ -2148,15 +2052,17 @@ class TestParseable:
 # ─── TestImportSoundness ───
 
 
-_API_REF_WITH_MODULES = json.dumps({
-    "format_version": "1.0",
-    "mellea_version": "0.6.0",
-    "modules": {
-        "mellea.backends.model_options": {},
-        "mellea.stdlib.requirements": {},
-        "mellea.stdlib.sampling": {},
-    },
-})
+_API_REF_WITH_MODULES = json.dumps(
+    {
+        "format_version": "1.0",
+        "mellea_version": "0.6.0",
+        "modules": {
+            "mellea.backends.model_options": {},
+            "mellea.stdlib.requirements": {},
+            "mellea.stdlib.sampling": {},
+        },
+    }
+)
 
 
 class TestImportSoundness:
@@ -2228,9 +2134,11 @@ class TestImportSoundness:
     def test_skipped_when_grounding_unavailable(self):
         files = {
             "pipeline.py": "from mellea.foo import bar\n",
-            "intermediate/mellea_api_ref.json": json.dumps({
-                "grounding_unavailable": True,
-            }),
+            "intermediate/mellea_api_ref.json": json.dumps(
+                {
+                    "grounding_unavailable": True,
+                }
+            ),
         }
         with tempfile.TemporaryDirectory() as tmp:
             pkg = _make_package(Path(tmp), files)
@@ -2240,8 +2148,7 @@ class TestImportSoundness:
         """`import mellea.X` (not `from`) — same rule applies."""
         files = {
             "pipeline.py": (
-                "import mellea.nonexistent\n"
-                "def run_pipeline(x): return x\n"
+                "import mellea.nonexistent\n" "def run_pipeline(x): return x\n"
             ),
             "intermediate/mellea_api_ref.json": _API_REF_WITH_MODULES,
         }
@@ -2339,5 +2246,3 @@ class TestImportSideEffects:
             pkg = _make_package(Path(tmp), {"pipeline.py": "def x(:\n    pass\n"})
             result = lint_import_side_effects(pkg)
             assert result.verdict in ("pass", "skipped")
-
-

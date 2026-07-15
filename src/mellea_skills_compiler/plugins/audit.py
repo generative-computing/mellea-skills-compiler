@@ -75,8 +75,11 @@ class AuditTrailPlugin(
         if self.policy_id:
             entry["policy_id"] = self.policy_id
         self._entries.append(entry)
-        with open(self.log_path, "a") as f:
-            f.write(json.dumps(entry, default=str) + "\n")
+        try:
+            with open(self.log_path, "a") as f:
+                f.write(json.dumps(entry, default=str) + "\n")
+        except Exception as e:
+            LOGGER.error(f"Unable to write audit trail - {str(e)}")
 
     # ── Generation hooks ────────────────────────────────────────────
     @hook(HookType.GENERATION_PRE_CALL, mode=PluginMode.FIRE_AND_FORGET)

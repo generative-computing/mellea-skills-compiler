@@ -33,6 +33,7 @@ class Invocation:
     target: str
     out_path: Optional[Path] = None  # derived automatically if not set
     force: bool = False
+    enforce: bool = False
 
 
 @dataclass
@@ -74,6 +75,7 @@ class TranslationPlan:
     warnings: list[str] = field(default_factory=list)
     deployment_guidance: str = ""
     has_policy_manifest: bool = False
+    enforce: bool = False
 
 
 @dataclass
@@ -317,6 +319,7 @@ def stage3_translate(loaded: LoadedContext) -> TranslationPlan:
     else:
         _halt(2, f"No translator for target '{loaded.invocation.target}'")
     plan.has_policy_manifest = loaded.policy_manifest_path is not None
+    plan.enforce = loaded.invocation.enforce
     return plan
 
 
@@ -408,7 +411,9 @@ def _build_reverse_manifest(plan: TranslationPlan, loaded: LoadedContext) -> dic
         "warnings": plan.warnings + loaded.load_warnings,
         "policy_manifest_bundled": loaded.policy_manifest_path is not None,
         "guardian_configured": (
-            "audit" if loaded.policy_manifest_path is not None else False
+            "enforce" if loaded.policy_manifest_path is not None and loaded.invocation.enforce
+            else "audit" if loaded.policy_manifest_path is not None
+            else False
         ),
     }
 
@@ -472,11 +477,19 @@ def _build_export_notes(plan: TranslationPlan, loaded: LoadedContext) -> str:
             "2. Consult the generated README.md for invocation instructions.",
         ]
     if guardian:
+        mode = "enforce" if loaded.invocation.enforce else "audit"
+        mode_note = (
+            "**Mode**: enforce — risky operations will be **blocked** at runtime with a `PluginViolationError`. "
+            "To switch to audit-only (observe but do not block), re-export without `--enforce`."
+            if loaded.invocation.enforce else
+            "**Mode**: audit — Guardian observes and logs but does not block operations."
+        )
         lines += [
             "## Guardian audit",
             "",
-            "This bundle was exported from a certified skill. Guardian audit-mode is active.",
+            f"This bundle was exported from a certified skill. Guardian {mode}-mode is active.",
             "",
+            f"- {mode_note}",
             "- **Audit log**: `<bundle_dir>/audit/runtime_audit.jsonl`",
             "- **Write access**: the process running the entry point must have write permission to the"
             " `audit/` directory adjacent to the bundle. Create it if it does not exist:",
@@ -598,10 +611,11 @@ def stage5_lint(
         }
         entry_file = entry_files.get(target)
         if entry_file and entry_file.exists():
-            if "GuardianAuditPlugin" not in entry_file.read_text():
+            content = entry_file.read_text()
+            if "GuardianAuditPlugin" not in content and "GuardianEnforcePlugin" not in content:
                 failures.append(
                     f"{entry_file.name}: policy_manifest.json present but "
-                    f"'GuardianAuditPlugin' not found in generated entry point"
+                    f"no Guardian plugin found in generated entry point"
                 )
 
     pkg_dir = result.out_path / plan.bundled_package_name

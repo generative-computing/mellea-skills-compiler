@@ -25,18 +25,20 @@
           "description": "SCREAMING_SNAKE_CASE identifier. Must be a valid Python identifier."
         },
         "value": {
-          "description": "The constant's value as a JSON scalar. Strings may contain any characters including quotes, backslashes, and braces — the writer uses repr() or triple-quoting to produce safe Python source.",
+          "description": "The constant's value as a JSON scalar OR a JSON object/array (for lookup tables, mappings, enumerations). Strings may contain any characters including quotes, backslashes, and braces; objects/arrays must be JSON-serializable — the writer renders all values as safe Python literals via repr()/triple-quoting.",
           "oneOf": [
             { "type": "string" },
             { "type": "integer" },
             { "type": "number" },
-            { "type": "boolean" }
+            { "type": "boolean" },
+            { "type": "object" },
+            { "type": "array" }
           ]
         },
         "type": {
           "type": "string",
-          "enum": ["str", "int", "float", "bool"],
-          "description": "Python type annotation. Must match the JSON type of value: string→str, integer→int, number→float, boolean→bool."
+          "enum": ["str", "int", "float", "bool", "dict", "list"],
+          "description": "Python type annotation. Must match the JSON type of value: string→str, integer→int, number→float, boolean→bool, object→dict, array→list. Use dict/list for non-scalar module constants (lookup tables, mappings, enumerations) the pipeline imports from config."
         },
         "category": {
           "type": "string",

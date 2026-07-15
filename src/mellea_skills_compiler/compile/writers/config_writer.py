@@ -24,16 +24,41 @@ _CATEGORY_LABELS: dict[str, str] = {
 }
 
 
+def _literal(value: Any) -> str:
+    """Render any JSON-derived value as a valid Python literal.
+
+    Scalars use repr(); multi-line strings are triple-quoted for readability.
+    Dicts/lists recurse so non-scalar module constants (lookup tables, mappings,
+    enumerations) emit as readable, importable Python literals. repr() alone would
+    also be valid, but recursion keeps nested multi-line strings legible.
+    """
+    if isinstance(value, str):
+        if "\n" in value and '"""' not in value:
+            return f'"""{value}"""'
+        return repr(value)
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        items = [f"{_literal(k)}: {_literal(v)}" for k, v in value.items()]
+        return "{" + ", ".join(items) + "}"
+    if isinstance(value, list):
+        if not value:
+            return "[]"
+        return "[" + ", ".join(_literal(v) for v in value) + "]"
+    return repr(value)
+
+
 def _value_repr(value: Any, py_type: str) -> str:
     """Produce safe Python source for a constant value.
 
     Multi-line strings are triple-quoted for readability (PREFIX_TEXT etc.).
+    Dict/list constants (py_type 'dict'/'list') are rendered as Python literals.
     Falls back to repr() if the string itself contains triple-quote sequences.
     """
     if py_type == "str" and isinstance(value, str) and "\n" in value:
         if '"""' not in value:
             return f'"""{value}"""'
-    return repr(value)
+    return _literal(value)
 
 
 def render(emission: dict[str, Any] | str) -> str:
