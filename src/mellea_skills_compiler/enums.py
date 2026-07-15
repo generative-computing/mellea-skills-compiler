@@ -44,6 +44,7 @@ class GovernanceTaxonomy(StrEnum):
     IBM_GRANITE_GUARDIAN = "ibm-granite-guardian"
     NIST_AI_RMF = "nist-ai-rmf"
     CREDO_UCF = "credo-ucf"
+    OWASP_ASI = "owasp-asi"
 
     @classmethod
     def list(cls):
