@@ -27,7 +27,7 @@ classifiers = [
 ]
 dependencies = [
     "pyyaml>=6.0",
-    "mellea[hooks]>=0.3.2",
+    "mellea[hooks]>=0.7.0,<0.8",
     "ai-atlas-nexus[ollama]",
     "rich",
     "typer",

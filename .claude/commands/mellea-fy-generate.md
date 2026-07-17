@@ -265,7 +265,7 @@ name = "<package-name>"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "mellea[hooks]>=0.4.2",
+    "mellea[hooks]>=0.7.0,<0.8",
     "pydantic>=2.0",
 ]
 

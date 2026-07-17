@@ -1,0 +1,92 @@
+# Version-conditional Mellea API guidance injected into intermediate/mellea_api_ref.json
+# ("compatibility" list), filtered to the installed mellea version by
+# grounding._load_compatibility_entries() using packaging SpecifierSet on `applies_when`.
+#
+# Purpose: carry Mellea API deltas across versions into the LLM compile phase so
+# generated code targets the *installed* mellea, not the version the KBs were last
+# stamped against. Seeded 2026-07-17 for the 0.4.2 -> 0.7.0 migration.
+# (mellea-0.7 tracking #243; see also #244 KB re-verify, #245? doc-index.)
+#
+# Entry fields (all passed through verbatim to the LLM):
+#   id           short stable identifier
+#   applies_when PEP 440 specifier (e.g. ">=0.7") or "*" (always)
+#   title        one-line summary
+#   note         actionable guidance for codegen
+#   wrong        (optional) the drifted / incorrect form to avoid
+#   right        (optional) the correct form on the target version
+
+format_version: "1.0"
+entries:
+  - id: start-session-import
+    applies_when: ">=0.7"
+    title: "start_session is a top-level export"
+    note: >
+      Import start_session from the mellea top level. It is NOT under
+      mellea.core in 0.7 — `from mellea.core import start_session` raises
+      ImportError and fails the [parseable]/[import-soundness] lints.
+    wrong: "from mellea.core import start_session"
+    right: "from mellea import start_session"
+
+  - id: instruct-strategy-kwarg
+    applies_when: ">=0.7"
+    title: "MelleaSession.instruct() sampling kwarg is `strategy`"
+    note: >
+      In 0.7, m.instruct(...) takes the sampling strategy via the `strategy`
+      keyword. The pre-0.7 `sampling_strategy` keyword no longer exists and
+      raises `TypeError: instruct() got an unexpected keyword argument
+      'sampling_strategy'` at runtime (DNF).
+    wrong: "m.instruct(..., sampling_strategy=RepairTemplateStrategy(...))"
+    right: "m.instruct(..., strategy=RepairTemplateStrategy(...))"
+
+  - id: instruct-grounding-context-typing
+    applies_when: ">=0.7"
+    title: "grounding_context values must be str/CBlock/ModelOutputThunk/Component"
+    note: >
+      m.instruct(grounding_context={...}) blockifies each value in 0.7 and
+      rejects non-str-like values (int, dict, pydantic models) with
+      `Exception: Type Error` from mellea.core.base.blockify. Coerce numbers and
+      structured values to strings (e.g. str(v) or model.model_dump_json())
+      before putting them in grounding_context.
+    wrong: 'grounding_context={"forecast_hours": forecast_hours, "cfg": model.model_dump()}'
+    right: 'grounding_context={"forecast_hours": str(forecast_hours), "cfg": model.model_dump_json()}'
+
+  - id: genslot-renamed-genstub
+    applies_when: ">=0.7"
+    title: "genslot module renamed to genstub"
+    note: >
+      mellea.stdlib.components.genslot is a deprecation shim in 0.7 that
+      re-exports from genstub and does NOT re-export underscore-private names.
+      Import generative-stub internals from mellea.stdlib.components.genstub.
+      The `@generative` decorator and its reserved parameter names are unchanged
+      in behaviour; do not name a generative-stub parameter any of the reserved
+      names (f_args, f_kwargs, m, context, backend, model_options, strategy,
+      precondition_requirements, requirements).
+    wrong: "from mellea.stdlib.components.genslot import _disallowed_param_names"
+    right: "from mellea.stdlib.components.genstub import _disallowed_param_names"
+
+  - id: telemetry-env-and-attrs
+    applies_when: ">=0.7"
+    title: "Telemetry env vars pluralised; OTel attr renamed"
+    note: >
+      Tracing env vars are MELLEA_TRACES_* in 0.7 (was MELLEA_TRACE_*), and the
+      OpenTelemetry attribute is gen_ai.provider.name (was gen_ai.system). The
+      old names were removed without a shim. Removed helpers: add_span_event,
+      start_backend_span, end_backend_span, trace_backend, and the
+      backend_instrumentation module — do not reference them.
+
+  - id: new-0-7-capabilities
+    applies_when: ">=0.7"
+    title: "Available in 0.7: STOP_SEQUENCES, shell tool, sampling presets"
+    note: >
+      ModelOption.STOP_SEQUENCES is uniform across backends; a sandboxed shell
+      tool exists at mellea.stdlib.tools.shell (bash_executor) and sampling
+      presets at mellea.stdlib.sampling.presets. Prefer bash_executor over raw
+      subprocess for shell-out tool bodies when emitting tool code.
+
+  - id: instruct-strategy-kwarg-pre07
+    applies_when: "<0.7"
+    title: "Pre-0.7 instruct sampling kwarg is `sampling_strategy`"
+    note: >
+      On mellea < 0.7, m.instruct(...) takes `sampling_strategy` (the `strategy`
+      keyword and top-level start_session export are 0.7+).
+    right: "m.instruct(..., sampling_strategy=RepairTemplateStrategy(...))"

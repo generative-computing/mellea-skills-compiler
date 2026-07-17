@@ -2420,6 +2420,102 @@ def lint_fixture_data_files_exist(package_dir: Path) -> LintResult:
 # ─── Runner ───
 
 
+def _load_forbidden_param_names(package_dir: Path) -> Optional[Set[str]]:
+    """Return the reserved `@generative` param names from the grounding file.
+
+    Reads `intermediate/mellea_api_ref.json:.forbidden_param_names` (always
+    written by the compile pipeline, even under grounding_unavailable). Returns
+    ``None`` only when the api_ref is absent or malformed.
+    """
+    api_ref_path = package_dir / "intermediate" / "mellea_api_ref.json"
+    if not api_ref_path.exists():
+        return None
+    try:
+        data = json.loads(api_ref_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    names = data.get("forbidden_param_names") if isinstance(data, dict) else None
+    if not isinstance(names, list) or not names:
+        return None
+    return {n for n in names if isinstance(n, str)}
+
+
+def _is_generative_decorator(dec: ast.expr) -> bool:
+    """True if a decorator node is mellea's `@generative` (bare or attribute)."""
+    if isinstance(dec, ast.Name):
+        return dec.id == "generative"
+    if isinstance(dec, ast.Attribute):
+        return dec.attr == "generative"
+    if isinstance(dec, ast.Call):
+        return _is_generative_decorator(dec.func)
+    return False
+
+
+def lint_generative_reserved_params(package_dir: Path) -> LintResult:
+    """No `@generative` stub may declare a mellea-reserved parameter name.
+
+    mellea builds a generative stub from the decorated function's signature and
+    raises `ValueError: cannot create a generative stub with disallowed parameter
+    names: [...]` at import if any parameter collides with a reserved kwarg
+    (e.g. `requirements`, `strategy`, `model_options`). This lint turns that
+    runtime import crash into a compile-time failure. (mellea-0.7 tracking #248)
+    """
+    result = LintResult(lint_id="generative-reserved-params", verdict="pass")
+
+    reserved = _load_forbidden_param_names(package_dir)
+    if reserved is None:
+        result.verdict = "skipped"
+        result.skipped_reason = (
+            "intermediate/mellea_api_ref.json absent or missing "
+            "forbidden_param_names"
+        )
+        return result
+
+    py_files: List[Path] = []
+    for p in sorted(package_dir.rglob("*.py")):
+        rel = p.relative_to(package_dir).as_posix()
+        if not _is_skipped_path(rel):
+            py_files.append(p)
+    result.files_checked = len(py_files)
+
+    for py_file in py_files:
+        rel = py_file.relative_to(package_dir).as_posix()
+        try:
+            tree = ast.parse(py_file.read_text(), filename=str(py_file))
+        except SyntaxError:
+            continue  # the parseable lint is responsible
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not any(_is_generative_decorator(d) for d in node.decorator_list):
+                continue
+            a = node.args
+            params = [*a.posonlyargs, *a.args, *a.kwonlyargs]
+            if a.vararg:
+                params.append(a.vararg)
+            if a.kwarg:
+                params.append(a.kwarg)
+            for arg in params:
+                if arg.arg in reserved:
+                    result.verdict = "fail"
+                    result.failures.append(
+                        LintFailure(
+                            file=rel,
+                            line=getattr(arg, "lineno", node.lineno),
+                            column=getattr(arg, "col_offset", None),
+                            message=(
+                                f"@generative function `{node.name}` declares "
+                                f"reserved parameter `{arg.arg}` — mellea will "
+                                f"raise `cannot create a generative stub with "
+                                f"disallowed parameter names` at import. Rename "
+                                f"it (reserved: {', '.join(sorted(reserved))})."
+                            ),
+                            rule_ref="mellea-0.7#248",
+                        )
+                    )
+    return result
+
+
 ALL_LINTS: Tuple[Callable[[Path], LintResult], ...] = (
     lint_fixtures_loader_contract,
     lint_fixture_data_files_exist,
@@ -2437,6 +2533,7 @@ ALL_LINTS: Tuple[Callable[[Path], LintResult], ...] = (
     lint_parseable,
     lint_import_soundness,
     lint_import_side_effects,
+    lint_generative_reserved_params,
 )
 
 

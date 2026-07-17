@@ -156,9 +156,24 @@ def _introspect_mellea(referenced_modules: set[str]) -> dict[str, dict[str, Any]
 
 
 def _extract_forbidden_param_names() -> list[str]:
-    """Pull the live disallowed-param list from genslot, with static fallback."""
+    """Pull the live disallowed-param list from mellea, with static fallback.
+
+    mellea 0.7 renamed ``genslot`` → ``genstub``; the old ``genslot`` module is a
+    deprecation shim that re-exports via ``from .genstub import *`` and therefore
+    does NOT re-export underscore-private names like ``_disallowed_param_names``.
+    Prefer the new ``genstub`` path and fall back to ``genslot`` for pre-0.7.
+    (mellea-0.7 tracking #241)
+    """
     try:
-        from mellea.stdlib.components.genslot import (  # type: ignore
+        from mellea.stdlib.components.genstub import (  # type: ignore
+            _disallowed_param_names,
+        )
+
+        return list(_disallowed_param_names)
+    except (ImportError, AttributeError):
+        pass
+    try:
+        from mellea.stdlib.components.genslot import (  # type: ignore  # pre-0.7
             _disallowed_param_names,
         )
 

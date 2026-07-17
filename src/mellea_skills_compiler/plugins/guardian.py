@@ -177,7 +177,19 @@ def _run_guardian_post_checks(
     if model_output is None:
         return []
 
-    if isinstance(model_output._action, Requirement):
+    # mellea 0.7 moved the originating component off ``ModelOutputThunk._action``
+    # into a ``_CallInfo`` sub-object at ``thunk._call.action``; ``_action`` is
+    # gone. Reach for the 0.7 location first, fall back to the pre-0.7 attribute.
+    # Without this, every GENERATION_POST_CALL hook raises AttributeError — in
+    # AUDIT mode it is silently swallowed (post-gen verdicts vanish), in ENFORCE
+    # mode it errors on every generation. (mellea-0.7 tracking #240)
+    _call = getattr(model_output, "_call", None)
+    action = (
+        getattr(_call, "action", None)
+        if _call is not None
+        else getattr(model_output, "_action", None)
+    )
+    if isinstance(action, Requirement):
         # No need to assess Requirement output here as the final post generation output
         # is more suitable place for monitoring.
         return []

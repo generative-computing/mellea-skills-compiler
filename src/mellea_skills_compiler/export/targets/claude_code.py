@@ -424,7 +424,7 @@ def _skill_md_arg_note(sig: "ParsedSignature", modality: str) -> str:
 def _render_pyproject_toml(
     *, skill_name: str, package_name: str, has_policy_manifest: bool = False
 ) -> str:
-    deps = ['    "mellea[hooks]>=0.3.2",\n']
+    deps = ['    "mellea[hooks]>=0.7.0,<0.8",\n']
     if has_policy_manifest:
         deps.append(
             '    "mellea-skills-compiler@git+https://github.com/generative-computing/mellea-skills-compiler.git",\n'
