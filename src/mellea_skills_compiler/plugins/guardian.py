@@ -23,6 +23,7 @@ Usage (enforce mode — blocks on risk):
 from __future__ import annotations
 
 import json
+import threading
 from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
@@ -171,17 +172,69 @@ def _call_guardian(
     return verdicts
 
 
+def _get_thunk_action(model_output: Any) -> Any:
+    """Return the originating action of a ``ModelOutputThunk``, or ``None``.
+
+    On mellea 0.7+ the action lives at ``thunk._call.action`` (see
+    ``_CallInfo`` in ``mellea/core/base.py``); on <0.7 it was on
+    ``thunk._action``. Both paths are private, but the dual accessor lets
+    us survive the rename without wire-level knowledge of which mellea we
+    are running against. This is a fallback for the id-correlation path
+    below — if ``payload.generation_id`` is populated (0.7+) we prefer
+    that.
+    """
+    call = getattr(model_output, "_call", None)
+    if call is not None:
+        return getattr(call, "action", None)
+    return getattr(model_output, "_action", None)
+
+
 def _run_guardian_post_checks(
-    payload: Any, risks: List[NexusRisk], inference_engine: str
+    plugin: "GuardianPlugin",
+    payload: Any,
+    risks: List[NexusRisk],
+    inference_engine: str,
 ) -> List[GuardianVerdict]:
-    """Shared logic: run Guardian checks and return (verdicts, flagged_labels)."""
+    """Shared logic: run Guardian checks and return (verdicts, flagged_labels).
+
+    Requirement-driven generations are skipped — they are validation calls
+    not user-facing outputs, and the surrounding pipeline monitors their
+    downstream results instead. On mellea 0.7+ this uses id correlation via
+    ``payload.generation_id`` (recorded by ``_run_guardian_pre_checks`` when
+    it saw a Requirement action); on <0.7 or when no id is available it
+    falls back to reading ``_call.action`` / ``_action`` from the thunk.
+    """
     model_output = payload.model_output
     if model_output is None:
         return []
 
-    if isinstance(model_output._action, Requirement):
-        # No need to assess Requirement output here as the final post generation output
-        # is more suitable place for monitoring.
+    generation_id = getattr(payload, "generation_id", None)
+    if generation_id is not None:
+        # Lock-guarded to match the surrounding ``_verdict_lock`` discipline
+        # and to survive a free-threaded interpreter (PEP 703). CPython's GIL
+        # makes single ``set.__contains__`` / ``set.discard`` atomic today,
+        # but the read+discard pair is not.
+        with plugin._verdict_lock:
+            if generation_id in plugin._requirement_generation_ids:
+                plugin._requirement_generation_ids.discard(generation_id)
+                return []
+
+    # Belt-and-braces: on pre-0.7 mellea, or if the pre-call hook did not
+    # fire for any reason, still catch Requirement-driven generations.
+    action = _get_thunk_action(model_output)
+    if isinstance(action, Requirement):
+        # Only WARN when generation_id is populated — that's the real
+        # regression signal (hook ordering changed on a supported mellea
+        # version). generation_id is None is the expected pre-0.7 shape
+        # and does not indicate any bug.
+        if generation_id is not None:
+            LOGGER.warning(
+                "Guardian post-check: Requirement action reached the post-call hook "
+                "without a matching pre-call tag (generation_id=%s). Falling back to "
+                "the thunk-action inspection path; a future mellea hook-ordering "
+                "change may be masking this. Investigate if this recurs.",
+                generation_id,
+            )
         return []
 
     assistant_text = getattr(model_output, "value", None) or ""
@@ -211,16 +264,36 @@ def _run_guardian_post_checks(
 
 
 def _run_guardian_pre_checks(
-    payload: Any, risks: List[NexusRisk], inference_engine: str
+    plugin: "GuardianPlugin",
+    payload: Any,
+    risks: List[NexusRisk],
+    inference_engine: str,
 ) -> List[GuardianVerdict]:
     """Pre-generation check: assess the input prompt before LLM generation.
 
     Follows the GAF-Guard pattern — system + user only, no assistant turn.
+    Records ``payload.generation_id`` for Requirement-driven generations so
+    the paired post-call hook can skip them without inspecting private
+    attributes on the thunk.
     """
 
     # Extract action from the CBlock or Component/Instruction
     action = payload.action
     if action is None:
+        return []
+
+    # Requirement early-exit BEFORE any ``format_for_llm()`` call —
+    # ``Requirement.format_for_llm`` asserts it runs inside a validate() call
+    # for that same requirement (see mellea/core/requirement.py:format_for_llm),
+    # and raises AssertionError otherwise. Guardian's plugin runs outside any
+    # such context. Recording the id here lets the paired post-call hook skip
+    # the corresponding output without reaching into ``ModelOutputThunk``.
+    if isinstance(action, Requirement):
+        generation_id = getattr(payload, "generation_id", None)
+        if generation_id is not None:
+            # Lock-guarded — see the paired discard in _run_guardian_post_checks.
+            with plugin._verdict_lock:
+                plugin._requirement_generation_ids.add(generation_id)
         return []
 
     # Get input text from the action component
@@ -233,10 +306,6 @@ def _run_guardian_pre_checks(
             if value:
                 input_text_clean.update({key: value})
         input_text = json.dumps(input_text_clean, default=lambda x: str(x), indent=2)
-    elif isinstance(action, Requirement):
-        # No need to assess Requirement here as the final post generation output
-        # is more suitable place for monitoring
-        return []
     else:
         # Fallback method to extract input text
         input_text = (
@@ -288,7 +357,30 @@ class GuardianPlugin(BasePlugin):
         """
         self.risks = risks
         self.all_verdicts: List[GuardianVerdict] = []
+        # Per-generation-id verdict map — populated by every _call_guardian invocation
+        # and read by AuditTrailPlugin.log_pre_call/log_post_call/log_tool_post so
+        # correlation is id-based rather than positional. Guards mellea 0.7's
+        # #1175 parallel sampling.
+        self.verdicts_by_generation_id: Dict[str, List[GuardianVerdict]] = {}
+        self._verdict_lock = threading.RLock()
+        # Ids of Requirement-driven generations recorded in check_input/enforce_input.
+        # Drained by the paired post-call hook so it can skip without reaching into
+        # ModelOutputThunk private attributes.
+        self._requirement_generation_ids: set[str] = set()
         self.inference_engine = inference_engine
+
+    def _record_verdicts(
+        self, verdicts: List[GuardianVerdict], generation_id: Optional[str]
+    ) -> None:
+        """Thread-safe append to ``all_verdicts`` plus id-keyed indexing."""
+        if not verdicts:
+            return
+        with self._verdict_lock:
+            self.all_verdicts.extend(verdicts)
+            if generation_id is not None:
+                self.verdicts_by_generation_id.setdefault(
+                    generation_id, []
+                ).extend(verdicts)
 
     def register(self) -> None:
         native = [r for r in self.risks if r.is_native]
@@ -339,14 +431,93 @@ class GuardianAuditPlugin(
     @hook(HookType.GENERATION_PRE_CALL, mode=PluginMode.AUDIT)
     async def check_input(self, payload: Any, ctx: Any) -> None:
         """Pre-generation: assess input prompt for risks (observe-only)."""
-        verdicts = _run_guardian_pre_checks(payload, self.risks, self.inference_engine)
-        self.all_verdicts.extend(verdicts)
+        verdicts = _run_guardian_pre_checks(
+            self, payload, self.risks, self.inference_engine
+        )
+        self._record_verdicts(verdicts, getattr(payload, "generation_id", None))
 
     @hook(HookType.GENERATION_POST_CALL, mode=PluginMode.AUDIT)
     async def check_output(self, payload: Any, ctx: Any) -> None:
         """Post-generation: assess LLM output for risks (observe-only)."""
-        verdicts = _run_guardian_post_checks(payload, self.risks, self.inference_engine)
-        self.all_verdicts.extend(verdicts)
+        verdicts = _run_guardian_post_checks(
+            self, payload, self.risks, self.inference_engine
+        )
+        self._record_verdicts(verdicts, getattr(payload, "generation_id", None))
+
+    @hook(HookType.GENERATION_ERROR, mode=PluginMode.AUDIT)
+    async def check_error(self, payload: Any, ctx: Any) -> None:
+        """Generation error: record that the generation failed with no verdict.
+
+        Added in mellea 0.7 (#1307 makes ``ModelOutputThunk.error`` public).
+        Guardian assesses nothing here — a failed generation has no output
+        to score — but recording an ERROR verdict per risk keeps the audit
+        trail complete and preserves "every generation monitored" as a
+        truthful claim.
+        """
+        generation_id = getattr(payload, "generation_id", None)
+        verdicts = [
+            GuardianVerdict(
+                risk=risk.name,
+                label=GuardianScore.ERROR,
+                raw_output=str(getattr(payload, "error", "")),
+                hook_stage=HookStage.POST,
+            )
+            for risk in self.risks
+        ]
+        self._record_verdicts(verdicts, generation_id)
+
+    @hook(HookType.GENERATION_BATCH_PRE_CALL, mode=PluginMode.AUDIT)
+    async def check_batch_input(self, payload: Any, ctx: Any) -> None:
+        """Pre-batch generation: no-op — Requirement metadata isn't on batch payloads.
+
+        Subscribed so a batch generation is visible to the plugin runner (and
+        so ``AuditTrailPlugin.log_batch_pre_call`` fires alongside), but there
+        is no per-item action metadata to filter on — ``generate_from_raw``
+        code paths don't wrap Requirements. All assessment happens on the
+        batch outputs in ``check_batch_output``.
+        """
+        return None
+
+    @hook(HookType.GENERATION_BATCH_POST_CALL, mode=PluginMode.AUDIT)
+    async def check_batch_output(self, payload: Any, ctx: Any) -> None:
+        """Post-batch generation: assess each item's output (observe-only)."""
+        model_outputs = getattr(payload, "model_outputs", None) or []
+        generation_ids = getattr(payload, "generation_ids", None) or [None] * len(
+            model_outputs
+        )
+        prompts = getattr(payload, "prompts", None) or [""] * len(model_outputs)
+        for model_output, gen_id, prompt in zip(model_outputs, generation_ids, prompts):
+            if model_output is None:
+                continue
+            assistant_text = getattr(model_output, "value", None) or ""
+            if not assistant_text:
+                continue
+            input_text = str(prompt) if prompt else ""
+            verdicts = _call_guardian(
+                HookStage.POST, self.risks, input_text, self.inference_engine, assistant_text
+            )
+            self._record_verdicts(verdicts, gen_id)
+
+    @hook(HookType.GENERATION_BATCH_ERROR, mode=PluginMode.AUDIT)
+    async def check_batch_error(self, payload: Any, ctx: Any) -> None:
+        """Batch generation error: record an ERROR verdict per risk per item.
+
+        Symmetrical to ``check_error`` — a batch that raised produces no
+        outputs to assess, but the audit trail records that the batch
+        was attempted and failed.
+        """
+        generation_ids = getattr(payload, "generation_ids", None) or [None]
+        for gen_id in generation_ids:
+            verdicts = [
+                GuardianVerdict(
+                    risk=risk.name,
+                    label=GuardianScore.ERROR,
+                    raw_output=str(getattr(payload, "error", "")),
+                    hook_stage=HookStage.POST,
+                )
+                for risk in self.risks
+            ]
+            self._record_verdicts(verdicts, gen_id)
 
     @hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.AUDIT)
     async def check_tool_input(self, payload: Any, ctx: Any) -> None:
@@ -392,11 +563,16 @@ class GuardianAuditPlugin(
             verdicts: list[GuardianVerdict] = _call_guardian(
                 HookStage.TOOLS_POST,
                 tool_risks,
-                user_text=f"Tool {tool_name} was called",
+                input_text=f"Tool {tool_name} was called",
                 assistant_text=tool_output[:2000],
                 inference_engine=self.inference_engine,
             )
-            self.all_verdicts.extend(verdicts)
+            # Tool calls carry their own correlation id in mellea 0.7; fall back
+            # to the associated generation_id if only that is available.
+            tool_correlation_id = getattr(payload, "tool_call_id", None) or getattr(
+                payload, "generation_id", None
+            )
+            self._record_verdicts(verdicts, tool_correlation_id)
 
             flagged = [v.risk for v in verdicts if v.label == GuardianScore.YES]
             if flagged:
@@ -431,9 +607,9 @@ class GuardianEnforcePlugin(
     async def enforce_input(self, payload: Any, ctx: Any) -> Any:
         """Pre-generation: block if input prompt has risks."""
         verdicts: List[GuardianVerdict] = _run_guardian_pre_checks(
-            payload, self.risks, self.inference_engine
+            self, payload, self.risks, self.inference_engine
         )
-        self.all_verdicts.extend(verdicts)
+        self._record_verdicts(verdicts, getattr(payload, "generation_id", None))
 
         flagged = [v.risk for v in verdicts if v.label == GuardianScore.YES]
         failed = [
@@ -468,8 +644,10 @@ class GuardianEnforcePlugin(
     @hook(HookType.GENERATION_POST_CALL, mode=PluginMode.SEQUENTIAL)
     async def enforce_output(self, payload: Any, ctx: Any) -> Any:
         """Post-generation: block if LLM output has risks."""
-        verdicts = _run_guardian_post_checks(payload, self.risks, self.inference_engine)
-        self.all_verdicts.extend(verdicts)
+        verdicts = _run_guardian_post_checks(
+            self, payload, self.risks, self.inference_engine
+        )
+        self._record_verdicts(verdicts, getattr(payload, "generation_id", None))
 
         flagged = [v.risk for v in verdicts if v.label == GuardianScore.YES]
         failed = [
@@ -521,7 +699,10 @@ class GuardianEnforcePlugin(
             input_text=f"Tool {tool_name} was called with arguments: {json.dumps(args, indent=2)}",
             inference_engine=self.inference_engine,
         )
-        self.all_verdicts.extend(verdicts)
+        tool_correlation_id = getattr(payload, "tool_call_id", None) or getattr(
+            payload, "generation_id", None
+        )
+        self._record_verdicts(verdicts, tool_correlation_id)
 
         flagged = [v.risk for v in verdicts if v.label == GuardianScore.YES]
         failed = [
@@ -584,7 +765,10 @@ class GuardianEnforcePlugin(
             assistant_text=tool_output[:2000],
             inference_engine=self.inference_engine,
         )
-        self.all_verdicts.extend(verdicts)
+        tool_correlation_id = getattr(payload, "tool_call_id", None) or getattr(
+            payload, "generation_id", None
+        )
+        self._record_verdicts(verdicts, tool_correlation_id)
 
         flagged = [v.risk for v in verdicts if v.label == GuardianScore.YES]
         failed = [
@@ -622,3 +806,75 @@ class GuardianEnforcePlugin(
                 },
             )
         return None
+
+    @hook(HookType.GENERATION_ERROR, mode=PluginMode.AUDIT)
+    async def enforce_error(self, payload: Any, ctx: Any) -> None:
+        """Generation error: record an ERROR verdict per risk.
+
+        SEQUENTIAL enforcement is meaningless on an error path — there is no
+        output to block. AUDIT mode is used deliberately so failed
+        generations still leave an audit record. See ``check_error`` on
+        :class:`GuardianAuditPlugin`.
+        """
+        generation_id = getattr(payload, "generation_id", None)
+        verdicts = [
+            GuardianVerdict(
+                risk=risk.name,
+                label=GuardianScore.ERROR,
+                raw_output=str(getattr(payload, "error", "")),
+                hook_stage=HookStage.POST,
+            )
+            for risk in self.risks
+        ]
+        self._record_verdicts(verdicts, generation_id)
+
+    @hook(HookType.GENERATION_BATCH_PRE_CALL, mode=PluginMode.AUDIT)
+    async def enforce_batch_input(self, payload: Any, ctx: Any) -> None:
+        """Pre-batch generation: observed only. See ``check_batch_input``."""
+        # Batch path does not surface per-item action metadata, so we do not
+        # attempt to enforce on it. Kept as AUDIT mode so the batch is still
+        # visible to the audit trail. Escalation to SEQUENTIAL blocking on
+        # batch outputs requires per-item context we do not have here.
+        return None
+
+    @hook(HookType.GENERATION_BATCH_POST_CALL, mode=PluginMode.AUDIT)
+    async def enforce_batch_output(self, payload: Any, ctx: Any) -> None:
+        """Post-batch generation: assess each item and record verdicts.
+
+        We deliberately do NOT block on batch outputs: the batch path is
+        used by budget-forcing sampling where blocking would kill the
+        sampling loop. Verdicts are recorded so the certifier can flag the
+        run post-hoc.
+        """
+        model_outputs = getattr(payload, "model_outputs", None) or []
+        generation_ids = getattr(payload, "generation_ids", None) or [None] * len(
+            model_outputs
+        )
+        prompts = getattr(payload, "prompts", None) or [""] * len(model_outputs)
+        for model_output, gen_id, prompt in zip(model_outputs, generation_ids, prompts):
+            if model_output is None:
+                continue
+            assistant_text = getattr(model_output, "value", None) or ""
+            if not assistant_text:
+                continue
+            input_text = str(prompt) if prompt else ""
+            verdicts = _call_guardian(
+                HookStage.POST, self.risks, input_text, self.inference_engine, assistant_text
+            )
+            self._record_verdicts(verdicts, gen_id)
+
+    @hook(HookType.GENERATION_BATCH_ERROR, mode=PluginMode.AUDIT)
+    async def enforce_batch_error(self, payload: Any, ctx: Any) -> None:
+        """Batch generation error: record ERROR verdicts."""
+        generation_ids = getattr(payload, "generation_ids", None) or [None]
+        for gen_id in generation_ids:
+            verdicts = [
+                GuardianVerdict(
+                    risk=risk.name,
+                    label=GuardianScore.ERROR,
+                    raw_output=str(getattr(payload, "error", "")),
+                    hook_stage=HookStage.POST,
+                )
+                for risk in self.risks
+            ]
+            self._record_verdicts(verdicts, gen_id)

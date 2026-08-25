@@ -28,7 +28,9 @@ classifiers = [
 ]
 dependencies = [
     "pyyaml>=6.0",
-    "mellea[hooks]>=0.3.2",
+    # Pin kept in sync with src/mellea_skills_compiler/constants.py::MELLEA_PIN.
+    # A regression test asserts they match (tests/mellea_skills_compiler/test_pin_consistency.py).
+    "mellea[hooks]>=0.7.0,<0.8",
     "ai-atlas-nexus[ollama]",
     "rich",
     "typer",

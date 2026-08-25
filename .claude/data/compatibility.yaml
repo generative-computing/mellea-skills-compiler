@@ -1,0 +1,178 @@
+# mellea → skills-compiler compatibility deltas.
+#
+# Consumed by mellea_skills_compiler.compile.grounding._load_compatibility_entries.
+# Each entry is filtered against the installed mellea version via a PEP-440
+# specifier in ``applies_when``; matching entries are injected into
+# ``mellea_api_ref.json`` so the LLM compile phase can ground on version-
+# conditional guidance instead of hallucinating.
+#
+# Discipline:
+#   * Every 0.7 change that has a pre-0.7 sibling ships in a MIRROR pair
+#     (``>=0.7`` + ``<0.7``) so the compile phase grounds correctly whichever
+#     mellea is installed.
+#   * Every ``applies_when: ">=0.7"`` entry gets a matching ``<0.7`` inverse
+#     so downgrade paths still surface the right guidance.
+#   * ``mellea-version-cited`` field names the mellea PR that motivated the
+#     entry (see docs/features/mellea-0.7-upgrade/context/2026-08-14-related-work.md).
+#
+# A CI gate (tests/mellea_skills_compiler/compile/test_grounding.py) asserts
+# no two entries match the same version on both sides of a mirror pair.
+
+format_version: "1.0"
+snapshot_date: "2026-08-14"
+seeded_against_mellea: "0.7.0"
+
+entries:
+  # ── genslot → genstub rename (0.7) ──────────────────────────────────
+  - id: genslot-genstub-rename
+    applies_when: ">=0.7"
+    topic: "generative stub import path"
+    guidance: |
+      Import ``SyncGenerativeStub`` (and any ``@generative`` helpers) from
+      ``mellea.stdlib.components.genstub``. The old ``genslot`` module is a
+      deprecation shim on 0.7 and emits a ``DeprecationWarning`` on import;
+      the shim does NOT re-export underscore-private names (including
+      ``_disallowed_param_names``). Prefer ``genstub`` everywhere.
+    mellea-version-cited: "PR #1174 (Mintlify→Docusaurus + rename cycle)"
+
+  - id: genslot-genstub-rename-legacy
+    applies_when: "<0.7"
+    topic: "generative stub import path"
+    guidance: |
+      Import ``SyncGenerativeStub`` from ``mellea.stdlib.components.genslot``.
+      The ``genstub`` alias does not exist before 0.7.
+
+  # ── telemetry env var rename (0.7) ──────────────────────────────────
+  - id: telemetry-env-var-rename
+    applies_when: ">=0.7"
+    topic: "telemetry environment variables"
+    guidance: |
+      Use ``MELLEA_TRACES_*`` (plural) environment variables. The pre-0.7
+      ``MELLEA_TRACE_*`` names are REMOVED with no shim.
+    mellea-version-cited: "PRs #1181 / #1254 / #1289 / #1361"
+
+  - id: telemetry-env-var-legacy
+    applies_when: "<0.7"
+    topic: "telemetry environment variables"
+    guidance: |
+      Use ``MELLEA_TRACE_*`` (singular) environment variables.
+
+  # ── OTel semantic attribute rename (0.7) ────────────────────────────
+  - id: otel-gen-ai-provider-name
+    applies_when: ">=0.7"
+    topic: "OpenTelemetry span attributes"
+    guidance: |
+      Use the ``gen_ai.provider.name`` attribute on spans. The pre-0.7
+      ``gen_ai.system`` attribute is REMOVED with no shim (follows OTel
+      GenAI conventions v1.30+).
+    mellea-version-cited: "PR #1251"
+
+  - id: otel-gen-ai-system-legacy
+    applies_when: "<0.7"
+    topic: "OpenTelemetry span attributes"
+    guidance: |
+      Use the ``gen_ai.system`` attribute on spans.
+
+  # ── removed telemetry helpers (0.7) ─────────────────────────────────
+  - id: telemetry-helpers-removed
+    applies_when: ">=0.7"
+    topic: "telemetry helper API"
+    guidance: |
+      These pre-0.7 helper functions are REMOVED. Migrate to the plugin-
+      based tracing scaffolding under ``mellea.plugins`` (BackendTracingPlugin
+      etc.):
+        - ``add_span_event`` (removed)
+        - ``start_backend_span`` (removed)
+        - ``end_backend_span`` (removed)
+        - ``trace_backend`` (removed)
+        - ``backend_instrumentation`` module (removed entirely)
+    mellea-version-cited: "PR #1251 telemetry rewrite"
+
+  - id: telemetry-helpers-available
+    applies_when: "<0.7"
+    topic: "telemetry helper API"
+    guidance: |
+      ``add_span_event``, ``start_backend_span``, ``end_backend_span``,
+      ``trace_backend`` and ``backend_instrumentation`` are available.
+
+  # ── ModelOutputThunk internal refactor (0.7) ────────────────────────
+  - id: model-output-thunk-action-path
+    applies_when: ">=0.7"
+    topic: "ModelOutputThunk internal layout"
+    guidance: |
+      The originating action of a ``ModelOutputThunk`` is at
+      ``thunk._call.action`` (see ``_CallInfo`` in ``mellea/core/base.py``).
+      Prefer id-based correlation via ``payload.generation_id`` (now public
+      on both pre- and post-call payloads); reach into ``_call.action`` only
+      as a defensive fallback. The pre-0.7 ``thunk._action`` attribute is
+      GONE.
+    mellea-version-cited: "PR #1307 (public error/generate_log)"
+
+  - id: model-output-thunk-action-path-legacy
+    applies_when: "<0.7"
+    topic: "ModelOutputThunk internal layout"
+    guidance: |
+      The originating action of a ``ModelOutputThunk`` is at ``thunk._action``.
+      ``_call`` / ``_CallInfo`` do not exist on <0.7.
+
+  # ── new hook types available (0.7) ──────────────────────────────────
+  - id: hook-types-batch-and-error
+    applies_when: ">=0.7"
+    topic: "hook types"
+    guidance: |
+      New hook types are available on 0.7 that the compiler's plugins should
+      subscribe to for complete audit coverage:
+        - ``GENERATION_BATCH_PRE_CALL / POST_CALL / ERROR`` — fired by
+          ``generate_from_raw`` (batch/context-free path). Per-call
+          ``GENERATION_PRE_CALL / POST_CALL`` do NOT fire on this path.
+        - ``GENERATION_ERROR`` — fired when generation raises (public
+          ``ModelOutputThunk.error`` / ``.generate_log`` in #1307).
+        - ``STREAMING_START / EVENT / END / ORCHESTRATION_START / END`` —
+          for streaming interaction modality.
+    mellea-version-cited: "PRs #1175, #1307"
+
+  # ── new capabilities present in 0.7 (informational) ─────────────────
+  - id: model-option-stop-sequences-available
+    applies_when: ">=0.7"
+    topic: "backend model options"
+    guidance: |
+      ``ModelOption.STOP_SEQUENCES`` is available and is uniform across all
+      backends (ollama, hf, openai, watsonx, litellm). Emit it whenever a
+      compiled skill needs to terminate generation on a specific token or
+      string, rather than post-hoc trimming.
+    mellea-version-cited: "PR #1112"
+
+  - id: stdlib-tools-shell-available
+    applies_when: ">=0.7"
+    topic: "tool implementations"
+    guidance: |
+      ``mellea.stdlib.tools.shell.bash_executor`` is available for shell-out
+      tool bodies. It has a conservative denylist (no ``sudo``, ``rm -rf``,
+      writes to ``/etc``/``/sys``/``/proc``, destructive git) and takes
+      ``working_dir`` and ``allowed_paths`` constraints. Note: adoption in
+      the compiler codegen is deferred to a follow-on workstream; this
+      entry exists so the grounding phase knows the symbol is real.
+    mellea-version-cited: "PR #1107"
+
+  - id: stdlib-sampling-presets-available
+    applies_when: ">=0.7"
+    topic: "sampling strategies"
+    guidance: |
+      ``mellea.stdlib.sampling.presets`` provides bundled requirement +
+      repair-strategy presets, including ``python_code_generation_sampling()``
+      and ``python_plotting_sampling()``. These wrap the executable
+      requirements from ``stdlib.requirements.python_reqs`` /
+      ``stdlib.requirements.plotting``. Note: adoption in the compiler
+      codegen is deferred to a follow-on workstream.
+    mellea-version-cited: "PRs #1128 / #1208 / #1265"
+
+  - id: parallel-sampling-enabled
+    applies_when: ">=0.7"
+    topic: "concurrent hook firing"
+    guidance: |
+      The base sampling strategy parallelizes independent generations
+      (mellea #1175). Plugin state that is mutated from hooks MUST be
+      guarded (``threading.Lock`` or equivalent); positional
+      ``recent[-N:]`` correlation between hook events is race-prone and
+      MUST use ``generation_id`` for correlation.
+    mellea-version-cited: "PR #1175"

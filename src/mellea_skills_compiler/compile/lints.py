@@ -1938,6 +1938,29 @@ def lint_import_soundness(package_dir: Path) -> LintResult:
                 module = node.module or ""
                 if not module.startswith("mellea"):
                     continue
+                # Flag the deprecated ``genslot`` module explicitly (renamed
+                # to ``genstub`` in mellea 0.7). The shim still imports on
+                # 0.7 but emits a DeprecationWarning that smoke_check now
+                # fails on — surface it here at lint time instead.
+                if module == "mellea.stdlib.components.genslot":
+                    result.failures.append(
+                        LintFailure(
+                            file=rel,
+                            line=getattr(node, "lineno", None),
+                            column=_col_offset_to_schema(node),
+                            message=(
+                                "`mellea.stdlib.components.genslot` was "
+                                "renamed to `mellea.stdlib.components.genstub` "
+                                "in mellea 0.7. The old module is a shim that "
+                                "emits DeprecationWarning and does not re-export "
+                                "underscore-private names. Rewrite the import "
+                                "to `from mellea.stdlib.components.genstub "
+                                "import ...`."
+                            ),
+                            rule_ref="Rule 4-2 (import-soundness) — genslot rename",
+                        )
+                    )
+                    continue
                 # `from mellea import generative` / `from mellea import
                 # start_session` reaches top-level re-exports — accept
                 # `mellea` itself as known even though the grounding

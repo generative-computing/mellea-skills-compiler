@@ -21,6 +21,7 @@ import json
 import re
 import time
 import traceback
+import warnings
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -228,6 +229,32 @@ def _classify_exception(
     return None
 
 
+def _mellea_deprecation_warnings(captured) -> List[str]:
+    """Return formatted DeprecationWarnings that originate from mellea.
+
+    Filters ``warnings.catch_warnings`` records down to
+    ``DeprecationWarning`` / ``PendingDeprecationWarning`` whose emitting
+    module lives under ``mellea.``. This is what surfaces a compiled
+    package using a shimmed API (e.g. importing
+    ``mellea.stdlib.components.genslot`` after the 0.7 rename) — the
+    package still runs, but silently drifts from upstream.
+    """
+    out: List[str] = []
+    for w in captured:
+        if not issubclass(w.category, (DeprecationWarning, PendingDeprecationWarning)):
+            continue
+        module = str(getattr(w, "filename", ""))
+        # Match imports from mellea/ (regardless of install location).
+        if "/mellea/" not in module and "\\mellea\\" not in module:
+            # Also catch the case where the DeprecationWarning names mellea in
+            # its message (some shims emit via warnings.warn with stacklevel
+            # tuned to the caller).
+            if "mellea" not in str(w.message).lower():
+                continue
+        out.append(f"{w.category.__name__}: {w.message} (at {module}:{w.lineno})")
+    return out
+
+
 def _run_one_fixture(
     pipeline_fn,
     fixture: Fixture,
@@ -235,41 +262,63 @@ def _run_one_fixture(
     package_dir: Optional[Path] = None,
 ) -> SmokeFixtureResult:
     started = time.time()
-    try:
-        # Run the fixture from the package directory so package-relative input
-        # paths (e.g. 'references/example_patient.json' bundled in the package)
-        # resolve the same way they do for an installed skill, rather than
-        # against the compiler's CWD. contextlib.chdir restores CWD afterward.
-        run_dir = package_dir if package_dir is not None else Path.cwd()
-        with contextlib.chdir(run_dir):
-            if isinstance(fixture.context, dict):
-                pipeline_fn(**fixture.context)
-            else:
-                pipeline_fn(fixture.context)
-    except BaseException as exc:  # noqa: BLE001 — we re-classify all
-        duration = time.time() - started
-        skipped_reason = _classify_exception(exc, skill_dir=skill_dir)
-        if skipped_reason:
-            LOGGER.warning(
-                "Fixture smoke-check skipped — %s. Re-run `mellea-skills validate <pkg> --run` "
-                "once the backend is up to verify runtime behaviour.",
-                skipped_reason,
-            )
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        try:
+            # Run the fixture from the package directory so package-relative input
+            # paths (e.g. 'references/example_patient.json' bundled in the package)
+            # resolve the same way they do for an installed skill, rather than
+            # against the compiler's CWD. contextlib.chdir restores CWD afterward.
+            run_dir = package_dir if package_dir is not None else Path.cwd()
+            with contextlib.chdir(run_dir):
+                if isinstance(fixture.context, dict):
+                    pipeline_fn(**fixture.context)
+                else:
+                    pipeline_fn(fixture.context)
+        except BaseException as exc:  # noqa: BLE001 — we re-classify all
+            duration = time.time() - started
+            skipped_reason = _classify_exception(exc, skill_dir=skill_dir)
+            if skipped_reason:
+                LOGGER.warning(
+                    "Fixture smoke-check skipped — %s. Re-run `mellea-skills validate <pkg> --run` "
+                    "once the backend is up to verify runtime behaviour.",
+                    skipped_reason,
+                )
+                return SmokeFixtureResult(
+                    fixture_id=fixture.id,
+                    verdict="skipped",
+                    duration_seconds=duration,
+                    skipped_reason=skipped_reason,
+                )
             return SmokeFixtureResult(
                 fixture_id=fixture.id,
-                verdict="skipped",
+                verdict="failed",
                 duration_seconds=duration,
-                skipped_reason=skipped_reason,
+                failure_message=f"{type(exc).__name__}: {exc}",
+                failure_traceback="".join(
+                    traceback.format_exception(type(exc), exc, exc.__traceback__)
+                ),
             )
-        return SmokeFixtureResult(
-            fixture_id=fixture.id,
-            verdict="failed",
-            duration_seconds=duration,
-            failure_message=f"{type(exc).__name__}: {exc}",
-            failure_traceback="".join(
-                traceback.format_exception(type(exc), exc, exc.__traceback__)
-            ),
-        )
+
+        # Fail the fixture if it emitted any mellea-originated DeprecationWarning.
+        # This is what catches the compiled package silently reverting to a
+        # shimmed API (e.g. ``genslot`` after the 0.7 rename). Non-mellea
+        # DeprecationWarnings (from an app dep) are ignored — see
+        # ``_mellea_deprecation_warnings``.
+        mellea_deprecations = _mellea_deprecation_warnings(captured)
+        if mellea_deprecations:
+            duration = time.time() - started
+            joined = "\n".join(mellea_deprecations)
+            return SmokeFixtureResult(
+                fixture_id=fixture.id,
+                verdict="failed",
+                duration_seconds=duration,
+                failure_message=(
+                    "mellea DeprecationWarning(s) emitted at runtime — the "
+                    "compiled package is using a shimmed / renamed API. Fix "
+                    "the offending import(s) before shipping:\n" + joined
+                ),
+            )
     return SmokeFixtureResult(
         fixture_id=fixture.id,
         verdict="passed",

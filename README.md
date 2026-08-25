@@ -247,7 +247,7 @@ See [`mellea-fy/README.md`](https://github.com/generative-computing/mellea-skill
 
 ### Run Skill Pipeline
 
-Run skill pipeline for a given fxiture
+Run skill pipeline for a given fixture
 
 ```bash
 # provide a raw string as an input

@@ -1,8 +1,10 @@
 # Melleafy: Known Mellea Behaviours & Workarounds
 
-**Version**: 4.3.0 | tested against mellea 0.4.2
+**Version**: 4.4.0 | tested against mellea 0.7.x
 
 Generated pipelines MUST include these workarounds. Re-test after upgrading mellea — some may be resolved in future releases. Step 7's `known-behaviours` lint mechanically checks for KB1, KB2, KB3, KB4, KB6, KB7, KB11. Step 7's `session-boundary` lint covers KB5. KB9 is advisory only — no lint sub-check.
+
+Version-conditional guidance (0.7 vs pre-0.7 imports, telemetry env vars, OTel attributes) lives in `.claude/data/compatibility.yaml` and is filtered by installed mellea version at grounding time — not inline here.
 
 > **Import path grounding**: All `mellea.*` import paths shown in this document were verified against `intermediate/mellea_api_ref.json` at generation time. If any path raises `ModuleNotFoundError` after a mellea upgrade, consult `mellea_api_ref.json:.modules` — it is the authoritative module index for the current installed version. Step 7's `import-soundness` lint will catch any drifted path in generated packages at validation time.
 
@@ -187,6 +189,7 @@ severity = classify_severity(m1, ...)             # ClassifySeverityResponse —
 **Lint check**: `session-boundary` lint (dedicated Tier 2 lint).
 **Ref**: https://docs.mellea.ai/concepts/context-and-sessions
 **Added**: pre-2026-04-28 | **Last-validated**: 2026-04-28 | **Fixture**: tests/promptfoo/kb_05.yaml
+**Scope**: ollama-only.
 
 ---
 

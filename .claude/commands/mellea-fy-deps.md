@@ -106,7 +106,7 @@ Expected JSON shape when grounding is available:
 }
 ```
 
-`modules` covers a fixed CORE_MODULES set (`mellea.stdlib.requirements`, `mellea.stdlib.sampling`, `mellea.backends.model_options`) plus any modules referenced by `dependency_plan.json:plan[].target`. `forbidden_param_names` is extracted live from `mellea.stdlib.components.genslot._disallowed_param_names` when reachable.
+`modules` covers the `CORE_MODULES` set defined in `compile/grounding.py` plus any modules referenced by `dependency_plan.json:plan[].target`. `forbidden_param_names` is extracted live from `mellea.stdlib.components.genstub._disallowed_param_names` (fallback to `genslot` for pre-0.7, then to a static snapshot).
 
 When `mellea` is not installed the compile pipeline writes the `grounding_unavailable: true` shape:
 

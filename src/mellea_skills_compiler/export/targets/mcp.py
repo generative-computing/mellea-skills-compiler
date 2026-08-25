@@ -353,7 +353,11 @@ def _render_mcp_json(
 def _render_pyproject_toml(
     *, tool_name: str, package_name: str, has_policy_manifest: bool = False
 ) -> str:
-    deps = ['    "mcp>=1.2.0",\n', '    "mellea[hooks]>=0.3.2",\n']
+    # Local import to avoid a circular dependency with the package top-level
+    # (constants is a leaf module; this target module is imported at compile time).
+    from mellea_skills_compiler.constants import MELLEA_PIN
+
+    deps = ['    "mcp>=1.2.0",\n', f'    "{MELLEA_PIN}",\n']
     if has_policy_manifest:
         deps.append(
             '    "mellea-skills-compiler@git+https://github.com/generative-computing/mellea-skills-compiler.git",\n'

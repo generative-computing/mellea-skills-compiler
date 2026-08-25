@@ -34,10 +34,21 @@ LOGGER = configure_logger()
 CACHE_DIR = Path.home() / ".cache" / "mellea-skills-compiler"
 
 # Modules always introspected, regardless of dependency_plan.json contents.
+# Includes the mellea 0.7 additions (shell tool, sampling presets, executable
+# requirements, plotting requirements, RAG requirements, context compactor)
+# so the LLM compile phase grounds against their real signatures rather than
+# hallucinating.
 CORE_MODULES = {
     "mellea.stdlib.requirements",
     "mellea.stdlib.sampling",
     "mellea.backends.model_options",
+    # mellea 0.7 additions (compat report §2.3 grounding hint):
+    "mellea.stdlib.tools.shell",
+    "mellea.stdlib.sampling.presets",
+    "mellea.stdlib.requirements.python_reqs",
+    "mellea.stdlib.requirements.plotting",
+    "mellea.stdlib.requirements.rag",
+    "mellea.stdlib.context.compactor",
 }
 
 # Static fallback for `forbidden_param_names` if the genslot symbol is not
@@ -55,16 +66,34 @@ _FORBIDDEN_PARAM_NAMES_FALLBACK = [
 ]
 
 # Static fallback for the doc_index when docs.mellea.ai is unreachable and no
-# cached copy exists. Source: mellea-fy-deps.md:217-242 (snapshot 2026-04-28).
+# cached copy exists.
+#
+# Snapshot: 2026-08-14 | target mellea version: 0.7.x
+# Migration: Mintlify -> Docusaurus 3 (mellea PR #1174). The old ``/guide/``
+# section was reorganised into ``/how-to/…`` and new sections were added
+# for observability, troubleshooting, reference, tutorials 02/03/05/06,
+# advanced/intrinsics, and per-integration pages under ``/integrations/``.
+# Kept in sync with docs.mellea.ai at snapshot time; refresh here whenever
+# mellea's docs restructure meaningfully.
 _DOC_PAGES_FALLBACK = [
+    # getting-started
     "/getting-started/installation",
+    "/getting-started/quickstart",
+    # tutorials (0.7 adds 02/03/05/06)
     "/tutorials/01-your-first-generative-program",
+    "/tutorials/02-structured-outputs",
+    "/tutorials/03-adding-requirements",
     "/tutorials/04-making-agents-reliable",
+    "/tutorials/05-tools-and-agents",
+    "/tutorials/06-rag-with-mellea",
+    # concepts (unchanged in shape, added plugins concept)
     "/concepts/generative-functions",
     "/concepts/requirements-system",
     "/concepts/instruct-validate-repair",
     "/concepts/mobjects-and-mify",
     "/concepts/context-and-sessions",
+    "/concepts/plugins",
+    # how-to (Mintlify /guide moved here; new safety-guardrails, plugins, exceptions pages)
     "/how-to/enforce-structured-output",
     "/how-to/write-custom-verifiers",
     "/how-to/use-async-and-streaming",
@@ -72,9 +101,23 @@ _DOC_PAGES_FALLBACK = [
     "/how-to/configure-model-options",
     "/how-to/use-images-and-vision",
     "/how-to/build-a-rag-pipeline",
-    "/guide/backends-and-configuration",
-    "/guide/tools-and-agents",
+    "/how-to/backends-and-configuration",
+    "/how-to/tools-and-agents",
+    "/how-to/safety-guardrails",
+    "/how-to/debug-with-plugins",
+    "/how-to/handling-exceptions",
+    # observability (new in 0.7 — telemetry rewrite)
+    "/observability/logging",
+    "/observability/metrics",
+    "/observability/telemetry",
+    "/observability/tracing",
+    # troubleshooting / reference / advanced
+    "/troubleshooting",
+    "/reference/cli",
     "/advanced/inference-time-scaling",
+    "/advanced/intrinsics",
+    # integrations (Bedrock now via LiteLLM AWS-cred chain — see mellea #578;
+    # m-serve, mcp, smolagents added)
     "/integrations/ollama",
     "/integrations/openai",
     "/integrations/bedrock",
@@ -82,6 +125,9 @@ _DOC_PAGES_FALLBACK = [
     "/integrations/huggingface",
     "/integrations/vertex-ai",
     "/integrations/langchain",
+    "/integrations/m-serve",
+    "/integrations/mcp",
+    "/integrations/smolagents",
 ]
 
 
@@ -156,7 +202,28 @@ def _introspect_mellea(referenced_modules: set[str]) -> dict[str, dict[str, Any]
 
 
 def _extract_forbidden_param_names() -> list[str]:
-    """Pull the live disallowed-param list from genslot, with static fallback."""
+    """Pull the live disallowed-param list from mellea, with static fallback.
+
+    Prefers ``mellea.stdlib.components.genstub`` (mellea 0.7+ — the module
+    was renamed from ``genslot`` to ``genstub``). Falls back to the old
+    ``genslot`` symbol on <0.7 for backwards compatibility. The static
+    fallback (``_FORBIDDEN_PARAM_NAMES_FALLBACK``) is used only when
+    neither is importable; that path is deliberately silent to avoid
+    warning-noise on every compile.
+
+    Note: importing the ``genslot`` shim on 0.7 emits a ``DeprecationWarning``
+    that the smoke check surfaces as a compile-time error (see compat
+    report §3.4 and ``compile/smoke_check.py``). We therefore avoid
+    importing it unless ``genstub`` genuinely fails.
+    """
+    try:
+        from mellea.stdlib.components.genstub import (  # type: ignore
+            _disallowed_param_names,
+        )
+
+        return list(_disallowed_param_names)
+    except (ImportError, AttributeError):
+        pass
     try:
         from mellea.stdlib.components.genslot import (  # type: ignore
             _disallowed_param_names,
@@ -167,21 +234,66 @@ def _extract_forbidden_param_names() -> list[str]:
         return list(_FORBIDDEN_PARAM_NAMES_FALLBACK)
 
 
+_COMPATIBILITY_YAML_ENV = "MELLEA_SKILLS_COMPILER_COMPATIBILITY_YAML"
+
+
+def _resolve_compatibility_yaml_path() -> Path:
+    """Locate ``.claude/data/compatibility.yaml`` regardless of CWD.
+
+    Resolution order (first hit wins):
+
+    1. ``MELLEA_SKILLS_COMPILER_COMPATIBILITY_YAML`` env override (used by tests
+       and callers that want to supply an alternate compat file).
+    2. Package-anchored path: ``<repo>/.claude/data/compatibility.yaml``, where
+       ``<repo>`` is ``Path(__file__).resolve().parents[3]``. This is the
+       correctness-critical case — the file ships in the repo alongside the
+       package and must not be missed just because the compiler is invoked
+       from a subdirectory.
+    3. CWD-relative ``Path(".claude/data/compatibility.yaml")``, matching the
+       existing ``claude_directives._RUNTIME_DEFAULTS_PATH`` convention.
+    """
+    override = os.environ.get(_COMPATIBILITY_YAML_ENV)
+    if override:
+        return Path(override)
+    package_relative = (
+        Path(__file__).resolve().parents[3] / ".claude" / "data" / "compatibility.yaml"
+    )
+    if package_relative.exists():
+        return package_relative
+    return Path(".claude/data/compatibility.yaml")
+
+
 def _load_compatibility_entries(mellea_version: str) -> list[dict[str, Any]]:
     """Load `.claude/data/compatibility.yaml` and filter to applicable entries.
 
     Filtering uses `packaging.specifiers.SpecifierSet` against the installed
     mellea version. An `applies_when` of "*" or missing means "always applies".
-    Returns an empty list if the file is missing or unparseable.
+    Returns an empty list if the file is missing or unparseable — but WARNs
+    loudly, because missing / broken compatibility data means the LLM compile
+    phase silently reverts to hallucinating pre-0.7 shape.
     """
-    compat_path = Path(".claude/data/compatibility.yaml")
+    compat_path = _resolve_compatibility_yaml_path()
     if not compat_path.exists():
+        LOGGER.warning(
+            "compatibility.yaml not found at %s. The LLM compile phase will "
+            "ground against the installed mellea's raw introspection surface "
+            "only — version-conditional guidance (genslot→genstub, telemetry "
+            "renames, etc.) will not be surfaced. Set %s to override the path.",
+            compat_path,
+            _COMPATIBILITY_YAML_ENV,
+        )
         return []
     try:
         import yaml  # type: ignore
 
         compat = yaml.safe_load(compat_path.read_text()) or {}
-    except Exception:
+    except Exception as exc:
+        LOGGER.warning(
+            "Failed to parse compatibility.yaml at %s: %s. Falling back to "
+            "empty compatibility data.",
+            compat_path,
+            exc,
+        )
         return []
     try:
         from packaging.specifiers import SpecifierSet  # type: ignore
@@ -197,8 +309,17 @@ def _load_compatibility_entries(mellea_version: str) -> list[dict[str, Any]]:
         try:
             if mellea_version in SpecifierSet(applies):
                 entries.append(entry)
-        except Exception:
-            # If the specifier is malformed, include the entry rather than drop it.
+        except Exception as exc:
+            # If the specifier is malformed, include the entry rather than drop it
+            # (bias toward surfacing guidance over hiding it), but log so the
+            # malformed file gets fixed.
+            LOGGER.warning(
+                "Malformed applies_when %r on compatibility entry %r: %s. "
+                "Including the entry anyway.",
+                applies,
+                entry.get("id", "<unnamed>"),
+                exc,
+            )
             entries.append(entry)
     return entries
 
