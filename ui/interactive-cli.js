@@ -551,17 +551,24 @@ async function runInteractive() {
         console.log();
 
         // Now fetch available models with loading spinner
-        const availableModels = await getAvailableClaudeModels();
+        // const availableModels = await getAvailableClaudeModels();
 
         // Continue with remaining prompts
         const remainingAnswers = await inquirer.prompt([
           {
             type: 'list',
-            name: 'model',
-            message: chalk.hex('#3A86FF')('Select Claude model: '),
+            name: 'backend',
+            message: chalk.hex('#3A86FF')('Select backend: '),
             prefix: chalk.hex('#06FFA5')('  🤖'),
-            choices: availableModels,
+            choices: ["claude", "bob"],
             loop: false,
+            transformer: (input) => chalk.white(input)
+          },
+          {
+            type: 'input',
+            name: 'model',
+            message: chalk.hex('#3A86FF')('Enter model: '),
+            prefix: chalk.hex('#06FFA5')('  🤖'),
             transformer: (input) => chalk.white(input)
           },
           {
@@ -587,6 +594,7 @@ async function runInteractive() {
         if (answers.model) args.push('--model', answers.model);
         if (answers.repairMode) args.push('--repair-mode');
         if (answers.skipRun) args.push('--no-run');
+        if (answers.backend) args.push('--backend', answers.backend);
         cleanupKeypressListeners();
         cleanupProcessListeners();
         break;
