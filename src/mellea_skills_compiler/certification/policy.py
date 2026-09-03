@@ -61,7 +61,7 @@ def generate_policy_manifest(
         zero_shot_only=True,
     )
 
-    identified_risks = risk_lists.get("risks", [])
+    identified_risks = risk_lists["per_usecase"][0].get("risks", [])
     LOGGER.info(f"AI Atlas Nexus risks: {len(identified_risks)}")
 
     risks: list[NexusRisk] = []
