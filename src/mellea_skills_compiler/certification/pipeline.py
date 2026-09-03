@@ -428,9 +428,9 @@ def full_pipeline(
             LOGGER.info("=" * 70)
             LOGGER.info("Total: %d", len(fixture_results))
 
-            LOGGER.info(f"Passed: {fixture_summary["success"]}")
-            LOGGER.info(f"Blocked (Risk detected): {fixture_summary["blocked"]}")
-            LOGGER.info(f"Failed: {fixture_summary["failed"]}")
+            LOGGER.info(f"Passed: {fixture_summary['success']}")
+            LOGGER.info(f"Blocked (Risk detected): {fixture_summary['blocked']}")
+            LOGGER.info(f"Failed: {fixture_summary['failed']}")
             LOGGER.info(f"Fixture Results: {fixture_results_path}")
 
             if len(fixture_results) == fixture_summary["failed"]:
