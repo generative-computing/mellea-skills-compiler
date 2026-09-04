@@ -22,8 +22,11 @@ Usage (enforce mode — blocks on risk):
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import json
-from copy import deepcopy
+import threading
+from collections import OrderedDict
 from typing import Any, Dict, List, Optional
 
 from mellea.core.requirement import Requirement
@@ -39,8 +42,7 @@ from mellea_skills_compiler.enums import (
     HookStage,
     InferenceEngineType,
 )
-from mellea_skills_compiler.inference import InferenceService
-from mellea_skills_compiler.models import GuardianVerdict, NexusRisk, PolicyManifest
+from mellea_skills_compiler.models import GuardianVerdict, NexusRisk
 from mellea_skills_compiler.plugins import BasePlugin
 from mellea_skills_compiler.toolkit.logging import configure_logger
 
@@ -48,6 +50,39 @@ from mellea_skills_compiler.toolkit.logging import configure_logger
 LOGGER = configure_logger()
 console = Console()
 GUARDIAN_RETRY_ATTEMPTS = 2
+GUARDIAN_MAX_CONCURRENCY = 4
+GUARDIAN_CACHE_MAXSIZE = 512
+
+_GUARDIAN_SEMAPHORE = threading.Semaphore(GUARDIAN_MAX_CONCURRENCY)
+_VERDICT_CACHE: OrderedDict[tuple, GuardianVerdict] = OrderedDict()
+_CACHE_LOCK = threading.Lock()
+
+
+def _blocking_chat(inference_engine, messages_batch):
+    with _GUARDIAN_SEMAPHORE:
+        return inference_engine.chat(messages_batch, verbose=False)
+
+
+def _cache_key(risk_name: str, judged_text: str, stage: HookStage) -> tuple:
+    digest = hashlib.sha256(judged_text.encode("utf-8")).hexdigest()
+    return (risk_name, digest, stage)
+
+
+def _cache_get(risk_name: str, judged_text: str, stage: HookStage) -> Optional[GuardianVerdict]:
+    key = _cache_key(risk_name, judged_text, stage)
+    with _CACHE_LOCK:
+        return _VERDICT_CACHE.get(key)
+
+
+def _cache_set(risk_name: str, judged_text: str, stage: HookStage, verdict: GuardianVerdict) -> None:
+    key = _cache_key(risk_name, judged_text, stage)
+    with _CACHE_LOCK:
+        if key in _VERDICT_CACHE:
+            _VERDICT_CACHE.move_to_end(key)
+        else:
+            if len(_VERDICT_CACHE) >= GUARDIAN_CACHE_MAXSIZE:
+                _VERDICT_CACHE.popitem(last=False)
+            _VERDICT_CACHE[key] = verdict
 
 
 def _parse_guardian_score(text: str) -> str:
@@ -62,20 +97,45 @@ def _parse_guardian_score(text: str) -> str:
     return GuardianScore.FAILED
 
 
-def _call_guardian(
+async def _retry_one(risk_name: str, messages: List, inference_engine, hook_stage: HookStage) -> GuardianVerdict:
+    """Retry a single failed verdict concurrently."""
+    preview_source = messages[-1]["content"] if messages[-1]["role"] == "assistant" else messages[-1]["content"] if messages[-1]["role"] == "user" else ""
+    preview = preview_source.replace("\n", " ")[0:90]
+    console.print(
+        f'[white]  risk={messages[0]["content"]}\n  preview={preview}[/]'
+    )
+
+    try:
+        raw_prediction = (await asyncio.to_thread(_blocking_chat, inference_engine, [messages]))[0].prediction
+        label = _parse_guardian_score(raw_prediction)
+    except Exception as e:
+        LOGGER.warning("Guardian call failed for risk=%s: %s", risk_name, e)
+        label = GuardianScore.ERROR
+        raw_prediction = ""
+
+    return GuardianVerdict(
+        risk=risk_name,
+        label=label,
+        raw_output=raw_prediction,
+        hook_stage=hook_stage,
+    )
+
+
+async def _call_guardian(
     hook_stage: HookStage,
     risks: List[NexusRisk],
     input_text: str,
     inference_engine,
     assistant_text: Optional[str] = None,
+    name_prefix: str = "",
 ) -> List[GuardianVerdict]:
-    """Synchronous call to Guardian.
+    """Async call to Guardian with caching and concurrent retries.
 
     Guardian expects a chat with the user turn (+ optional assistant turn)
     and a system prompt specifying the risk to evaluate.
 
     The ``risk`` parameter is the Guardian system prompt content:
-      - For native risks (from Nexus ``tag`` field): a bare risk name like
+      - For native risks (from Nexus ``tag`` field): a risk name like
         ``"harm"``, ``"social_bias"``, ``"jailbreak"`` — Guardian uses its
         calibrated assessment path for these.
       - For custom criteria (no Nexus ``tag``): description text
@@ -90,88 +150,108 @@ def _call_guardian(
 
     Guardian response format: ``<score>yes</score>`` (risk detected) or
     ``<score>no</score>`` (safe).
+
+    The name_prefix is prepended to verdict.risk for tool-namespacing (e.g. "tool:").
+    Cache keys use the risk.name so tool-prefixed and unprefixed verdicts
+    for the same text are deduplicated.
     """
 
-    # Extract risk names and their prompts
-    risk_names = [r.name for r in risks]
-    guardian_prompts = [r.guardian_prompt for r in risks]
+    # Construct judged text for caching
+    judged_text = input_text + "\x00" + (assistant_text or "")
 
-    # Create guardian message prompts
-    all_messages = []
-    for guardian_prompt in guardian_prompts:
-        messages = [{"role": "system", "content": guardian_prompt}]
-        if input_text:
-            messages.append({"role": "user", "content": input_text})
-        if assistant_text:
-            messages.append({"role": "assistant", "content": assistant_text})
-        all_messages.append(messages)
+    # Check cache and separate cache hits from misses
+    cached_verdicts = {}
+    risks_to_query = []
+    messages_to_query = []
 
-    try:
-        # Batch inferencing guardian risks
-        raw_predictions = [
-            raw_prediction.prediction
-            for raw_prediction in inference_engine.chat(all_messages, verbose=False)
-        ]
+    for risk in risks:
+        cached = _cache_get(risk.name, judged_text, hook_stage)
+        if cached:
+            cached_verdicts[risk.name] = cached
+        else:
+            risks_to_query.append(risk)
+            messages = [{"role": "system", "content": risk.guardian_prompt}]
+            if input_text:
+                messages.append({"role": "user", "content": input_text})
+            if assistant_text:
+                messages.append({"role": "assistant", "content": assistant_text})
+            messages_to_query.append(messages)
 
-    except Exception as e:
-        LOGGER.warning("Guardian call failed for risks=%s: %s", risk_names, e)
-        return [
-            GuardianVerdict(
-                risk=risk.name,
-                label=GuardianScore.ERROR,
-                raw_output="",
-            )
-            for risk in risks
-        ]
-
-    # Create Guardian Verdict
-    verdicts = []
-    for risk_name, messages, raw_prediction in zip(
-        risk_names, all_messages, raw_predictions
-    ):
-        label = _parse_guardian_score(raw_prediction)
-
-        # retry failed guardian call
-        if label == GuardianScore.FAILED:
-            attempt = 1
-            while attempt <= GUARDIAN_RETRY_ATTEMPTS:
-                LOGGER.warning(
-                    f"Retrying failed guardian assessment - {risk_name}...attempt: {attempt}"
+    # Batch query for cache misses
+    verdicts_by_name = dict(cached_verdicts)
+    if risks_to_query:
+        try:
+            raw_predictions = [
+                raw_prediction.prediction
+                for raw_prediction in await asyncio.to_thread(_blocking_chat, inference_engine, messages_to_query)
+            ]
+        except Exception as e:
+            LOGGER.warning("Guardian call failed for risks=%s: %s", [r.name for r in risks_to_query], e)
+            for risk in risks_to_query:
+                verdict = GuardianVerdict(
+                    risk=risk.name,
+                    label=GuardianScore.ERROR,
+                    raw_output="",
+                    hook_stage=hook_stage,
                 )
-                preview_source = assistant_text if assistant_text else input_text
-                preview = preview_source.replace("\n", " ")[0:90]
-                console.print(
-                    f'[white]  risk={messages[0]["content"]}\n  label={label}\n  preview={preview}[/]'
+                verdicts_by_name[risk.name] = verdict
+            raw_predictions = [GuardianScore.ERROR] * len(risks_to_query)
+
+        # Parse predictions and collect failures for retry
+        failed_indices = []
+        for idx, (risk, messages, raw_prediction) in enumerate(zip(risks_to_query, messages_to_query, raw_predictions)):
+            label = _parse_guardian_score(raw_prediction)
+
+            if label == GuardianScore.FAILED:
+                failed_indices.append(idx)
+            else:
+                verdict = GuardianVerdict(
+                    risk=risk.name,
+                    label=label,
+                    raw_output=raw_prediction,
+                    hook_stage=hook_stage,
                 )
+                verdicts_by_name[risk.name] = verdict
+                if label in [GuardianScore.YES, GuardianScore.NO]:
+                    _cache_set(risk.name, judged_text, hook_stage, verdict)
 
-                try:
-                    raw_prediction = inference_engine.chat([messages], verbose=False)[
-                        0
-                    ].prediction
-                    label = _parse_guardian_score(raw_prediction)
-                except Exception as e:
-                    LOGGER.warning("Guardian call failed for risk=%s: %s", risk_name, e)
-                    label = GuardianScore.ERROR
-                    raw_prediction = ""
+        # Concurrent retries for failed predictions
+        if failed_indices:
+            retry_tasks = [
+                _retry_one(risks_to_query[idx].name, messages_to_query[idx], inference_engine, hook_stage)
+                for idx in failed_indices
+            ]
+            latest_by_idx = dict(zip(failed_indices, await asyncio.gather(*retry_tasks)))
 
-                if label not in [GuardianScore.FAILED, GuardianScore.ERROR]:
+            for attempt in range(GUARDIAN_RETRY_ATTEMPTS - 1):
+                still_failed = [idx for idx, v in latest_by_idx.items() if v.label == GuardianScore.FAILED]
+                if not still_failed:
                     break
+                retry_tasks = []
+                for idx in still_failed:
+                    LOGGER.warning(f"Retrying failed guardian assessment - {risks_to_query[idx].name}...attempt: {attempt + 2}")
+                    retry_tasks.append(_retry_one(risks_to_query[idx].name, messages_to_query[idx], inference_engine, hook_stage))
+                for idx, v in zip(still_failed, await asyncio.gather(*retry_tasks)):
+                    latest_by_idx[idx] = v
 
-                attempt += 1
+            for verdict in latest_by_idx.values():
+                verdicts_by_name[verdict.risk] = verdict
+                if verdict.label in [GuardianScore.YES, GuardianScore.NO]:
+                    _cache_set(verdict.risk, judged_text, hook_stage, verdict)
 
-        verdicts.append(
-            GuardianVerdict(
-                risk=risk_name,
-                label=label,
-                raw_output=raw_prediction,
-                hook_stage=hook_stage,
-            )
+    # Apply name_prefix and return in original risk order
+    return [
+        GuardianVerdict(
+            risk=f"{name_prefix}{verdicts_by_name[r.name].risk}",
+            label=verdicts_by_name[r.name].label,
+            raw_output=verdicts_by_name[r.name].raw_output,
+            hook_stage=verdicts_by_name[r.name].hook_stage,
         )
+        for r in risks
+    ]
 
-    return verdicts
 
-
-def _run_guardian_post_checks(
+async def _run_guardian_post_checks(
     payload: Any, risks: List[NexusRisk], inference_engine: str
 ) -> List[GuardianVerdict]:
     """Shared logic: run Guardian checks and return (verdicts, flagged_labels)."""
@@ -199,7 +279,7 @@ def _run_guardian_post_checks(
     else:
         input_text = str(prompt) if prompt else ""
 
-    verdicts: List[GuardianVerdict] = _call_guardian(
+    verdicts: List[GuardianVerdict] = await _call_guardian(
         HookStage.POST, risks, input_text, inference_engine, assistant_text
     )
     for verdict in verdicts:
@@ -210,7 +290,7 @@ def _run_guardian_post_checks(
     return verdicts
 
 
-def _run_guardian_pre_checks(
+async def _run_guardian_pre_checks(
     payload: Any, risks: List[NexusRisk], inference_engine: str
 ) -> List[GuardianVerdict]:
     """Pre-generation check: assess the input prompt before LLM generation.
@@ -251,7 +331,7 @@ def _run_guardian_pre_checks(
         return []
 
     assistant_text = None
-    verdicts: List[GuardianVerdict] = _call_guardian(
+    verdicts: List[GuardianVerdict] = await _call_guardian(
         HookStage.PRE, risks, input_text, inference_engine, assistant_text
     )
     for verdict in verdicts:
@@ -339,13 +419,13 @@ class GuardianAuditPlugin(
     @hook(HookType.GENERATION_PRE_CALL, mode=PluginMode.AUDIT)
     async def check_input(self, payload: Any, ctx: Any) -> None:
         """Pre-generation: assess input prompt for risks (observe-only)."""
-        verdicts = _run_guardian_pre_checks(payload, self.risks, self.inference_engine)
+        verdicts = await _run_guardian_pre_checks(payload, self.risks, self.inference_engine)
         self.all_verdicts.extend(verdicts)
 
     @hook(HookType.GENERATION_POST_CALL, mode=PluginMode.AUDIT)
     async def check_output(self, payload: Any, ctx: Any) -> None:
         """Post-generation: assess LLM output for risks (observe-only)."""
-        verdicts = _run_guardian_post_checks(payload, self.risks, self.inference_engine)
+        verdicts = await _run_guardian_post_checks(payload, self.risks, self.inference_engine)
         self.all_verdicts.extend(verdicts)
 
     @hook(HookType.TOOL_PRE_INVOKE, mode=PluginMode.AUDIT)
@@ -381,20 +461,14 @@ class GuardianAuditPlugin(
         )
 
         if not (not tool_output or not payload.success):
-
-            tool_risks = []
-            for risk in self.risks:
-                tool_risk = deepcopy(risk)
-                tool_risk.name = f"tool:{tool_risk.name}"
-                tool_risks.append(tool_risk)
-
             # Run Guardian checks on the tool output (treat as assistant text)
-            verdicts: list[GuardianVerdict] = _call_guardian(
+            verdicts: list[GuardianVerdict] = await _call_guardian(
                 HookStage.TOOLS_POST,
-                tool_risks,
+                self.risks,
                 input_text=f"Tool {tool_name} was called",
                 assistant_text=tool_output[:2000],
                 inference_engine=self.inference_engine,
+                name_prefix="tool:",
             )
             self.all_verdicts.extend(verdicts)
 
@@ -430,7 +504,7 @@ class GuardianEnforcePlugin(
     @hook(HookType.GENERATION_PRE_CALL, mode=PluginMode.SEQUENTIAL)
     async def enforce_input(self, payload: Any, ctx: Any) -> Any:
         """Pre-generation: block if input prompt has risks."""
-        verdicts: List[GuardianVerdict] = _run_guardian_pre_checks(
+        verdicts: List[GuardianVerdict] = await _run_guardian_pre_checks(
             payload, self.risks, self.inference_engine
         )
         self.all_verdicts.extend(verdicts)
@@ -468,7 +542,7 @@ class GuardianEnforcePlugin(
     @hook(HookType.GENERATION_POST_CALL, mode=PluginMode.SEQUENTIAL)
     async def enforce_output(self, payload: Any, ctx: Any) -> Any:
         """Post-generation: block if LLM output has risks."""
-        verdicts = _run_guardian_post_checks(payload, self.risks, self.inference_engine)
+        verdicts = await _run_guardian_post_checks(payload, self.risks, self.inference_engine)
         self.all_verdicts.extend(verdicts)
 
         flagged = [v.risk for v in verdicts if v.label == GuardianScore.YES]
@@ -508,18 +582,13 @@ class GuardianEnforcePlugin(
         tool_name = getattr(tool_call, "name", "unknown")
         args = getattr(tool_call, "args", {})
 
-        tool_risks = []
-        for risk in self.risks:
-            tool_risk = deepcopy(risk)
-            tool_risk.name = f"tool:{tool_risk.name}"
-            tool_risks.append(tool_risk)
-
         # Run Guardian checks on tool input
-        verdicts: list[GuardianVerdict] = _call_guardian(
+        verdicts: list[GuardianVerdict] = await _call_guardian(
             HookStage.TOOLS_PRE,
-            tool_risks,
+            self.risks,
             input_text=f"Tool {tool_name} was called with arguments: {json.dumps(args, indent=2)}",
             inference_engine=self.inference_engine,
+            name_prefix="tool:",
         )
         self.all_verdicts.extend(verdicts)
 
@@ -570,19 +639,14 @@ class GuardianEnforcePlugin(
         if not tool_output or not payload.success:
             return None
 
-        tool_risks = []
-        for risk in self.risks:
-            tool_risk = deepcopy(risk)
-            tool_risk.name = f"tool:{tool_risk.name}"
-            tool_risks.append(tool_risk)
-
         # Run Guardian checks on tool output
-        verdicts: list[GuardianVerdict] = _call_guardian(
+        verdicts: list[GuardianVerdict] = await _call_guardian(
             HookStage.TOOLS_POST,
-            tool_risks,
+            self.risks,
             input_text=f"Tool {tool_name} was called",
             assistant_text=tool_output[:2000],
             inference_engine=self.inference_engine,
+            name_prefix="tool:",
         )
         self.all_verdicts.extend(verdicts)
 

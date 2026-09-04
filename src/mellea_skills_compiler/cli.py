@@ -1,8 +1,13 @@
+import cProfile
+import functools
+import os
+import pstats
 import signal
 import sys
+from io import StringIO
 from logging import Logger
 from pathlib import Path
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Callable, Literal, Optional, TypeVar
 
 import typer
 from typer.main import Typer
@@ -16,6 +21,40 @@ from mellea_skills_compiler.toolkit.logging import configure_logger
 
 app: Typer = typer.Typer(no_args_is_help=True)
 LOGGER: Logger = configure_logger()
+
+F = TypeVar("F", bound=Callable)
+
+
+def _profile_if_enabled(func: F) -> F:
+    """Wrap a function to profile it if MELLEA_PROFILE env var is set.
+
+    Set MELLEA_PROFILE=1 to enable cProfile profiling of the command.
+    Profiling results (top 40 functions by cumulative time) are printed
+    to stdout after the command completes.
+
+    Example:
+        MELLEA_PROFILE=1 mellea-skills-compiler compile spec.yaml
+    """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if not os.environ.get("MELLEA_PROFILE"):
+            return func(*args, **kwargs)
+
+        pr = cProfile.Profile()
+        pr.enable()
+        try:
+            result = func(*args, **kwargs)
+        finally:
+            pr.disable()
+            stream = StringIO()
+            stats = pstats.Stats(pr, stream=stream).sort_stats("cumulative")
+            stats.print_stats(40)
+            print("\n" + "=" * 80)
+            print("PROFILING RESULTS (MELLEA_PROFILE=1)")
+            print("=" * 80)
+            print(stream.getvalue())
+        return result
+    return wrapper
 
 
 def signal_handler(sig, frame):
@@ -35,6 +74,9 @@ def main() -> None:
 
     Transform AI agent skill specifications into certified, governed pipelines
     with comprehensive risk analysis and compliance reporting.
+
+    Environment variables:
+      MELLEA_PROFILE=1  Enable cProfile profiling for any command (outputs top 40 functions by cumulative time).
     """
 
 
@@ -42,6 +84,7 @@ def main() -> None:
     help="Melleafy Compile: Decompose an Agent Spec into Mellea Code",
     epilog="Compile Mellea skill specification into a Mellea pipeline. Use --backend to select compilation backend [claude, bob].",
 )
+@_profile_if_enabled
 def compile(
     ctx: typer.Context,
     spec_path: Annotated[
@@ -184,6 +227,7 @@ def validate(
 
 
 @app.command(help="Run Mellea Skill Pipeline")
+@_profile_if_enabled
 def run(
     ctx: typer.Context,
     pipeline_dir: Annotated[
@@ -320,6 +364,7 @@ def ingest(
 
 
 @app.command(help="Run Full Certification Pipeline for Mellea skill")
+@_profile_if_enabled
 def certify(
     ctx: typer.Context,
     pipeline_dir: Annotated[
