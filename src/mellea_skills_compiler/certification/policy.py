@@ -3,7 +3,7 @@
 from collections import defaultdict
 from logging import Logger
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from mellea_skills_compiler.enums import (
     GovernanceTaxonomy,
@@ -61,7 +61,8 @@ def generate_policy_manifest(
         zero_shot_only=True,
     )
 
-    identified_risks = risk_lists["per_usecase"][0].get("risks", [])
+    per_usecase = risk_lists.get("per_usecase") or []
+    identified_risks = per_usecase[0].get("risks", []) if per_usecase else []
     LOGGER.info(f"AI Atlas Nexus risks: {len(identified_risks)}")
 
     risks: list[NexusRisk] = []
