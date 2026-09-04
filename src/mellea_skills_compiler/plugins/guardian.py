@@ -392,7 +392,7 @@ class GuardianAuditPlugin(
             verdicts: list[GuardianVerdict] = _call_guardian(
                 HookStage.TOOLS_POST,
                 tool_risks,
-                user_text=f"Tool {tool_name} was called",
+                input_text=f"Tool {tool_name} was called",
                 assistant_text=tool_output[:2000],
                 inference_engine=self.inference_engine,
             )

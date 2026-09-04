@@ -241,7 +241,7 @@ class BOBBackend:
                                 response["stats"]["duration_ms"] / 1000, 60
                             )
                             console.print(
-                                f"[cyan]Status: {response.get("status")}[/]\n"
+                                f"[cyan]Status: {response.get('status')}[/]\n"
                                 f"[cyan]Total Time ⏱️: {int(mins)}m {int(secs)}s.[/]\n"
                             )
                     except json.decoder.JSONDecodeError as e:
