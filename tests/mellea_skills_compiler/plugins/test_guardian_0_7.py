@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -69,7 +69,8 @@ class TestThunkActionAccess:
 class TestIdCorrelation:
     """Requirement-driven generations are skipped via generation_id, not private attrs."""
 
-    def test_pre_call_records_requirement_generation_id(self, audit_plugin):
+    @pytest.mark.asyncio
+    async def test_pre_call_records_requirement_generation_id(self, audit_plugin):
         from mellea.core.requirement import Requirement
 
         req = Requirement(description="must be nice")
@@ -79,12 +80,13 @@ class TestIdCorrelation:
         )
         from mellea_skills_compiler.plugins import guardian as gmod
 
-        gmod._run_guardian_pre_checks(
+        await gmod._run_guardian_pre_checks(
             audit_plugin, payload, audit_plugin.risks, "ollama"
         )
         assert "gen-abc" in audit_plugin._requirement_generation_ids
 
-    def test_post_call_skips_recorded_id_without_reading_action(self, audit_plugin):
+    @pytest.mark.asyncio
+    async def test_post_call_skips_recorded_id_without_reading_action(self, audit_plugin):
         from mellea_skills_compiler.plugins import guardian as gmod
 
         audit_plugin._requirement_generation_ids.add("gen-xyz")
@@ -97,13 +99,14 @@ class TestIdCorrelation:
             generation_id="gen-xyz",
             prompt="what?",
         )
-        result = gmod._run_guardian_post_checks(
+        result = await gmod._run_guardian_post_checks(
             audit_plugin, payload, audit_plugin.risks, "ollama"
         )
         assert result == []
         assert "gen-xyz" not in audit_plugin._requirement_generation_ids
 
-    def test_post_call_falls_back_to_action_check_when_id_absent(self, audit_plugin):
+    @pytest.mark.asyncio
+    async def test_post_call_falls_back_to_action_check_when_id_absent(self, audit_plugin):
         """Belt-and-braces: pre-0.7 payloads with no generation_id still skip Requirements."""
         from mellea.core.requirement import Requirement
         from mellea_skills_compiler.plugins import guardian as gmod
@@ -113,7 +116,7 @@ class TestIdCorrelation:
         payload = SimpleNamespace(
             model_output=model_output, generation_id=None, prompt=""
         )
-        result = gmod._run_guardian_post_checks(
+        result = await gmod._run_guardian_post_checks(
             audit_plugin, payload, audit_plugin.risks, "ollama"
         )
         assert result == []
@@ -133,6 +136,44 @@ class TestRecordVerdictsIndexing:
         audit_plugin._record_verdicts([v], generation_id=None)
         assert v in audit_plugin.all_verdicts
         assert audit_plugin.verdicts_by_generation_id == {}
+
+
+class TestObserveOnlyHooksIndexByGenerationId:
+    """Regression for the 3-site bug: check_input/check_output/enforce_output
+    must route through _record_verdicts, not a raw unlocked .extend()."""
+
+    @pytest.mark.asyncio
+    async def test_check_input_indexes_verdicts_by_generation_id(self, audit_plugin):
+        from mellea_skills_compiler.plugins import guardian as gmod
+
+        v = GuardianVerdict(risk="harm", label=GuardianScore.YES, raw_output="in", hook_stage=HookStage.PRE)
+        payload = SimpleNamespace(generation_id="gen-ci")
+        with patch.object(gmod, "_run_guardian_pre_checks", new=AsyncMock(return_value=[v])):
+            await audit_plugin.check_input(payload, ctx=None)
+        assert v in audit_plugin.all_verdicts
+        assert audit_plugin.verdicts_by_generation_id.get("gen-ci") == [v]
+
+    @pytest.mark.asyncio
+    async def test_check_output_indexes_verdicts_by_generation_id(self, audit_plugin):
+        from mellea_skills_compiler.plugins import guardian as gmod
+
+        v = GuardianVerdict(risk="harm", label=GuardianScore.YES, raw_output="out", hook_stage=HookStage.POST)
+        payload = SimpleNamespace(generation_id="gen-co")
+        with patch.object(gmod, "_run_guardian_post_checks", new=AsyncMock(return_value=[v])):
+            await audit_plugin.check_output(payload, ctx=None)
+        assert v in audit_plugin.all_verdicts
+        assert audit_plugin.verdicts_by_generation_id.get("gen-co") == [v]
+
+    @pytest.mark.asyncio
+    async def test_enforce_output_indexes_verdicts_by_generation_id(self, enforce_plugin):
+        from mellea_skills_compiler.plugins import guardian as gmod
+
+        v = GuardianVerdict(risk="harm", label=GuardianScore.NO, raw_output="out", hook_stage=HookStage.POST)
+        payload = SimpleNamespace(generation_id="gen-eo")
+        with patch.object(gmod, "_run_guardian_post_checks", new=AsyncMock(return_value=[v])):
+            await enforce_plugin.enforce_output(payload, ctx=None)
+        assert v in enforce_plugin.all_verdicts
+        assert enforce_plugin.verdicts_by_generation_id.get("gen-eo") == [v]
 
 
 class TestConcurrency:

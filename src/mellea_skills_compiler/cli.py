@@ -12,6 +12,7 @@ from mellea_skills_compiler.enums import (
     InferenceEngineType,
 )
 from mellea_skills_compiler.toolkit.logging import configure_logger
+from mellea_skills_compiler.toolkit.profiling import profile_if_enabled
 
 
 app: Typer = typer.Typer(no_args_is_help=True)
@@ -35,6 +36,9 @@ def main() -> None:
 
     Transform AI agent skill specifications into certified, governed pipelines
     with comprehensive risk analysis and compliance reporting.
+
+    Environment variables:
+      MELLEA_PROFILE=1  Enable profiling for compile/run/certify (captures worker threads; outputs per-thread summary and top 40 functions by total time).
     """
 
 
@@ -42,6 +46,7 @@ def main() -> None:
     help="Melleafy Compile: Decompose an Agent Spec into Mellea Code",
     epilog="Compile Mellea skill specification into a Mellea pipeline. Use --backend to select compilation backend [claude, bob].",
 )
+@profile_if_enabled
 def compile(
     ctx: typer.Context,
     spec_path: Annotated[
@@ -184,6 +189,7 @@ def validate(
 
 
 @app.command(help="Run Mellea Skill Pipeline")
+@profile_if_enabled
 def run(
     ctx: typer.Context,
     pipeline_dir: Annotated[
@@ -320,6 +326,7 @@ def ingest(
 
 
 @app.command(help="Run Full Certification Pipeline for Mellea skill")
+@profile_if_enabled
 def certify(
     ctx: typer.Context,
     pipeline_dir: Annotated[

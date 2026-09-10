@@ -81,3 +81,21 @@ def test_id_map_and_positional_lookup_return_distinguishable_results(audit_setup
         "positional-fallback should return the last-recorded verdict; if this "
         "test fails, the fallback stopped being distinguishable from the id-map"
     )
+
+
+def test_lookup_returns_empty_not_positional_when_id_present_but_unpopulated(audit_setup, caplog):
+    """generation_id present but never recorded — must return [], never the
+    positional tail (which would misattribute an unrelated generation's verdict).
+    """
+    guardian_plugin, audit_plugin = audit_setup
+    v_other = GuardianVerdict(risk="harm", label=GuardianScore.YES, raw_output="other", hook_stage=HookStage.POST)
+    guardian_plugin._record_verdicts([v_other], generation_id="gen-other")
+
+    with caplog.at_level("WARNING"):
+        result = audit_plugin._lookup_verdicts_by_generation_id("gen-missing")
+
+    assert result == [], (
+        "present-but-unpopulated generation_id must return [], not silently "
+        "fall back to the positional tail and misattribute gen-other's verdict"
+    )
+    assert any("gen-missing" in r.message for r in caplog.records)
