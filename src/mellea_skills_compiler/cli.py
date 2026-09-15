@@ -7,6 +7,7 @@ from typing import Annotated, Literal, Optional
 import typer
 from typer.main import Typer
 
+import mellea_skills_compiler
 from mellea_skills_compiler.enums import (
     GuardianMode,
     InferenceEngineType,
@@ -457,6 +458,12 @@ def export(
     except Exception as e:
         LOGGER.error(f"Export command failed - {str(e)}")
         raise typer.Exit(code=1)
+
+
+@app.command(help="Mellea Skills Compiler Version")
+def version(ctx: typer.Context):
+    """Print the installed mellea-skills-compiler package version."""
+    print(mellea_skills_compiler.__version__)
 
 
 if __name__ == "__main__":

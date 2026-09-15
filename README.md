@@ -8,6 +8,7 @@
   <a href="#what-is-mellea-skills-compiler">What</a> &middot;
   <a href="#why">Why</a> &middot;
   <a href="#how-it-works">How</a> &middot;
+  <a href="#installation">Installation</a> &middot;
   <a href="#quick-start">Quick Start</a> &middot;
   <a href="#example-outputs">Examples</a> &middot;
   <a href="#next-steps">Next Steps</a> &middot;
@@ -67,7 +68,50 @@ agent specification        spec → typed pipeline                   Guardian ho
 
 **Step 2: Certify** — A single `mellea-skills certify` invocation performs end-to-end governance: AI Atlas Nexus identifies applicable risks from Granite Guardian, NIST AI RMF, and Credo UCF taxonomies and emits a `PolicyManifest`; Guardian hooks configured from that manifest monitor every `m.instruct()` call as fixtures execute; each governance requirement is classified as AUTOMATED, PARTIAL, or MANUAL based on runtime evidence; a compliance report and audit trail are written alongside the compiled pipeline.
 
-## Install
+## Installation
+
+**Jump to:** [Docker](#docker) · [Manual](#manual) · [Claude Setup](#claude-setup) · [IBM Bob](#ibm-bob) · [Project Code](#project-code)
+
+### Docker
+
+**Prerequisites:** Docker installed and running.
+
+**1. Build the image**
+
+```bash
+docker build -t mellea-skills-compiler:latest .
+```
+
+This will:
+- Install Claude Code (into `/home/user/.local/bin`)
+- Install IBM Bob shell (into `/user/local/bin`)
+- Install mellea-skills-compiler binary (`/usr/local/bin/mellea-skills`)
+- Copy `.claude/` and `.bob/` config into the container user's home directory.
+
+**2. Run the container**
+
+ - OLLAMA_HOST (e.g. `http://host.docker.internal:11434`) must be accessible from inside the container.
+ - Either ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY is required.
+
+```bash
+docker run -it \
+  -e ANTHROPIC_BASE_URL \
+  -e ANTHROPIC_AUTH_TOKEN \
+  -e ANTHROPIC_API_KEY \
+  -e BOB_API_KEY \
+  -e OLLAMA_HOST=http://host.docker.internal:11434 \
+  -v ./skills:/skills \
+  mellea-skills-compiler:latest
+```
+
+A few things to note about this command:
+
+- **`-v ./skills:/skills`** is a *volume mount*: it links the `skills` folder in your current directory on your machine to the path `/skills` inside the container. Any files you place in `./skills` are immediately visible inside the container at `/skills`, and vice versa.
+- The container process runs as a non-root user (UID 1001) for security. If you encounter permission errors when writing output files back to a mounted directory, ensure the directory on your host is writable by UID 1001 (`chmod o+w ./skills`).
+
+Please follow the [**Quick Start**](#quick-start) guide below on how to run Mellea Skills Compiler.
+
+### Manual
 
 Mellea Skills Compiler requires a backend to compile skills. You can use either **Claude Code** or **IBM Bob** — pick whichever you have access to and follow the corresponding setup below.
 

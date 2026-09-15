@@ -1,0 +1,17 @@
+.git
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+dist
+*.egg-info
+node_modules
+examples
+skills
+.vscode
+.github
+.pdm-build
+docs
+tests
