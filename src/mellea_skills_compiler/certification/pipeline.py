@@ -179,6 +179,11 @@ def run_pipeline(
                             guardian_model, inference_engine_type
                         ),
                     )
+                    import asyncio
+                    from mellea.plugins.manager import initialize_plugins
+
+                    asyncio.run(initialize_plugins(timeout=30))
+
                     guardian_plugin.register()
                     audit_plugin = AuditTrailPlugin(
                         log_path=run_dir / "audit_trail.jsonl",
@@ -360,6 +365,7 @@ def full_pipeline(
 
         # ── Step 3: Configure plugins from manifest ───────────────────────
         print()
+        
         LOGGER.info(
             "Configuring Guardian hooks from Policy Manifest...",
         )
@@ -368,7 +374,13 @@ def full_pipeline(
             manifest.risks,
             InferenceService.guardian_engine(guardian_model, inference_engine_type),
         )
+        import asyncio
+        from mellea.plugins.manager import initialize_plugins
+
+        asyncio.run(initialize_plugins(timeout=30)) 
+        
         guardian_plugin.register()
+        
         audit_plugin = AuditTrailPlugin(
             log_path=audit_dir / "audit_trail.jsonl", guardian_plugin=guardian_plugin
         )
