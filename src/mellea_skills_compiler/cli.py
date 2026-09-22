@@ -45,7 +45,7 @@ def main() -> None:
 
 @app.command(
     help="Melleafy Compile: Decompose an Agent Spec into Mellea Code",
-    epilog="Compile Mellea skill specification into a Mellea pipeline. Use --backend to select compilation backend [claude, bob].",
+    epilog="Compile Mellea skill specification into a Mellea pipeline. Use --backend to select compilation backend [claude, bob, pi].",
 )
 @profile_if_enabled
 def compile(
@@ -115,7 +115,7 @@ def compile(
         typer.Option(
             "--backend",
             "-b",
-            help="Compilation backend to use ['claude', 'bob'].",
+            help="Compilation backend to use ['claude', 'bob', 'pi'].",
         ),
     ] = "claude",
 ) -> None:
