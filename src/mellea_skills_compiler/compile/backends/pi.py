@@ -277,8 +277,9 @@ class PiBackend:
             f"{command} {spec_path}",
             "--mode",
             "json",
+            "--approve",
             "--tools",
-            "Read,Write,Edit",
+            "read,write,edit",
         ]
 
         if model:
