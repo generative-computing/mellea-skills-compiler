@@ -64,13 +64,13 @@ agent specification        spec → typed pipeline                   Guardian ho
 
 **Step 1: Compile** — A `.md` specification is decomposed into a typed Mellea pipeline package: Pydantic schemas, `@generative` extraction slots, requirement validators, and multi-phase orchestration code. Two compilation paths are available: the `mellea-skills compile` CLI command, or the `/mellea-fy` command inside Claude Code. See [`examples/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/examples/) for pre-compiled examples.
 
-> **Backend Abstraction** — The compilation process uses a pluggable backend architecture. Currently, Claude Code and IBM Bob backends are supported (via `--backend claude` or `--backend bob`). The abstraction layer enables future support for alternative local LLMs.
+> **Backend Abstraction** — The compilation process uses a pluggable backend architecture. Currently, Claude Code, IBM Bob, and pi backends are supported (via `--backend claude`, `--backend bob`, or `--backend pi`). The abstraction layer enables future support for alternative local LLMs.
 
 **Step 2: Certify** — A single `mellea-skills certify` invocation performs end-to-end governance: AI Atlas Nexus identifies applicable risks from Granite Guardian, NIST AI RMF, and Credo UCF taxonomies and emits a `PolicyManifest`; Guardian hooks configured from that manifest monitor every `m.instruct()` call as fixtures execute; each governance requirement is classified as AUTOMATED, PARTIAL, or MANUAL based on runtime evidence; a compliance report and audit trail are written alongside the compiled pipeline.
 
 ## Installation
 
-**Jump to:** [Docker](#docker) · [Manual](#manual) · [Claude Setup](#claude-setup) · [IBM Bob](#ibm-bob) · [Project Code](#project-code)
+**Jump to:** [Docker](#docker) · [Manual](#manual) · [Claude Setup](#claude-setup) · [IBM Bob](#ibm-bob) · [Pi Setup](#pi-setup) · [Project Code](#project-code)
 
 ### Docker
 
@@ -113,7 +113,7 @@ Please follow the [**Quick Start**](#quick-start) guide below on how to run Mell
 
 ### Manual
 
-Mellea Skills Compiler requires a backend to compile skills. You can use either **Claude Code** or **IBM Bob** — pick whichever you have access to and follow the corresponding setup below.
+Mellea Skills Compiler requires a backend to compile skills. You can use **Claude Code**, **IBM Bob**, or **pi** — pick whichever you have access to and follow the corresponding setup below.
 
 ### Claude Setup
 
@@ -145,6 +145,22 @@ Mellea Skills Compiler requires a backend to compile skills. You can use either 
 
       ```
       export BOB_API_KEY = ""
+      ```
+
+### Pi Setup
+
+  1. The pi CLI is required to compile a Mellea skill with the pi backend. Install it via:
+
+      ```
+      npm install -g @earendil-works/pi-coding-agent
+      ```
+
+  2. Set relevant provider credentials for pi (e.g. via `pi auth` / `/login`, or an environment variable).
+
+      For example, if you have an ANTHROPIC_API_KEY
+
+      ```
+      export ANTHROPIC_API_KEY = ""
       ```
 
 ### Project Code
@@ -244,13 +260,16 @@ mellea-skills compile <Your-local-path>/skills/weather/spec.md
 mellea-skills compile <Your-local-path>/skills/weather
 ```
 
-The `--backend` flag allows you to specify which compilation backend to use (currently `claude` and `bob` are supported):
+The `--backend` flag allows you to specify which compilation backend to use (currently `claude`, `bob`, and `pi` are supported):
 ```bash
 # Explicit backend selection as claude
 mellea-skills compile <Your-local-path>/skills/weather/spec.md --backend claude
 
 # Explicit backend selection as bob
 mellea-skills compile <Your-local-path>/skills/weather/spec.md --backend bob
+
+# Explicit backend selection as pi
+mellea-skills compile <Your-local-path>/skills/weather/spec.md --backend pi
 
 # Uses 'claude' by default
 mellea-skills compile <Your-local-path>/skills/weather/spec.md
