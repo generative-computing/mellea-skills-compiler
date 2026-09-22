@@ -15,6 +15,18 @@ class BOBMessageType(StrEnum):
     RESULT = auto()
 
 
+class PiMessageType(StrEnum):
+    SESSION = auto()
+    AGENT_START = auto()
+    TURN_START = auto()
+    MESSAGE_START = auto()
+    MESSAGE_UPDATE = auto()
+    MESSAGE_END = auto()
+    TURN_END = auto()
+    AGENT_END = auto()
+    AGENT_SETTLED = auto()
+
+
 class InferenceEngineType(Enum):
     """Enum to contain possible values for inference engine types"""
 
