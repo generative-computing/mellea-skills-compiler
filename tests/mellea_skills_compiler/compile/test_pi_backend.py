@@ -231,6 +231,20 @@ class TestHelperMethods:
         assert "json" in argv
         assert any("/mellea-fy" in part and str(spec_path) in part for part in argv)
 
+    def test_build_pi_argv_includes_approve_flag(self, backend, tmp_path):
+        spec_path = tmp_path / "spec.md"
+        argv = backend._build_pi_argv(spec_path=spec_path, repair_mode=False, model=None)
+
+        assert "--approve" in argv
+
+    def test_build_pi_argv_uses_lowercase_tool_names(self, backend, tmp_path):
+        spec_path = tmp_path / "spec.md"
+        argv = backend._build_pi_argv(spec_path=spec_path, repair_mode=False, model=None)
+
+        assert "--tools" in argv
+        tools_index = argv.index("--tools")
+        assert argv[tools_index + 1] == "read,write,edit"
+
     def test_build_pi_argv_repair_mode(self, backend, tmp_path):
         spec_path = tmp_path / "spec.md"
         argv = backend._build_pi_argv(spec_path=spec_path, repair_mode=True, model=None)
