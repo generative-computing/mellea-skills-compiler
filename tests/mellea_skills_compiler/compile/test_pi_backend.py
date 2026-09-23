@@ -127,6 +127,63 @@ class TestValidateEnvironment:
         assert is_valid is False
         assert error is not None
 
+    @patch("mellea_skills_compiler.compile.backends.pi.shutil.which")
+    @patch("mellea_skills_compiler.compile.backends.pi.subprocess.run")
+    def test_validate_environment_uses_default_provider(self, mock_run, mock_which, backend):
+        mock_which.return_value = "/usr/local/bin/pi"
+        mock_run.return_value = Mock(
+            returncode=0,
+            stdout=json.dumps(
+                {"status": "ready", "provider": "anthropic", "authType": "api_key"}
+            ),
+            stderr="",
+        )
+
+        backend.validate_environment()
+
+        args = mock_run.call_args[0][0]
+        assert args == ["pi", "auth", "check", "--provider", "anthropic", "--json"]
+
+    @patch("mellea_skills_compiler.compile.backends.pi.shutil.which")
+    @patch("mellea_skills_compiler.compile.backends.pi.subprocess.run")
+    def test_validate_environment_uses_supplied_provider(self, mock_run, mock_which, backend):
+        mock_which.return_value = "/usr/local/bin/pi"
+        mock_run.return_value = Mock(
+            returncode=0,
+            stdout=json.dumps(
+                {"status": "ready", "provider": "ollama", "authType": "none"}
+            ),
+            stderr="",
+        )
+
+        backend.validate_environment(provider="ollama")
+
+        args = mock_run.call_args[0][0]
+        assert args == ["pi", "auth", "check", "--provider", "ollama", "--json"]
+
+    @patch("mellea_skills_compiler.compile.backends.pi.shutil.which")
+    @patch("mellea_skills_compiler.compile.backends.pi.subprocess.run")
+    def test_validate_environment_not_ready_reports_supplied_provider(
+        self, mock_run, mock_which, backend
+    ):
+        mock_which.return_value = "/usr/local/bin/pi"
+        mock_run.return_value = Mock(
+            returncode=1,
+            stdout=json.dumps(
+                {
+                    "status": "not_ready",
+                    "provider": "ollama",
+                    "reason": "credentials_not_configured",
+                }
+            ),
+            stderr="",
+        )
+
+        is_valid, error = backend.validate_environment(provider="ollama")
+
+        assert is_valid is False
+        assert "provider 'ollama'" in error
+
 
 class TestCompileMethod:
     """Test the compile() workflow."""
@@ -259,3 +316,37 @@ class TestHelperMethods:
 
         assert "--model" in argv
         assert "anthropic/claude-opus-4-7" in argv
+
+    def test_build_pi_argv_with_provider(self, backend, tmp_path):
+        spec_path = tmp_path / "spec.md"
+        argv = backend._build_pi_argv(
+            spec_path=spec_path, repair_mode=False, model=None, provider="ollama"
+        )
+
+        assert "--provider" in argv
+        provider_idx = argv.index("--provider")
+        assert argv[provider_idx + 1] == "ollama"
+
+    def test_build_pi_argv_without_provider_omits_flag(self, backend, tmp_path):
+        spec_path = tmp_path / "spec.md"
+        argv = backend._build_pi_argv(
+            spec_path=spec_path, repair_mode=False, model=None, provider=None
+        )
+
+        assert "--provider" not in argv
+
+    def test_build_pi_argv_with_provider_and_model(self, backend, tmp_path):
+        spec_path = tmp_path / "spec.md"
+        argv = backend._build_pi_argv(
+            spec_path=spec_path,
+            repair_mode=False,
+            model="llama3",
+            provider="ollama",
+        )
+
+        assert "--provider" in argv
+        assert "--model" in argv
+        provider_idx = argv.index("--provider")
+        model_idx = argv.index("--model")
+        assert argv[provider_idx + 1] == "ollama"
+        assert argv[model_idx + 1] == "llama3"

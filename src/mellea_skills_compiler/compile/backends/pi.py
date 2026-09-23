@@ -98,6 +98,7 @@ class PiBackend:
                 spec_path=context.spec_path,
                 repair_mode=context.repair_mode,
                 model=context.model,
+                provider=context.provider,
             )
 
             start_time = time.time()
@@ -201,12 +202,22 @@ class PiBackend:
                 except subprocess.TimeoutExpired:
                     process.kill()
 
-    def validate_environment(self) -> tuple[bool, Optional[str]]:
+    def validate_environment(
+        self, provider: Optional[str] = None
+    ) -> tuple[bool, Optional[str]]:
         """Check if pi CLI and credentials are available.
+
+        Args:
+            provider: Provider to check credentials for (e.g. "anthropic",
+                "ollama"). Defaults to "anthropic" when not supplied, matching
+                the other two backends' effective default — this is
+                intentionally NOT pi's own CLI-level default of "google".
 
         Returns:
             A tuple of (is_valid, error_message).
         """
+        effective_provider = provider or "anthropic"
+
         if shutil.which("pi") is None:
             return False, (
                 "pi CLI not found in PATH. "
@@ -219,7 +230,7 @@ class PiBackend:
         ):
             try:
                 result = subprocess.run(
-                    ["pi", "auth", "check", "--provider", "anthropic", "--json"],
+                    ["pi", "auth", "check", "--provider", effective_provider, "--json"],
                     capture_output=True,
                     text=True,
                     timeout=30,
@@ -240,8 +251,8 @@ class PiBackend:
         if result.returncode != 0 or status.get("status") != "ready":
             reason = status.get("reason", "unknown reason")
             return False, (
-                f"Pi credentials are not configured for provider 'anthropic' ({reason}). "
-                "Run 'pi auth' or configure ANTHROPIC_API_KEY."
+                f"Pi credentials are not configured for provider '{effective_provider}' ({reason}). "
+                f"Run 'pi auth' or configure the appropriate credentials for '{effective_provider}'."
             )
 
         return True, None
@@ -259,6 +270,7 @@ class PiBackend:
         spec_path: Path,
         repair_mode: bool,
         model: Optional[str],
+        provider: Optional[str] = None,
     ) -> list[str]:
         """Build the command-line arguments for invoking pi.
 
@@ -266,6 +278,10 @@ class PiBackend:
             spec_path: Path to the skill specification file
             repair_mode: Whether to use /mellea-fy-repair instead of /mellea-fy
             model: Optional model identifier to pass via --model
+            provider: Optional provider identifier to pass via --provider.
+                When None, --provider is omitted entirely and pi falls back
+                to whatever --model's "provider/id" prefix implies, or its
+                own CLI default if neither is set.
 
         Returns:
             List of command-line arguments ready for subprocess.Popen
@@ -281,6 +297,9 @@ class PiBackend:
             "--tools",
             "read,write,edit",
         ]
+
+        if provider:
+            pi_argv.extend(["--provider", provider])
 
         if model:
             pi_argv.extend(["--model", model])
