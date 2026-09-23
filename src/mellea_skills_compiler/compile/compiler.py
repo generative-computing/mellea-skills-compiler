@@ -202,6 +202,7 @@ def compile(
     skill_backend: Optional[str] = None,
     skill_model: Optional[str] = None,
     backend: str = "claude",
+    provider: Optional[str] = None,
 ) -> None:
     """Compile an agent specification into a Mellea skill package.
 
@@ -240,6 +241,10 @@ def compile(
         backend (str, optional): Compilation backend identifier used to look up
             the backend implementation from the global registry (e.g.
             ``"claude"``, ``"bob"``). Defaults to "claude".
+        provider (Optional[str], optional): Provider identifier passed to the
+            *compilation* backend when it supports provider selection
+            (pi-only currently, e.g. "anthropic", "ollama"). Ignored by
+            backends that don't support it. Defaults to None.
 
     Raises:
         RuntimeError: If the requested backend is unavailable or if compilation
@@ -252,7 +257,10 @@ def compile(
 
     # Get the backend implementation and validate its environment
     backend_impl: CompilationBackend = global_registry.get_backend(identifier=backend)
-    is_valid, error_msg = backend_impl.validate_environment()
+    if backend == "pi":
+        is_valid, error_msg = backend_impl.validate_environment(provider=provider)
+    else:
+        is_valid, error_msg = backend_impl.validate_environment()
     if not is_valid:
         raise RuntimeError(f"Provided backend '{backend}' not available - {error_msg}")
 
@@ -381,6 +389,7 @@ def compile(
         skill_model=chosen_model_id,
         defaults_source=defaults_source,
         refresh_cache=refresh_cache,
+        provider=provider,
     )
 
     result: CompilationResult = backend_impl.compile(context)

@@ -271,6 +271,9 @@ mellea-skills compile <Your-local-path>/skills/weather/spec.md --backend bob
 # Explicit backend selection as pi
 mellea-skills compile <Your-local-path>/skills/weather/spec.md --backend pi
 
+# --provider is pi-only and defaults to 'anthropic' when omitted
+mellea-skills compile <Your-local-path>/skills/weather/spec.md --backend pi --provider ollama --model llama3
+
 # Uses 'claude' by default
 mellea-skills compile <Your-local-path>/skills/weather/spec.md
 ```
