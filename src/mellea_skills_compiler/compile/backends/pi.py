@@ -30,6 +30,7 @@ from mellea_skills_compiler.compile.backend import (
     CompilationContext,
     CompilationResult,
 )
+from mellea_skills_compiler.compile.claude_directives import build_pi_system_prompt
 from mellea_skills_compiler.enums import PiMessageType
 from mellea_skills_compiler.toolkit.logging import configure_logger
 
@@ -81,24 +82,56 @@ class PiBackend:
     def compile(self, context: CompilationContext) -> CompilationResult:
         """Execute the full compilation workflow using pi.
 
+        If `context.repair_mode` is True but no prior compilation exists
+        (`intermediate/classification.json` is absent), this falls back to a
+        fresh `/mellea-fy` run instead of `/mellea-fy-repair` — pi's own
+        agentic judgment sometimes pauses to ask for confirmation when the
+        repair template's Step-0 routing entry names `/mellea-fy-classify`
+        as the resume sub-command in one-shot mode, rather than proceeding
+        automatically the way the template instructs. Requesting `/mellea-fy`
+        directly for this case sidesteps that pause; `ClaudeCodeBackend`
+        follows the same template correctly and needs no such workaround.
+
         Args:
             context: Compilation parameters including paths, model, timeout, etc.
 
         Returns:
             CompilationResult with success status, package directory, and metadata.
+            Also fails if pi exits 0 without producing
+            `intermediate/classification.json` — a clean exit with no output
+            (e.g. pi stopped to ask a question in one-shot mode) is not success.
         """
         process = None
         process_exited = False
         try:
+            classification_path = context.intermediate_dir / "classification.json"
+            never_compiled = not classification_path.exists()
+            effective_repair_mode = context.repair_mode and not never_compiled
+
+            if context.repair_mode and never_compiled:
+                console.print(
+                    "\n[yellow]No prior compilation found for this skill "
+                    "(intermediate/classification.json missing) — running a "
+                    "fresh /mellea-fy compile instead of /mellea-fy-repair.[/]\n"
+                )
+
             console.print(
-                f"\n[green]{'Repairing' if context.repair_mode else 'Compiling'} using {self.name()}\n"
+                f"\n[green]{'Repairing' if effective_repair_mode else 'Compiling'} using {self.name()}\n"
+            )
+
+            system_prompt = build_pi_system_prompt(
+                context.skill_backend or "anthropic",
+                context.skill_model or context.model or "",
+                context.defaults_source,
+                context.package_dir,
             )
 
             pi_argv = self._build_pi_argv(
                 spec_path=context.spec_path,
-                repair_mode=context.repair_mode,
+                repair_mode=effective_repair_mode,
                 model=context.model,
                 provider=context.provider,
+                system_prompt=system_prompt,
             )
 
             start_time = time.time()
@@ -179,6 +212,18 @@ class PiBackend:
                     success=False,
                     package_dir=context.package_dir,
                     error_message=f"Mellea-fy skill compilation failed with return code {return_code}. Error: {' '.join(stderr_lines)}",
+                )
+
+            if not classification_path.exists():
+                return CompilationResult(
+                    success=False,
+                    package_dir=context.package_dir,
+                    error_message=(
+                        "Pi exited with return code 0 but produced no "
+                        f"{classification_path} — the run likely stopped early "
+                        "(e.g. pi asked a clarifying question instead of "
+                        "completing) rather than compiling the skill."
+                    ),
                 )
 
             return CompilationResult(
@@ -271,6 +316,7 @@ class PiBackend:
         repair_mode: bool,
         model: Optional[str],
         provider: Optional[str] = None,
+        system_prompt: Optional[str] = None,
     ) -> list[str]:
         """Build the command-line arguments for invoking pi.
 
@@ -282,6 +328,10 @@ class PiBackend:
                 When None, --provider is omitted entirely and pi falls back
                 to whatever --model's "provider/id" prefix implies, or its
                 own CLI default if neither is set.
+            system_prompt: Optional text appended via --append-system-prompt,
+                mirroring ClaudeCodeBackend's use of the same flag to tell the
+                LLM to run all steps without pausing and to emit
+                *_emission.json instead of writing wrapper-rendered paths.
 
         Returns:
             List of command-line arguments ready for subprocess.Popen
@@ -297,6 +347,9 @@ class PiBackend:
             "--tools",
             "read,write,edit",
         ]
+
+        if system_prompt:
+            pi_argv.extend(["--append-system-prompt", system_prompt])
 
         if provider:
             pi_argv.extend(["--provider", provider])
