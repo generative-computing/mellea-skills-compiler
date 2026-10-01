@@ -85,13 +85,18 @@ class AuditTrailPlugin(
             verdicts = self.guardian_plugin.verdicts_by_generation_id.get(
                 generation_id, []
             )
-            if verdicts:
-                return list(verdicts)
-        else:
-            LOGGER.debug(
-                "audit trail: falling back to positional verdict lookup "
-                "(no generation_id on payload). Expected on <0.7 mellea only."
-            )
+            if not verdicts:
+                LOGGER.warning(
+                    "audit trail: no verdicts indexed for generation_id=%s — "
+                    "returning empty rather than falling back to positional "
+                    "lookup.",
+                    generation_id,
+                )
+            return list(verdicts)
+        LOGGER.debug(
+            "audit trail: falling back to positional verdict lookup "
+            "(no generation_id on payload). Expected on <0.7 mellea only."
+        )
         # Legacy fallback for payloads without a generation_id.
         n = len(getattr(self.guardian_plugin, "risks", []) or []) or 1
         return list(self.guardian_plugin.all_verdicts[-n:])

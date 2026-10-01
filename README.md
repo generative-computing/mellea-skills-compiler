@@ -291,23 +291,34 @@ See [`mellea-fy/README.md`](https://github.com/generative-computing/mellea-skill
 
 **Using pi**
 
-If you use the [pi](https://pi.dev) coding agent, install the `pi/` extension
-package in this repo to run `compile`, `validate`, `run`, and `certify` as
-slash commands from inside a pi session (it shells out to the same
-`mellea-skills` CLI installed above — install it first):
+If you use the [pi](https://pi.dev) coding agent, install the
+`extensions/pi/` extension package in this repo to run `compile`, `validate`,
+`run`, and `certify` as slash commands from inside a pi session (it shells out
+to the same `mellea-skills` CLI installed above — install it first).
+
+Install pi (if you don't have it), install the extension, then start a pi
+session from the repo root:
 
 ```bash
-pi install ./pi
+curl -fsSL https://pi.dev/install.sh | sh   # or: npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+pi install ./extensions/pi
+pi
 ```
 
+Then, **inside the pi session** (these are pi slash commands, not shell
+commands):
+
 ```
-/mellea-compile <Your-local-path>/skills/weather/spec.md
+/mellea-compile skills/weather/spec.md
+/mellea-validate examples/weather/weather_mellea
+/mellea-run examples/weather/weather_mellea --input "What's the weather like in Dublin?"
+/mellea-certify examples/weather/weather_mellea
 ```
 
 This is a different feature from the `pi` **export target** below (compiled
 skill → pi-loadable `SKILL.md` bundle) — this extension runs the compiler
 *from inside* pi, the export target instead packages an already-compiled
-skill *for* pi. See [`pi/README.md`](pi/README.md) for the full command
+skill *for* pi. See [`extensions/pi/README.md`](extensions/pi/README.md) for the full command
 list, flags, and known limitations.
 
 ### Run Skill Pipeline

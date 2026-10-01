@@ -42,6 +42,7 @@ dependencies = [
 tests = ["pytest", "pytest-cov", "pytest-asyncio"]
 secrets = ["detect-secrets @ git+https://github.com/ibm/detect-secrets.git@master#egg=detect-secrets"]
 docs = ["zensical", "mkdocstrings-python"]
+profile = ["yappi>=1.6,<2"]
 
 [tool.pdm.version]
 source = "file"
@@ -52,3 +53,6 @@ mellea-skills = "mellea_skills_compiler.cli:app"
 
 [tool.pdm.build]
 package-dir = "src"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

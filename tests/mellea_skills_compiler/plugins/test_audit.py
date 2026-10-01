@@ -179,16 +179,19 @@ class TestAuditTrailHooks:
         from mellea_skills_compiler.models import GuardianVerdict
 
         # Add verdicts to guardian plugin
-        audit_plugin.guardian_plugin.all_verdicts = [
+        verdicts = [
             GuardianVerdict(risk="jailbreak", label="No", raw_output="<score>no</score>", hook_stage=HookStage.POST),
             GuardianVerdict(risk="harm", label="No", raw_output="<score>no</score>", hook_stage=HookStage.POST),
         ]
+        generation_id = "gen-test-1"
+        audit_plugin.guardian_plugin._record_verdicts(verdicts, generation_id=generation_id)
 
         payload = MagicMock()
         payload.model_output = MagicMock(value="Test output")
         payload.latency_ms = 150
         payload.session_id = "session-1"
         payload.request_id = "req-1"
+        payload.generation_id = generation_id
 
         ctx = MagicMock()
 
@@ -207,16 +210,19 @@ class TestAuditTrailHooks:
         from mellea_skills_compiler.models import GuardianVerdict
 
         # Add verdicts to guardian plugin with one risk detected
-        audit_plugin.guardian_plugin.all_verdicts = [
+        verdicts = [
             GuardianVerdict(risk="jailbreak", label="Yes", raw_output="<score>yes</score>", hook_stage=HookStage.POST),
             GuardianVerdict(risk="harm", label="No", raw_output="<score>no</score>", hook_stage=HookStage.POST),
         ]
+        generation_id = "gen-test-2"
+        audit_plugin.guardian_plugin._record_verdicts(verdicts, generation_id=generation_id)
 
         payload = MagicMock()
         payload.model_output = MagicMock(value="Test output")
         payload.latency_ms = 200
         payload.session_id = "session-1"
         payload.request_id = "req-1"
+        payload.generation_id = generation_id
 
         ctx = MagicMock()
 
@@ -393,9 +399,11 @@ class TestAuditTrailSummary:
         from mellea_skills_compiler.models import GuardianVerdict
 
         # Add verdict with risk detected to guardian plugin
-        audit_plugin.guardian_plugin.all_verdicts = [
+        verdicts = [
             GuardianVerdict(risk="test", label="Yes", raw_output="<score>yes</score>", hook_stage=HookStage.POST),
         ]
+        generation_id = "gen-test-3"
+        audit_plugin.guardian_plugin._record_verdicts(verdicts, generation_id=generation_id)
 
         # Add generation with risk
         payload = MagicMock()
@@ -403,6 +411,7 @@ class TestAuditTrailSummary:
         payload.latency_ms = 100
         payload.session_id = "s1"
         payload.request_id = "r1"
+        payload.generation_id = generation_id
 
         asyncio.run(audit_plugin.log_post_call(payload, MagicMock()))
 

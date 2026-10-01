@@ -1,6 +1,6 @@
 # Mellea Skills Compiler — pi extension
 
-Run the [Mellea Skills Compiler](../README.md) `compile`, `validate`, `run`,
+Run the [Mellea Skills Compiler](../../README.md) `compile`, `validate`, `run`,
 and `certify` commands from inside a [pi](https://pi.dev) session, as
 `/mellea-compile`, `/mellea-validate`, `/mellea-run`, and `/mellea-certify`.
 
@@ -8,7 +8,7 @@ and `certify` commands from inside a [pi](https://pi.dev) session, as
 
 This extension shells out to the `mellea-skills` CLI — it does not bundle or
 install it. Before using `/mellea-compile` or `/mellea-certify`, install the
-compiler following the [main README's Install section](../README.md#installation)
+compiler following the [main README's Install section](../../README.md#installation)
 (`pip install -e .` from a clone of this repo), and confirm `mellea-skills`
 resolves on your `PATH`:
 
@@ -23,12 +23,58 @@ and points back here.
 
 ## Install
 
+### 1. Install pi
+
+If you don't already have the [pi](https://pi.dev) coding agent, install it
+with one of:
+
 ```bash
-pi install ./pi
+# macOS / Linux
+curl -fsSL https://pi.dev/install.sh | sh
+
+# or via npm
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 ```
 
-(from a local clone of this repo — see pi's package docs for git/npm source
-options once this package is published to a registry).
+Confirm it's on your `PATH`:
+
+```bash
+pi --version
+```
+
+### 2. Install this extension
+
+From the root of a local clone of this repo:
+
+```bash
+pi install ./extensions/pi
+```
+
+This adds the extension to your global pi settings, so it loads in every pi
+session. Use `pi install -l ./extensions/pi` to install it for this project
+only (`.pi/settings.json`) instead. Once this package is published, it will
+also be installable from a git/npm source — see pi's package docs.
+
+To try it for a single session without installing anything:
+
+```bash
+pi -e ./extensions/pi/extensions/mellea-skills.ts
+```
+
+### 3. Start a pi session
+
+The `/mellea-*` commands are pi slash commands, **not** shell commands —
+typing `/mellea-run ...` directly into zsh/bash will fail with
+`no such file or directory`. Start pi first, from the repo root so the
+example paths below resolve:
+
+```bash
+pi
+```
+
+Check that `mellea-skills.ts` is listed under `[Extensions]` in pi's startup
+banner, then type `/` in the session to see the four `/mellea-*` commands in
+autocomplete.
 
 ## Commands
 
@@ -46,6 +92,28 @@ options once this package is published to a registry).
   certify`. Flags are passed through as-is; see `mellea-skills certify
   --help` (`--enforce`, `--inference-engine`, `--risk-model`,
   `--guardian-model`, etc.).
+
+## Examples
+
+Run these **inside the pi session** started from the repo root (paths are
+relative to pi's working directory):
+
+```
+# Compile a spec into a Mellea pipeline (needs Claude Code configured)
+/mellea-compile skills/weather/spec.md
+
+# Validate a compiled skill (lints + fixture smoke-check)
+/mellea-validate examples/weather/weather_mellea
+
+# Run a compiled skill against a natural-language input
+/mellea-run examples/weather/weather_mellea --input "What's the weather like in Dublin?"
+
+# Certify a compiled skill (needs Ollama or vLLM running)
+/mellea-certify examples/weather/weather_mellea
+```
+
+Each command shows a status indicator while it runs, then a single
+notification with the CLI's output once it finishes.
 
 Command names are prefixed with `mellea-` to avoid colliding with other pi
 extensions or with pi's own built-in commands (pi ships a built-in `/export`,
