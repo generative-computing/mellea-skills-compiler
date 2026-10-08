@@ -46,6 +46,9 @@ class CompilationContext:
         skill_model: Runtime model for the compiled skill
         defaults_source: Source of where the backend values came from (e.g. "command-line", "file")
         refresh_cache: If True, force refresh of cached artifacts
+        provider: Optional provider identifier for the compilation backend
+            (pi-only; e.g. "anthropic", "ollama"). Ignored by backends that
+            don't support provider selection.
 
     Example:
         >>> context = CompilationContext(
@@ -67,6 +70,7 @@ class CompilationContext:
     skill_model: Optional[str] = None
     defaults_source: Optional[str] = None
     refresh_cache: bool = False
+    provider: Optional[str] = None
 
 
 @dataclass

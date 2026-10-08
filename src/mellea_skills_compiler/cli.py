@@ -45,7 +45,7 @@ def main() -> None:
 
 @app.command(
     help="Melleafy Compile: Decompose an Agent Spec into Mellea Code",
-    epilog="Compile Mellea skill specification into a Mellea pipeline. Use --backend to select compilation backend [claude, bob].",
+    epilog="Compile Mellea skill specification into a Mellea pipeline. Use --backend to select compilation backend [claude, bob, pi].",
 )
 @profile_if_enabled
 def compile(
@@ -115,9 +115,19 @@ def compile(
         typer.Option(
             "--backend",
             "-b",
-            help="Compilation backend to use ['claude', 'bob'].",
+            help="Compilation backend to use ['claude', 'bob', 'pi'].",
         ),
     ] = "claude",
+    provider: Annotated[
+        Optional[str],
+        typer.Option(
+            "--provider",
+            help="Provider for the pi compilation backend (e.g. 'anthropic', "
+            "'ollama'). Only used with --backend pi; ignored otherwise. "
+            "Defaults to 'anthropic' when --backend pi is used and this is "
+            "not set.",
+        ),
+    ] = None,
 ) -> None:
     """
     Compile Mellea skill specification into a Mellea pipeline using mellea-fy Claude command.
@@ -140,6 +150,7 @@ def compile(
             skill_backend=skill_backend,
             skill_model=skill_model,
             backend=backend,
+            provider=provider,
         )
     except Exception as e:
         LOGGER.error(str(e))
