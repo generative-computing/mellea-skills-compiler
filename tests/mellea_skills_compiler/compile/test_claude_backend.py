@@ -166,8 +166,10 @@ class TestCompileMethod:
     )
     @patch("mellea_skills_compiler.compile.backends.claude.build_system_prompt")
     @patch("mellea_skills_compiler.compile.backends.claude.write_compile_settings")
+    @patch("mellea_skills_compiler.compile.backends.claude.CompileMetadata.record_backend")
     def test_compile_success(
         self,
+        mock_record_backend,
         mock_write_settings,
         mock_build_prompt,
         mock_tcp_server,
@@ -295,8 +297,10 @@ class TestCompileMethod:
     @patch("mellea_skills_compiler.compile.backends.claude.build_system_prompt")
     @patch("mellea_skills_compiler.compile.backends.claude.write_compile_settings")
     @patch("mellea_skills_compiler.compile.backends.claude.time.time")
+    @patch("mellea_skills_compiler.compile.backends.claude.CompileMetadata.record_backend")
     def test_compile_timeout(
         self,
+        mock_record_backend,
         mock_time,
         mock_write_settings,
         mock_build_prompt,
@@ -375,8 +379,10 @@ class TestCompileMethod:
     )
     @patch("mellea_skills_compiler.compile.backends.claude.build_system_prompt")
     @patch("mellea_skills_compiler.compile.backends.claude.write_compile_settings")
+    @patch("mellea_skills_compiler.compile.backends.claude.CompileMetadata.record_backend")
     def test_compile_subprocess_error(
         self,
+        mock_record_backend,
         mock_write_settings,
         mock_build_prompt,
         mock_tcp_server,
@@ -450,8 +456,10 @@ class TestCompileMethod:
     )
     @patch("mellea_skills_compiler.compile.backends.claude.build_system_prompt")
     @patch("mellea_skills_compiler.compile.backends.claude.write_compile_settings")
+    @patch("mellea_skills_compiler.compile.backends.claude.CompileMetadata.record_backend")
     def test_compile_repair_mode(
         self,
+        mock_record_backend,
         mock_write_settings,
         mock_build_prompt,
         mock_tcp_server,

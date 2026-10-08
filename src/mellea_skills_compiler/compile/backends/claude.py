@@ -65,6 +65,7 @@ from mellea_skills_compiler.compile.claude_directives import (
     build_system_prompt,
     write_compile_settings,
 )
+from mellea_skills_compiler.compile.metadata import CompileMetadata
 from mellea_skills_compiler.compile.proxy import ContextMgmtStrippingProxy
 from mellea_skills_compiler.enums import ClaudeMessageType, InferenceModel
 
@@ -219,6 +220,11 @@ class ClaudeCodeBackend:
                         error_message=f"Please provide claude model via --model option.\nAvailable: {available_models}",
                     )
                 model = models[0]
+
+            # Record the chosen compilation backend and model in compile metadata
+            CompileMetadata.record_backend(
+                backend=self.identifier(), backend_model=model
+            )
 
             console.print(
                 f"\n[green]{'Repairing' if context.repair_mode else 'Compiling'} using {self.name()}, model:[/] {model}\n"
