@@ -115,8 +115,11 @@ class PiBackend:
                     "fresh /mellea-fy compile instead of /mellea-fy-repair.[/]\n"
                 )
 
+            provider_label = context.provider or "anthropic"
+            model_label = context.model or "default"
             console.print(
-                f"\n[green]{'Repairing' if effective_repair_mode else 'Compiling'} using {self.name()}\n"
+                f"\n[green]{'Repairing' if effective_repair_mode else 'Compiling'} using {self.name()}, "
+                f"provider:[/] {provider_label}[green], model:[/] {model_label}\n"
             )
 
             system_prompt = build_pi_system_prompt(
@@ -148,6 +151,7 @@ class PiBackend:
             )
 
             stderr_lines: List[str] = []
+            api_errors: List[str] = []
 
             def read_stderr():
                 if process.stderr:
@@ -186,6 +190,14 @@ class PiBackend:
                             event_type == PiMessageType.MESSAGE_END
                             and event.get("message", {}).get("role") == "assistant"
                         ):
+                            if event["message"].get("stopReason") == "error":
+                                api_errors.append(
+                                    str(
+                                        event["message"].get(
+                                            "errorMessage", "unknown error"
+                                        )
+                                    )
+                                )
                             content = event["message"].get("content", [])
                             text = "".join(
                                 block.get("text", "")
@@ -212,6 +224,16 @@ class PiBackend:
                     success=False,
                     package_dir=context.package_dir,
                     error_message=f"Mellea-fy skill compilation failed with return code {return_code}. Error: {' '.join(stderr_lines)}",
+                )
+
+            if api_errors:
+                return CompilationResult(
+                    success=False,
+                    package_dir=context.package_dir,
+                    error_message=(
+                        f"Pi reported an error from provider '{provider_label}': "
+                        f"{api_errors[-1]}"
+                    ),
                 )
 
             if not classification_path.exists():

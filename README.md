@@ -155,13 +155,23 @@ Mellea Skills Compiler requires a backend to compile skills. You can use **Claud
       npm install -g @earendil-works/pi-coding-agent
       ```
 
-  2. Set relevant provider credentials for pi (e.g. via `pi auth` / `/login`, or an environment variable).
-
-      For example, if you have an ANTHROPIC_API_KEY
+  2. Configure credentials for the provider pi will use. Either run `pi` and use `/login` to authenticate interactively, or set the provider's environment variable (below). Then verify the credentials resolve:
 
       ```
-      export ANTHROPIC_API_KEY = ""
+      pi auth check --provider <provider>   # prints "ready" when configured
       ```
+
+      Alternatively set the provider's environment variable. For Anthropic, any of these work:
+
+      ```
+      export ANTHROPIC_API_KEY=""         # API key
+      export ANTHROPIC_OAUTH_TOKEN=""     # OAuth token
+      export ANTHROPIC_AUTH_TOKEN=""      # bearer token (e.g. behind a gateway)
+      ```
+
+      See pi's `docs/providers.md` for other providers and for loading keys from a secret manager.
+
+  3. Without `--provider`, the compiler uses `anthropic`. Credentials must resolve for that provider (or the one you pass with `--provider`), otherwise compilation fails up front. If pi accepts the credentials but the provider rejects them (e.g. an invalid key or token type), the compile error now includes the provider's message.
 
 ### Project Code
 
