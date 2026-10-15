@@ -25,6 +25,9 @@
     "mellea-skills-cli": "file:ui",
     "ora": "^8.0.1"
   },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.2.0"
+  },
   "engines": {
     "node": ">=18.0.0"
   }
