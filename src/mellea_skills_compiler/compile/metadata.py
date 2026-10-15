@@ -71,13 +71,14 @@ class CompileMetadata:
 
     @classmethod
     def record_backend(
-        cls, backend: Literal["claude", "bob"], backend_model: Optional[str] = None
+        cls, backend: Literal["claude", "bob"], backend_model: Optional[str] = None, provider: Optional[str] = None
     ) -> None:
         inst = cls._require_init()
         inst._metadata["compiler"] = {
             "backend": backend,
             "version": _get_backend_version(backend),
             "model": backend_model,
+            "provider": provider,
         }
         inst._dump()
 

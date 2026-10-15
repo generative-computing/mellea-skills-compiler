@@ -31,6 +31,7 @@ from mellea_skills_compiler.compile.backend import (
     CompilationResult,
 )
 from mellea_skills_compiler.compile.claude_directives import build_pi_system_prompt
+from mellea_skills_compiler.compile.metadata import CompileMetadata
 from mellea_skills_compiler.enums import PiMessageType
 from mellea_skills_compiler.toolkit.logging import configure_logger
 
@@ -115,11 +116,17 @@ class PiBackend:
                     "fresh /mellea-fy compile instead of /mellea-fy-repair.[/]\n"
                 )
 
-            provider_label = context.provider or "anthropic"
-            model_label = context.model or "default"
+            pi_default_settings = _get_default_settings()
+            provider_label = context.provider or pi_default_settings.get("defaultProvider", "anthropic")
+            model_label = context.model or pi_default_settings.get("defaultModel", "default")
             console.print(
                 f"\n[green]{'Repairing' if effective_repair_mode else 'Compiling'} using {self.name()}, "
                 f"provider:[/] {provider_label}[green], model:[/] {model_label}\n"
+            )
+
+            # Record the chosen compilation backend and model in compile metadata
+            CompileMetadata.record_backend(
+                backend=self.identifier(), backend_model=model_label, provider=provider_label
             )
 
             system_prompt = build_pi_system_prompt(
@@ -382,3 +389,17 @@ class PiBackend:
         LOGGER.debug(f"Pi command - {' '.join(pi_argv)}")
 
         return pi_argv
+
+
+def _get_default_settings() -> dict:
+    """Read pi's settings from ~/.pi/agent/settings.json.
+
+    Returns:
+        The parsed settings (e.g. ``defaultProvider``, ``defaultModel``), or an
+        empty dict if the file does not exist.
+    """
+    settings_path = Path.home() / ".pi" / "agent" / "settings.json"
+    if not settings_path.is_file():
+        return {}
+    with open(settings_path) as f:
+        return json.load(f)
