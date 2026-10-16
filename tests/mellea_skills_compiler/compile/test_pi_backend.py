@@ -188,6 +188,20 @@ class TestValidateEnvironment:
 class TestCompileMethod:
     """Test the compile() workflow."""
 
+    @pytest.fixture(autouse=True)
+    def _patch_compile_deps(self):
+        """Suppress side-effectful helpers that are not under test."""
+        with (
+            patch(
+                "mellea_skills_compiler.compile.backends.pi._get_default_settings",
+                return_value={},
+            ),
+            patch(
+                "mellea_skills_compiler.compile.backends.pi.CompileMetadata.record_backend"
+            ),
+        ):
+            yield
+
     @patch("mellea_skills_compiler.compile.backends.pi.subprocess.Popen")
     def test_compile_success(self, mock_popen, backend, mock_context):
         events = [
