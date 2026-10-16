@@ -165,3 +165,45 @@ def build_system_prompt(
         f"The post-compile lint will verify config.py against the recorded values "
         f"at {mellea_package_dir}/intermediate/runtime_directive.json."
     )
+
+
+def build_pi_system_prompt(
+    backend: str, model_id: str, source: str, mellea_package_dir: Path
+) -> str:
+    """Same directive as `build_system_prompt`, worded for pi.
+
+    Pi has no mechanical deny-rule equivalent to Claude Code's `--settings`
+    (no path-scoped Write/Edit block), so this instructs pi not to write the
+    wrapper-rendered paths rather than claiming the tools are denied for
+    them, which would be false for pi.
+    """
+    wrapper_rendered_lines = "\n".join(
+        f"  - {mellea_package_dir}/{p}" for p in _WRAPPER_RENDERED_PATHS
+    )
+    return (
+        "Run the complete 10-step pipeline (Steps 0 through 7) autonomously from start to finish. "
+        "Do NOT pause between steps, do NOT ask for user confirmation to proceed, and do NOT stop "
+        "after any individual step completes. All sub-command content you need is already inline "
+        "in the expanded prompt below — treat each 'Sub-command: /mellea-fy-xxx' reference as the "
+        "section of this same prompt covering that step, not as a separate command to invoke or a "
+        "dependency you need to look up elsewhere. Invoke each step in sequence and continue "
+        "immediately to the next step.\n\n"
+        f"The compiled package directory path is exactly `{mellea_package_dir}`. "
+        f"Use this exact path wherever the slash-command directives reference "
+        f"`<package_name>`; do NOT re-derive it from the frontmatter.\n\n"
+        f"The following paths are rendered by the compile pipeline from the JSON you emit "
+        f"in {mellea_package_dir}/intermediate/ — you MUST NOT write or edit them yourself, even "
+        f"though your tools are not mechanically blocked from doing so; the wrapper renders them "
+        f"deterministically after you exit, and writing them yourself will be overwritten and "
+        f"causes an inconsistent package:\n"
+        f"{wrapper_rendered_lines}\n"
+        f"Emit the corresponding *_emission.json files under {mellea_package_dir}/intermediate/ "
+        f"conforming to .claude/schemas/*_emission.schema.json instead.\n\n"
+        f"Runtime defaults (source: {source}). The values below MUST appear in "
+        f"config_emission.json so the wrapper renders them into {mellea_package_dir}/config.py:\n"
+        f"  BACKEND = {backend!r}\n"
+        f"  MODEL_ID = {model_id!r}\n"
+        f"Do not invent alternative values, and do not omit either constant. "
+        f"The post-compile lint will verify config.py against the recorded values "
+        f"at {mellea_package_dir}/intermediate/runtime_directive.json."
+    )
