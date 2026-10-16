@@ -149,6 +149,8 @@ Mellea Skills Compiler requires a backend to compile skills. You can use **Claud
 
 ### Pi Setup
 
+> For a full walkthrough of provider options (direct Anthropic, LiteLLM proxy / AWS Bedrock, Ollama) and troubleshooting common errors (including the `eager_input_streaming` error on Bedrock), see **[`docs/PI_SETUP.md`](docs/PI_SETUP.md)**.
+
   1. The pi CLI is required to compile a Mellea skill with the pi backend. Install it via:
 
       ```
