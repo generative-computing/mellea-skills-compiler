@@ -334,8 +334,8 @@ Install pi (if you don't have it), install the extension, then start a pi
 session from the repo root:
 
 ```bash
-curl -fsSL https://pi.dev/install.sh | sh   # or: npm install -g --ignore-scripts @earendil-works/pi-coding-agent
-pi install ./extensions/pi
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.2.0
+pi install npm:mellea-skills-compiler-pi   # or, from a clone: pi install ./extensions/pi
 pi
 ```
 
@@ -352,7 +352,7 @@ commands):
 This is a different feature from the `pi` **export target** below (compiled
 skill → pi-loadable `SKILL.md` bundle) — this extension runs the compiler
 *from inside* pi, the export target instead packages an already-compiled
-skill *for* pi. See [`extensions/pi/README.md`](extensions/pi/README.md) for the full command
+skill *for* pi. See [Using with pi](docs/PI_SETUP.md#pi-extension) for the full command
 list, flags, and known limitations.
 
 ### Run Skill Pipeline
