@@ -24,6 +24,7 @@ nav = [
   {Examples ="EXAMPLES.md"},
   {Concepts = [
     {"Main concepts" = "CONCEPTS.md"},
+    {"The /mellea-fy command" = "MELLEA_FY.md"},
   {"Next Steps" = "NEXT_STEPS.md"}]},
   {Dialects = [
     {Overview = "dialects/README.md"},

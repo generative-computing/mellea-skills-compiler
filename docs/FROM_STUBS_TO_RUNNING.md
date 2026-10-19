@@ -173,5 +173,5 @@ Once your compiled skill runs cleanly, see [`EXPORTING.md`](EXPORTING.md) for ho
 - Stub catalogue: `SETUP.md §8` inside `sentry_find_bugs_mellea/`
 - Smoke check verdicts: `src/mellea_skills_compiler/compile/smoke_check.py`
 - Fixture loader: `src/mellea_skills_compiler/toolkit/file_utils.py`
-- Compile-time deny rules: `src/mellea_skills_compiler/compile/writer_renderer.py`
+- Compile-time deny rules: `src/mellea_skills_compiler/compile/claude_directives.py`
 - Exporting compiled skills: [`EXPORTING.md`](EXPORTING.md)

@@ -47,7 +47,7 @@ The user-facing workflow is two commands — `compile` then `certify`:
 
 ### What is `/mellea-fy`?
 
-A Claude Code slash command that performs the LLM-driven specification decomposition. Given a `.md` skill specification, it produces a complete Mellea pipeline package alongside the spec. The command definition lives in [`mellea-fy/`](mellea-fy/). The `mellea-skills compile` CLI wraps `/mellea-fy` and adds deterministic plumbing on either side (companion-directory mirroring, grounding pre-population, runtime-defaults injection, structural lints, fixture smoke check). See [`mellea-fy/README.md`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/mellea-fy/README.md) for details.
+A Claude Code slash command that performs the LLM-driven specification decomposition. Given a `.md` skill specification, it produces a complete Mellea pipeline package alongside the spec. The command definition lives in [`.claude/commands/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/.claude/commands). The `mellea-skills compile` CLI wraps `/mellea-fy` and adds deterministic plumbing on either side (companion-directory mirroring, grounding pre-population, runtime-defaults injection, structural lints, fixture smoke check). See [`.claude/commands/README.md`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/.claude/commands/README.md) for details.
 
 ### What is AI Atlas Nexus?
 
@@ -94,7 +94,7 @@ Support for non-`.md` source formats is **experimental**. The compiler currently
 - LangGraph (Python files with `StateGraph` construction)
 - AutoGen, OpenAI Agents SDK, smolagents (basic detection)
 
-See [`mellea-fy-inventory.md`](src/mellea_skills_compiler/compile/claude/commands/mellea-fy-inventory.md) for the full dialect detection table. Behaviour against these formats is less mature than `.md` — drift in fixture shape and pipeline structure is more common, and full coverage of all dialects is a roadmap item.
+See [`mellea-fy-inventory.md`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/.claude/commands/mellea-fy-inventory.md) for the full dialect detection table. Behaviour against these formats is less mature than `.md` — drift in fixture shape and pipeline structure is more common, and full coverage of all dialects is a roadmap item.
 
 ### What kinds of skills can the compiler handle?
 
@@ -141,7 +141,7 @@ In `auto` mode (the default), the compiler picks dispositions from a fixed table
 
 A stub is a function in the compiled package that ends with `raise NotImplementedError(...)`. Stubs appear when the spec references a tool whose implementation the spec didn't pin down (typically C6 abstract tools — "send a message," "fetch a document"). The user fills the body before the relevant pipeline branches can execute.
 
-See [`docs/FROM_STUBS_TO_RUNNING.md`](docs/FROM_STUBS_TO_RUNNING.md) for a worked walkthrough using `sentry-find-bugs`'s two stubs (`search_fn`, `read_file_fn`).
+See [`FROM_STUBS_TO_RUNNING.md`](FROM_STUBS_TO_RUNNING.md) for a worked walkthrough using `sentry-find-bugs`'s two stubs (`search_fn`, `read_file_fn`).
 
 ### What if my skill needs an API key or service that's not available?
 
@@ -158,7 +158,7 @@ To keep the first compile experience non-interactive and reproducible. Interacti
 ### What do I need to run the Mellea Skills Compiler?
 
 - Python >=3.11 and <3.14.4 (ai-atlas-nexus requires 3.11+ and <3.14.4; Mellea supports 3.11+)
-- Claude Code (for the `/mellea-fy` compilation step)
+- A compilation backend: Claude Code (default), IBM Bob, or pi. See [Installation](INSTALLATION.md#prerequisites)
 - Ollama running locally with `granite4.1:3b` pulled (for compiled-skill execution and Guardian checks)
 
 ### Can I run just the compilation step without certification?
@@ -171,7 +171,7 @@ Yes. `mellea-skills compile <spec>` produces a standalone Mellea pipeline packag
 mellea-skills run <package_dir> --fixture <fixture_id>
 ```
 
-Each compiled `<name>_mellea/` directory ships a `fixtures/` subdirectory; the fixture id matches the filename (without `.py`). See [`docs/TUTORIAL.md`](docs/TUTORIAL.md) for end-to-end examples.
+Each compiled `<name>_mellea/` directory ships a `fixtures/` subdirectory; the fixture id matches the filename (without `.py`). See [`TUTORIAL.md`](TUTORIAL.md) for end-to-end examples.
 
 ### What format are audit trails in?
 
@@ -192,11 +192,11 @@ mellea-skills compile <spec_path> --repair-mode
 3. Identifies the first broken step and resumes the pipeline from there — re-using earlier `valid` outputs rather than starting over.
 4. Halts with a diagnostic report when a failure is not auto-recoverable (spec-level halts, `session-boundary` lint failures, `category-specific` security findings).
 
-Repair operates on the same skill directory as the original compile — point it at the skill root, the `<name>_mellea/` package directory, or a `.melleafy-partial/` directory left by an interrupted run. See [`src/mellea_skills_compiler/compile/claude/commands/mellea-fy-repair.md`](src/mellea_skills_compiler/compile/claude/commands/mellea-fy-repair.md) for the audit phases, resume-point routing, and the lint-specific repair table.
+Repair operates on the same skill directory as the original compile — point it at the skill root, the `<name>_mellea/` package directory, or a `.melleafy-partial/` directory left by an interrupted run. See [`.claude/commands/mellea-fy-repair.md`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/.claude/commands/mellea-fy-repair.md) for the audit phases, resume-point routing, and the lint-specific repair table.
 
 ### How does compliance classification work?
 
-Each NIST or Credo governance action is classified against the pipeline's runtime capabilities using a static YAML mapping under [`src/mellea_skills_compiler/certification/data/`](src/mellea_skills_compiler/certification/data/):
+Each NIST or Credo governance action is classified against the pipeline's runtime capabilities using a static YAML mapping under [`src/mellea_skills_compiler/certification/data/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/src/mellea_skills_compiler/certification/data):
 
 | Classification | Meaning                                                          |
 | -------------- | ---------------------------------------------------------------- |
@@ -210,17 +210,18 @@ Each NIST or Credo governance action is classified against the pipeline's runtim
 
 ### Can I export a compiled skill to a different agent framework?
 
-Yes — there is an experimental `mellea-skills export <package_path> <target>` subcommand on the [`export-pipeline`](../../tree/export-pipeline) branch (landing on `main` shortly) targeting three harnesses:
+Yes — there is an experimental `mellea-skills export <package_path> --target <target>` subcommand targeting four harnesses:
 
 | Target                           | Status       | Output                                                                                                                                                                                                                       |
 | -------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **LangGraph**                    | Experimental | `graph.py`, `state.py`, `langgraph.json`, `pyproject.toml`, `README.md`. Async node wraps `run_pipeline` via `asyncio.to_thread`; modality-aware (streaming, conversational session, scheduled, event-triggered, heartbeat). |
 | **Claude Code**                  | Experimental | `SKILL.md`, `scripts/run.sh`, `pyproject.toml`, `README.md`. Bash entry point shells out to the bundled Python pipeline.                                                                                                     |
 | **MCP** (Model Context Protocol) | Experimental | `server.py` (FastMCP), `mcp.json`, `pyproject.toml`, `README.md`. One `@mcp.tool()` per pipeline entry; sync or async based on modality.                                                                                     |
+| **Pi**                           | Experimental | `SKILL.md`, `scripts/run.sh`, `pyproject.toml`, `README.md`. A pi-loadable skill whose Bash entry point shells out to the bundled Python pipeline.                                                                             |
 
 The compiled Mellea package is bundled inside each export so the result is self-contained.
 
-Out-of-the-box export in this research preview is limited to the three targets above. There is **no** built-in export path for OpenClaw, NanoClaw, CrewAI, Letta, AutoGen, smolagents, OpenAI Agents SDK, or other harnesses — for those you write the wrapper yourself, and how much glue that is depends on how far the target's idioms are from a typed Python function call. See [`EXPORTING.md`](EXPORTING.md) for the full breakdown of the export pipeline (5-stage validate → load → translate → emit → lint), per-target modality support, and what hand-wrapping a non-supported harness looks like.
+Out-of-the-box export in this research preview is limited to the four targets above. There is **no** built-in export path for OpenClaw, NanoClaw, CrewAI, Letta, AutoGen, smolagents, OpenAI Agents SDK, or other harnesses — for those you write the wrapper yourself, and how much glue that is depends on how far the target's idioms are from a typed Python function call. See [`EXPORTING.md`](EXPORTING.md) for the full breakdown of the export pipeline (5-stage validate → load → translate → emit → lint), per-target modality support, and what hand-wrapping a non-supported harness looks like.
 
 ### Why is export experimental?
 
@@ -228,29 +229,27 @@ The exporter runs end-to-end and is covered by tests, but output file layouts, a
 
 ### What about other harnesses (OpenClaw, NanoClaw, CrewAI, Letta, AutoGen, smolagents, OpenAI Agents SDK)?
 
-Not currently export targets. The compiler can detect some of these as input dialects (see [`mellea-fy-inventory.md`](../.claude/commands/mellea-fy-inventory.md)) — that lets you compile a skill _from_ one of those formats, not export _to_ it. If you need to run a compiled skill under one of these harnesses today, you write the wrapper yourself. Adding more native export targets is roadmap, not a current feature.
+Not currently export targets. The compiler can detect some of these as input dialects (see [`mellea-fy-inventory.md`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/.claude/commands/mellea-fy-inventory.md)) — that lets you compile a skill _from_ one of those formats, not export _to_ it. If you need to run a compiled skill under one of these harnesses today, you write the wrapper yourself. Adding more native export targets is roadmap, not a current feature.
 
 ---
 
 ## Limitations and scope
 
-### Why does compilation require Claude Code?
+### Does compilation require Claude Code?
 
-The current implementation uses Claude Code as the default compilation backend to perform the LLM-driven decomposition. Claude Code must be installed and authenticated on your system. The compilation architecture now includes a pluggable backend abstraction layer (accessible via the `--backend` flag), which enables future support for alternative compilation backends such as IBM Bob or local LLMs. Currently, only the `claude` backend is implemented.
+No. Claude Code is the default compilation backend, but you can choose another with the `--backend` flag. Whichever backend you pick must be installed and authenticated on your system.
 
 ### Can I use a different compilation backend?
 
-The Mellea Skills Compiler now includes a pluggable backend abstraction layer that allows for alternative compilation backends. You can specify a backend using the `--backend` flag:
+Yes. Three backends are implemented:
 
 ```bash
-mellea-skills compile <spec> --backend claude  # Explicit backend selection
-mellea-skills compile <spec>                   # Uses 'claude' by default
+mellea-skills compile <spec>                    # Claude Code (default)
+mellea-skills compile <spec> --backend bob      # IBM Bob
+mellea-skills compile <spec> --backend pi       # pi; choose a provider with --provider
 ```
 
-**Current Status**: Only the `claude` backend is implemented in this release. The abstraction layer is designed to support future backends such as:
-- **IBM Bob** — Planned for Phase 2, will enable compilation using IBM's Bob agent framework
-
-The backend abstraction ensures that when new backends are added, they will provide the same compilation guarantees (typed pipelines, validation, fixtures) while potentially offering different trade-offs in terms of cost, latency, or deployment constraints.
+All three run the same compilation steps and produce the same kind of package (typed pipelines, validation, fixtures). They differ in setup, cost, and which models you can use. See [Installation](INSTALLATION.md#prerequisites) for each backend's setup, and [Using with pi](PI_SETUP.md#pi-compilation-backend) for pi providers.
 
 ### Is the compliance classification verified?
 
@@ -258,7 +257,7 @@ Not yet. The current implementation uses a static YAML mapping of governance act
 
 ### Can I use this with models other than Granite?
 
-The compiled Mellea pipelines can target any model supported by Mellea's backend configuration; today the project default is `ollama` + `granite4.1:3b` (set in [`src/mellea_skills_compiler/compile/claude/data/runtime_defaults.json`](src/mellea_skills_compiler/compile/claude/data/runtime_defaults.json), overridable per compile via `--skill-backend` / `--skill-model`). The certification pipeline's Guardian checks currently use Granite Guardian 3.3 8B via Ollama. The `/mellea-fy` compilation step itself uses Claude (typically Sonnet) and is not configurable to use other LLMs at this time.
+The compiled Mellea pipelines can target any model supported by Mellea's backend configuration; today the project default is `ollama` + `granite4.1:3b` (set in [`.claude/data/runtime_defaults.json`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/.claude/data/runtime_defaults.json), overridable per compile via `--skill-backend` / `--skill-model`). The certification pipeline's Guardian checks currently use Granite Guardian 3.3 8B via Ollama. The compilation step itself uses Claude (typically Sonnet) by default. With `--backend pi`, it can use other providers, including local Ollama models (experimental). See [Using with pi](PI_SETUP.md#ollama-local-models).
 
 ### What about evaluation and benchmarks?
 

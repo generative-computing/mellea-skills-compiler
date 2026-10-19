@@ -1,4 +1,4 @@
-#Examples
+# Examples
 
 ## Example Outputs
 
@@ -11,11 +11,11 @@ The [`examples/`](https://github.com/generative-computing/mellea-skills-compiler
 | [superpowers-systematic-debugging](https://github.com/generative-computing/mellea-skills-compiler/tree/main/examples/superpowers-systematic-debugging/) | T1      | Constrained reasoning      | Four-phase debugging walk with hypothesis testing; `fix_attempts_count >= 3` triggers architectural-issue branch                               |
 | [clawdefender](https://github.com/generative-computing/mellea-skills-compiler/tree/main/examples/clawdefender/)                                         | T3      | Adversarial classification | Prompt injection / SSRF / command injection / credential exfiltration detection; bundled scripts need `chmod +x` on Unix                       |
 
-Each example includes the original `spec.md` (or `SKILL.md`), generated pipeline code, factory-shape fixtures, intermediate IR (`config_emission.json`, `fixtures_emission.json`, etc.), `mapping_report.md`, and `melleafy.json` manifest. See [`docs/TUTORIAL.md`](docs/TUTORIAL.md) for the runnable tutorial that walks through each one and [`docs/FROM_STUBS_TO_RUNNING.md`](docs/FROM_STUBS_TO_RUNNING.md) for the stub-implementation walkthrough.
+Each example includes the original `spec.md` (or `SKILL.md`), generated pipeline code, factory-shape fixtures, intermediate IR (`config_emission.json`, `fixtures_emission.json`, etc.), `mapping_report.md`, and `melleafy.json` manifest. See [`TUTORIAL.md`](TUTORIAL.md) for the runnable tutorial that walks through each one and [`FROM_STUBS_TO_RUNNING.md`](FROM_STUBS_TO_RUNNING.md) for the stub-implementation walkthrough.
 
 
 
-The [`skills/`](skills/) directory contains 16 skill specifications drawn from multiple sources (Sentry, Anthropic, community contributions, and IBM Research). Four of these ship as pre-compiled examples (see above); the rest can be compiled locally via `mellea-skills compile skills/<name>/spec.md`.
+The [`skills/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/skills) directory contains 16 skill specifications drawn from multiple sources (Sentry, Anthropic, community contributions, and IBM Research). Four of these ship as pre-compiled examples (see above); the rest can be compiled locally via `mellea-skills compile skills/<name>/spec.md`.
 
 Skills are classified into three tiers by what's needed to run a fixture against the compiled package:
 
@@ -23,4 +23,4 @@ Skills are classified into three tiers by what's needed to run a fixture against
 - **T2** — Runs after filling 1–2 stubs or supplying a small bundled artifact.
 - **T3** — Requires external integration before any fixture completes (CLI tool, API key, OAuth, runtime helper).
 
-See [`skills/README.md`](skills/README.md) for the full per-skill tier table and source attribution.
+See [`skills/README.md`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/skills/README.md) for the full per-skill tier table and source attribution.

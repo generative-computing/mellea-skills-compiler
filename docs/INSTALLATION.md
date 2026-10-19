@@ -1,6 +1,6 @@
 # Installation
 
-**Jump to:** [Docker](#docker) · [Manual](#manual) · [Claude Setup](#claude-setup) · [IBM Bob](#ibm-bob) · [Project Code](#project-code)
+**Jump to:** [Docker](#docker) · [Manual](#manual) · [Claude Setup](#claude-setup) · [IBM Bob](#ibm-bob) · [Pi](#pi) · [Project Code](#project-code)
 
 ## Docker
 
@@ -14,14 +14,15 @@ docker build -t mellea-skills-compiler:latest .
 
 This will:
 - Install Claude Code (into `/home/user/.local/bin`)
-- Install IBM Bob shell (into `/user/local/bin`)
+- Install IBM Bob shell (into `/usr/local/bin`)
 - Install mellea-skills-compiler binary (`/usr/local/bin/mellea-skills`)
 - Copy `.claude/` and `.bob/` config into the container user's home directory.
 
 **2. Run the container**
 
- - OLLAMA_HOST (e.g. `http://host.docker.internal:11434`) must be accessible from inside the container.
- - Either ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY is required.
+ - `OLLAMA_HOST` (e.g. `http://host.docker.internal:11434`) is required and must be accessible from inside the container.
+ - For Claude, `ANTHROPIC_BASE_URL` plus either `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_API_KEY` is required. For IBM Bob, `BOB_API_KEY` is required instead. The container exits at startup if neither is set.
+ - The image does not include pi. To use `--backend pi`, follow the [manual setup](#pi).
 
 ```bash
 docker run -it \
@@ -36,13 +37,13 @@ docker run -it \
 
 The container starts as UID 1001. Your local `skills` directory is mounted to `/skills` to access your skill specs inside the container.
 
-Please follow the [**Quick Start**](/docs/QUICK_START.md) guide on how to run Mellea Skills Compiler.
+Please follow the [**Quick Start**](QUICK_START.md) guide on how to run Mellea Skills Compiler.
 
 ## Manual
 
 ### Prerequisites
 
-Mellea Skills Compiler requires a backend to compile skills. You can use either **Claude Code** or **IBM Bob** — pick whichever you have access to and follow the corresponding setup below.
+Mellea Skills Compiler requires a backend to compile skills. You can use **Claude Code**, **IBM Bob**, or **pi**. Pick whichever you have access to and follow the corresponding setup below.
 
 ### Claude Setup
 
@@ -74,6 +75,17 @@ IBM Bob authentication works via IBMid, SSO and API key authentication. Please c
     ```
     export BOB_API_KEY = ""
     ```
+
+### Pi
+
+The pi backend (`--backend pi`) needs Node.js 18 or later and the pi coding agent. pi 1.2.0 is the tested version:
+
+```bash
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.2.0
+pi --version
+```
+
+See [Using with pi](PI_SETUP.md#pi-compilation-backend) to configure a provider (direct Anthropic, LiteLLM / Bedrock proxy, or Ollama).
 
 ### Project Code
 

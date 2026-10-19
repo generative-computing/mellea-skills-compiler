@@ -8,12 +8,12 @@ This page describes the current state of export support and what the experimenta
 
 ## 1. Current State
 
-This release is a **research preview**. There is an **experimental** `mellea-skills export` subcommand that targets four deployment harnesses: **LangGraph**, **Claude Code**, **MCP** (Model Context Protocol), and **Pi** (Pi Coding Agent). It lives on the [`export-pipeline`](../../../tree/export-pipeline) branch and is gated behind an `[EXPERIMENTAL]` flag — output structure and CLI surface may change between releases without a deprecation period.
+This release is a **research preview**. There is an **experimental** `mellea-skills export` subcommand that targets four deployment harnesses: **LangGraph**, **Claude Code**, **MCP** (Model Context Protocol), and **Pi** (Pi Coding Agent). It is marked `[EXPERIMENTAL]` in the CLI help — output structure and CLI surface may change between releases without a deprecation period.
 
 What "experimental" means here, concretely:
 
 - The exporter runs end-to-end and produces deployable artifacts for the four supported targets.
-- Tests cover the core translation pipeline (`tests/mellea_skills_compiler/export/test_exporter.py`, ~490 lines) but coverage is narrower than the compile path.
+- Tests cover each target's translation (`tests/mellea_skills_compiler/export/`) but coverage is narrower than the compile path.
 - Output file layouts, adapter conventions, and warning text may shift.
 - Not every modality is supported on every target (see §4).
 
@@ -115,14 +115,15 @@ The native exporter (§4) generates all four artifacts.
 ## 4. The `mellea-skills export` Command (Experimental)
 
 ```bash
-mellea-skills export <package_path> <target> [--force]
+mellea-skills export <package_path> --target <target> [--force] [--enforce]
 ```
 
 Where:
 
 - `<package_path>` — the compiled skill directory (the one containing `melleafy.json`, or a parent that holds a single `*_mellea/` subdirectory).
-- `<target>` — one of `langgraph`, `claude-code`, `mcp`, `pi`.
+- `--target` / `-t` (required) — one of `langgraph`, `claude-code`, `mcp`, `pi`.
 - `--force` / `-f` — overwrite the output directory if it already exists.
+- `--enforce` / `-e` — register Guardian in enforce mode (block on risk detection). The default is audit-only.
 
 Output is written to `<package_name>/<package_name>-<target>/` inside the skill directory, and the compiled Mellea package is bundled inside it so the export is self-contained.
 
@@ -197,7 +198,7 @@ What's lost: typed contract at the Pi surface (Pi dispatches via prompt + script
 
 ## 5. Harnesses We Do Not Export To
 
-To set expectations clearly: **this research preview does not currently export to OpenClaw, NanoClaw, CrewAI, Letta, AutoGen, OpenAI Agents SDK, smolagents, or any harness outside the four above.** The compiler can _detect_ several of these as input dialects (see [`mellea-fy-inventory.md`](../.claude/commands/mellea-fy-inventory.md) for the dialect detection table) — that lets you compile a skill _from_ one of those formats, but it does not produce an export _to_ it.
+To set expectations clearly: **this research preview does not currently export to OpenClaw, NanoClaw, CrewAI, Letta, AutoGen, OpenAI Agents SDK, smolagents, or any harness outside the four above.** The compiler can _detect_ several of these as input dialects (see [`mellea-fy-inventory.md`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/.claude/commands/mellea-fy-inventory.md) for the dialect detection table) — that lets you compile a skill _from_ one of those formats, but it does not produce an export _to_ it.
 
 If you need to run a compiled skill under one of these harnesses, you write the wrapper yourself. The §3 patterns are the starting point; the typed contract in `melleafy.json` tells you what shape the wrapper has to bridge. More native export targets are on the roadmap, not in this preview.
 
@@ -207,7 +208,7 @@ If you need to run a compiled skill under one of these harnesses, you write the 
 
 If you're writing your own integration (manual or via your own exporter), the following are stable and safe to build against:
 
-- **`run_pipeline` is the entry point.** Modality-specific signatures are documented in [`mellea-fy-generate.md`](../.claude/commands/mellea-fy-generate.md). Synchronous one-shot is the most common.
+- **`run_pipeline` is the entry point.** Modality-specific signatures are documented in [`mellea-fy-generate.md`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/.claude/commands/mellea-fy-generate.md). Synchronous one-shot is the most common.
 - **Pydantic schemas in `schemas.py` define the I/O contract.** Output models are non-`Optional` for hard-required fields; nullable fields use `Optional`.
 - **`melleafy.json` is versioned.** `manifest_version` ≥ 1.0.0 is required by the exporter; the current emitted version is `1.1.0`.
 - **Fixtures in `fixtures/` follow the `ALL_FIXTURES = [factory, ...]` contract.** Each factory returns `(inputs_dict, fixture_id, description)` — runnable input examples for any wrapper that needs them.
@@ -222,7 +223,7 @@ What's _not_ stable yet:
 
 ## 7. Where to Track This
 
-- For experimental export today: `mellea-skills export --help` after checking out the [`export-pipeline`](../../../tree/export-pipeline) branch (or `main` once it lands).
+- For experimental export today: `mellea-skills export --help`.
 - For hand-wrapping a non-supported harness: §3 documents the patterns; the wrapper is yours to maintain.
 - For typed contract questions: read `melleafy.json` for the package you're integrating, and the spec at `mellea-fy-artifacts.md` for what each field means.
 - For status of the export feature graduating from experimental to stable: check the project [Issues](https://github.com/generative-computing/mellea-skills-compiler/issues).
