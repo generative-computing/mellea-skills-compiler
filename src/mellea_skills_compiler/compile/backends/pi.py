@@ -17,8 +17,10 @@ This backend requires:
 """
 
 import json
+import re
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -30,7 +32,10 @@ from mellea_skills_compiler.compile.backend import (
     CompilationContext,
     CompilationResult,
 )
-from mellea_skills_compiler.compile.claude_directives import build_pi_system_prompt
+from mellea_skills_compiler.compile.claude_directives import (
+    _WRAPPER_RENDERED_PATHS,
+    build_pi_system_prompt,
+)
 from mellea_skills_compiler.compile.metadata import CompileMetadata
 from mellea_skills_compiler.enums import PiMessageType
 from mellea_skills_compiler.toolkit.logging import configure_logger
@@ -38,6 +43,31 @@ from mellea_skills_compiler.toolkit.logging import configure_logger
 
 LOGGER = configure_logger()
 console = Console(log_time=True)
+
+# Project prompt templates, resolved against the cwd as pi itself does.
+_PI_PROMPTS_DIR = Path(".pi/prompts")
+
+# Backticked `intermediate/` references in the templates, bare or behind a
+# package-dir placeholder. Tree diagrams and example log lines are unquoted
+# and deliberately left alone.
+_INTERMEDIATE_REF = re.compile(
+    r"`(?:<package_name>/|<package_dir>/|<name>_mellea/)?intermediate/"
+)
+
+# Backticked package-dir placeholders used as a path prefix (e.g.
+# `<package_name>/` or `<package_dir>/melleafy.json`). Without this, only
+# `intermediate/` paths are concrete and models file Step 6 output there.
+# `<name>_mellea/` is left alone: the repair template uses it for "any
+# compiled package", not this one.
+_PACKAGE_DIR_REF = re.compile(r"`(?:<package_name>|<package_dir>)/")
+
+# Intermediate files the compile pipeline writes before pi starts. The step
+# templates only ask the model to verify them, so they are locked read-only.
+_PIPELINE_WRITTEN_PATHS: tuple[str, ...] = (
+    "intermediate/runtime_directive.json",
+    "intermediate/mellea_api_ref.json",
+    "intermediate/mellea_doc_index.json",
+)
 
 
 class PiBackend:
@@ -104,6 +134,8 @@ class PiBackend:
         """
         process = None
         process_exited = False
+        prompts_dir = Path(tempfile.mkdtemp(prefix="mellea-pi-prompts-"))
+        placeholders: Optional[List[Path]] = None
         try:
             classification_path = context.intermediate_dir / "classification.json"
             never_compiled = not classification_path.exists()
@@ -129,20 +161,31 @@ class PiBackend:
                 backend=self.identifier(), backend_model=model_label, provider=provider_label
             )
 
+            # Absolute paths in everything the model sees, so it never has to
+            # compose one from the cwd (small models get that wrong and write
+            # outside the repo).
+            package_dir = context.package_dir.resolve()
+            _render_prompt_templates(package_dir, prompts_dir)
+
             system_prompt = build_pi_system_prompt(
                 context.skill_backend or "anthropic",
                 context.skill_model or context.model or "",
                 context.defaults_source,
-                context.package_dir,
+                package_dir,
+                prompts_dir,
+                Path(".claude/schemas").resolve(),
             )
 
             pi_argv = self._build_pi_argv(
-                spec_path=context.spec_path,
+                spec_path=context.spec_path.resolve(),
                 repair_mode=effective_repair_mode,
                 model=context.model,
                 provider=context.provider,
                 system_prompt=system_prompt,
+                prompts_dir=prompts_dir,
             )
+
+            placeholders = _lock_protected_paths(context.package_dir)
 
             start_time = time.time()
             processing = console.status(
@@ -158,7 +201,10 @@ class PiBackend:
             )
 
             stderr_lines: List[str] = []
-            api_errors: List[str] = []
+            # Error from the most recent assistant message only. Pi retries
+            # transient provider errors (e.g. a truncated Ollama stream), so
+            # an error followed by a successful message is not a failure.
+            last_api_error: Optional[str] = None
 
             def read_stderr():
                 if process.stderr:
@@ -198,13 +244,13 @@ class PiBackend:
                             and event.get("message", {}).get("role") == "assistant"
                         ):
                             if event["message"].get("stopReason") == "error":
-                                api_errors.append(
-                                    str(
-                                        event["message"].get(
-                                            "errorMessage", "unknown error"
-                                        )
+                                last_api_error = str(
+                                    event["message"].get(
+                                        "errorMessage", "unknown error"
                                     )
                                 )
+                            else:
+                                last_api_error = None
                             content = event["message"].get("content", [])
                             text = "".join(
                                 block.get("text", "")
@@ -233,13 +279,13 @@ class PiBackend:
                     error_message=f"Mellea-fy skill compilation failed with return code {return_code}. Error: {' '.join(stderr_lines)}",
                 )
 
-            if api_errors:
+            if last_api_error:
                 return CompilationResult(
                     success=False,
                     package_dir=context.package_dir,
                     error_message=(
                         f"Pi reported an error from provider '{provider_label}': "
-                        f"{api_errors[-1]}"
+                        f"{last_api_error}"
                     ),
                 )
 
@@ -275,6 +321,10 @@ class PiBackend:
                     process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     process.kill()
+            if placeholders is not None:
+                _unlock_protected_paths(context.package_dir, placeholders)
+            prompts_dir.chmod(0o700)
+            shutil.rmtree(prompts_dir, ignore_errors=True)
 
     def validate_environment(
         self, provider: Optional[str] = None
@@ -347,6 +397,7 @@ class PiBackend:
         model: Optional[str],
         provider: Optional[str] = None,
         system_prompt: Optional[str] = None,
+        prompts_dir: Optional[Path] = None,
     ) -> list[str]:
         """Build the command-line arguments for invoking pi.
 
@@ -362,6 +413,9 @@ class PiBackend:
                 mirroring ClaudeCodeBackend's use of the same flag to tell the
                 LLM to run all steps without pausing and to emit
                 *_emission.json instead of writing wrapper-rendered paths.
+            prompts_dir: Optional directory of rewritten prompt templates.
+                When set, project templates are disabled and this directory
+                is loaded instead, so `/mellea-fy` expands from it.
 
         Returns:
             List of command-line arguments ready for subprocess.Popen
@@ -377,8 +431,13 @@ class PiBackend:
             "json",
             "--approve",
             "--tools",
-            "read,write,edit",
+            "read,write,edit,ls,find,grep",
         ]
+
+        if prompts_dir:
+            pi_argv.extend(
+                ["--no-prompt-templates", "--prompt-template", str(prompts_dir)]
+            )
 
         if system_prompt:
             pi_argv.extend(["--append-system-prompt", system_prompt])
@@ -392,6 +451,107 @@ class PiBackend:
         LOGGER.debug(f"Pi command - {' '.join(pi_argv)}")
 
         return pi_argv
+
+
+def _render_prompt_templates(package_dir: Path, out_dir: Path) -> None:
+    """Copy the mellea-fy prompt templates into ``out_dir`` with concrete paths.
+
+    The templates say ``intermediate/<file>.json`` relative to the compiled
+    package, but weaker models resolve that against the spec's directory.
+    Substituting the real package path removes the ambiguity rather than
+    relying on the system prompt to explain it. Backticked package-dir
+    placeholders and ``.claude/`` paths are made concrete too, so the model
+    never composes a path from the cwd.
+
+    Args:
+        package_dir: The compiled package directory (e.g. ``skills/x/x_mellea``).
+        out_dir: Directory to write the rewritten ``mellea-fy*.md`` files into.
+    """
+    package = package_dir.as_posix()
+    claude_dir = f"`{Path('.claude').resolve().as_posix()}/"
+    for template in sorted(_PI_PROMPTS_DIR.glob("mellea-fy*.md")):
+        text = _INTERMEDIATE_REF.sub(f"`{package}/intermediate/", template.read_text())
+        text = _PACKAGE_DIR_REF.sub(f"`{package}/", text)
+        text = text.replace("`.claude/", claude_dir)
+        rendered = out_dir / template.name
+        rendered.write_text(text)
+        rendered.chmod(0o444)
+    # Read-only so the model cannot overwrite the step specs it is meant to
+    # follow (observed with qwen3-coder rewriting them before Step 0).
+    out_dir.chmod(0o555)
+
+
+def _lock_protected_paths(package_dir: Path) -> List[Path]:
+    """Make paths the model must not write read-only for the pi run.
+
+    Pi has no path-scoped deny rule like Claude Code's ``--settings``, and
+    weaker models ignore system-prompt instructions about these paths, so a
+    write to any of them fails with a permission error instead:
+
+    - wrapper-rendered paths (``config.py``, ``fixtures/``), created as empty
+      placeholders when missing;
+    - intermediate files the pipeline has already written;
+    - an empty ``intermediate/`` next to the spec, so a model that resolves
+      ``intermediate/`` against the skill directory is refused rather than
+      silently writing there. An existing directory there is left alone.
+
+    Args:
+        package_dir: The compiled package directory.
+
+    Returns:
+        The placeholders this call created, for `_unlock_protected_paths`.
+    """
+    created: List[Path] = []
+    for rel in _WRAPPER_RENDERED_PATHS:
+        is_dir = rel.endswith("/**")
+        path = package_dir / rel.removesuffix("/**")
+        if not path.exists():
+            path.mkdir() if is_dir else path.touch()
+            created.append(path)
+        if is_dir:
+            for child in path.rglob("*"):
+                child.chmod(0o555 if child.is_dir() else 0o444)
+            path.chmod(0o555)
+        else:
+            path.chmod(0o444)
+    for rel in _PIPELINE_WRITTEN_PATHS:
+        path = package_dir / rel
+        if path.exists():
+            path.chmod(0o444)
+    skill_root_intermediate = package_dir.parent / "intermediate"
+    if not skill_root_intermediate.exists():
+        skill_root_intermediate.mkdir()
+        skill_root_intermediate.chmod(0o555)
+        created.append(skill_root_intermediate)
+    return created
+
+
+def _unlock_protected_paths(package_dir: Path, created: List[Path]) -> None:
+    """Undo `_lock_protected_paths` so the wrapper can render and clean up.
+
+    Restores write permission and removes placeholders that are still empty.
+    """
+    for rel in _WRAPPER_RENDERED_PATHS:
+        path = package_dir / rel.removesuffix("/**")
+        if not path.exists():
+            continue
+        if path.is_dir():
+            path.chmod(0o755)
+            for child in path.rglob("*"):
+                child.chmod(0o755 if child.is_dir() else 0o644)
+        else:
+            path.chmod(0o644)
+    for rel in _PIPELINE_WRITTEN_PATHS:
+        path = package_dir / rel
+        if path.exists():
+            path.chmod(0o644)
+    for path in created:
+        if path.is_dir():
+            path.chmod(0o755)
+            if not any(path.iterdir()):
+                path.rmdir()
+        elif path.is_file() and path.stat().st_size == 0:
+            path.unlink()
 
 
 def _get_default_settings() -> dict:

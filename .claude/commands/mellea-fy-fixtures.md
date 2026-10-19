@@ -1,12 +1,12 @@
 # Melleafy Step 4: Fixture Generation
 
-**Version**: 4.1.1 | **Prereq**: Step 3 complete (skeleton emitted with finalised `run_pipeline` signature) | **Produces**: `<package_name>/fixtures/`
+**Version**: 4.1.1 | **Prereq**: Step 3 complete (skeleton emitted with finalised `run_pipeline` signature) | **Produces**: `intermediate/fixtures_emission.json` (rendered into `<package_name>/fixtures/` by the writer)
 
 > **Output path rule** (Rule OUT-4): `fixtures/` is written **inside `<package_name>/`** — NOT at the skill root. It is test-only and intentionally excluded from the installed package by `pyproject.toml`'s `[tool.setuptools.packages.find]`. Run fixtures via `python -m pytest <package_name>/fixtures/` from the skill root.
 
 Step 4 generates 5–8 test fixtures covering ≥3 C-categories. Fixtures are the primary means by which the generated package can be validated at runtime (Step 7's lints are static-only).
 
-> **Rule 4-1 — Batched fixture generation as JSON**: Generate all fixture specifications in a single LLM invocation. The invocation receives the `run_pipeline` signature, the element mapping summary, and the C-category coverage requirement, and returns **one JSON object conforming to `.claude/schemas/fixtures_emission.schema.json`** — not Python source. The deterministic writer at `.claude/melleafy/writers/fixtures_writer.py` renders the per-fixture `.py` files plus `fixtures/__init__.py` from that JSON. **The model never writes Python source for fixtures directly.** This makes shape drift (pytest-style tests, `INPUT`-only modules, hand-rolled `__init__.py` exports) structurally unreachable — every legal JSON instance produces a contract-correct fixture package.
+> **Rule 4-1 — Batched fixture generation as JSON**: Generate all fixture specifications in a single LLM invocation. The invocation receives the `run_pipeline` signature, the element mapping summary, and the C-category coverage requirement, and returns **one JSON object conforming to `.claude/schemas/fixtures_emission.schema.json`**, written to `intermediate/fixtures_emission.json` — not Python source. The deterministic writer at `.claude/melleafy/writers/fixtures_writer.py` renders the per-fixture `.py` files plus `fixtures/__init__.py` from that JSON. **The model never writes Python source for fixtures directly.** This makes shape drift (pytest-style tests, `INPUT`-only modules, hand-rolled `__init__.py` exports) structurally unreachable — every legal JSON instance produces a contract-correct fixture package.
 
 ---
 

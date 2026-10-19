@@ -58,9 +58,9 @@ Step 7's `bundled-asset-path-resolution` lint catches violations at validation t
 
 ### Skeleton contents per file
 
-**config.py**: C1 and C2 bundle entries become `Final[str]` constants under `# === C1: Identity ===` and `# === C2: Operating Rules ===` section headers. C8 bundle entries (model ID, backend) also here. Every constant gets a `# PROVENANCE: <source_file>:<source_lines>` comment. **In Step 5, the model emits JSON conforming to `.claude/schemas/config_emission.schema.json` — not Python source. The writer at `.claude/melleafy/writers/config_writer.py` renders the file.**
+**config.py**: C1 and C2 bundle entries become `Final[str]` constants under `# === C1: Identity ===` and `# === C2: Operating Rules ===` section headers. C8 bundle entries (model ID, backend) also here. Every constant gets a `# PROVENANCE: <source_file>:<source_lines>` comment. **In Step 5, the model writes JSON to `intermediate/config_emission.json`, conforming to `.claude/schemas/config_emission.schema.json` — not Python source. The writer at `.claude/melleafy/writers/config_writer.py` renders `config.py` from it; never write `config.py` directly.**
 
-> **C8 backend rule**: `BACKEND` and `MODEL_ID` values are injected via the system prompt by the compile pipeline (sourced from `.claude/data/runtime_defaults.json`, with optional `--backend` / `--model-id` CLI overrides). Emit them in `config.py` exactly as instructed in the system prompt; do not invent alternatives. The Step 7 `runtime-defaults-bound` lint enforces this — divergence from the injected values is a hard failure.
+> **C8 backend rule**: `BACKEND` and `MODEL_ID` values are injected via the system prompt by the compile pipeline (sourced from `.claude/data/runtime_defaults.json`, with optional `--backend` / `--model-id` CLI overrides). Emit them in `intermediate/config_emission.json` exactly as instructed in the system prompt; the writer renders them into `config.py`. Do not invent alternatives. The Step 7 `runtime-defaults-bound` lint enforces this — divergence from the injected values is a hard failure.
 
 _JSON the model emits:_
 

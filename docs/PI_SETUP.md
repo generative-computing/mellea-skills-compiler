@@ -255,7 +255,37 @@ Add this to `~/.pi/agent/models.json`:
 Then compile with:
 
 ```bash
-mellea-skills compile skills/weather/spec.md --backend pi --provider ollama --model granite4.2:30b
+mellea-skills compile skills/weather/spec.md --backend pi --provider ollama --model granite4.2:30b --timeout 21600
+```
+
+Local models are much slower than hosted Claude. A small skill such as `weather` took
+about 110 minutes with `granite4.2:30b`, longer than the default 75-minute `--timeout`,
+so raise it as shown above.
+
+#### Choosing an Ollama model
+
+The compile reads roughly 200 KB of step instructions and has to follow strict rules
+about which files it may write, so it needs a large model that follows instructions
+reliably and calls tools rather than describing them. Results from compiling `weather`:
+
+| Model | Result |
+|-------|--------|
+| `granite4.2:30b` | Compiles successfully (about 110 min) |
+| `qwen3-coder` | Fast, but ignores file-placement rules and does not produce the required `*_emission.json` files, so the compile fails |
+| `granite3.3:8b` | Prints commands as text instead of calling tools; the compile stops immediately |
+| `granite4.2:3b` | Loses track of the working directory and writes files outside the repository |
+
+Models other than these have not been tested.
+
+#### Check the compiled skill by running it
+
+A successful compile means the package parses, passes the structural lints, and its
+fixtures import and run. It does not prove that the skill's tools work: fixtures do not
+make live network calls, and generated tools may catch errors and return them as
+ordinary strings. Run the compiled skill against a real input before relying on it:
+
+```bash
+mellea-skills run skills/weather/weather_mellea --input '{"location": "Dublin"}'
 ```
 
 ### Verifying credentials
@@ -285,3 +315,6 @@ curl -s http://127.0.0.1:11434/api/tags
 | Your provider is missing from `pi --list-models` | `models.json` is in the wrong place or misnamed | It must be `models.json` (plural) in `~/.pi/agent/`, or in `$PI_CODING_AGENT_DIR` if set |
 | `pi auth check` prints `not ready` | Missing or mis-scoped credentials | Re-run `pi` and use `/login`, or set the correct environment variable for that provider |
 | Compile starts then silently produces no output | Provider accepted the connection but the model rejected the request | The provider error message is printed to the terminal at the end of the compile run — scroll up to find it |
+| `Mellea-fy skill compilation failed due to timeout` with an Ollama model | Local models take far longer than the default 75-minute limit | Re-run with a larger `--timeout`, e.g. `--timeout 21600` (6 hours) |
+| `config_emission.json not found` or `fixtures_emission.json not found` | The model wrote `config.py` / `fixtures/` directly (blocked during pi runs) instead of emitting the JSON the compiler renders from | Use a more capable model; see [Choosing an Ollama model](#choosing-an-ollama-model) |
+| `Pi exited with return code 0 but produced no .../classification.json` | The model stopped without doing any work — it asked a question or replied with text instead of calling tools | Use a model that supports tool calling reliably; see [Choosing an Ollama model](#choosing-an-ollama-model) |
