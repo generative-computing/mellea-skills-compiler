@@ -15,7 +15,8 @@ nav = [
     {"Quick start" = "QUICK_START.md"},
     {"CLI reference" = "CLI.md"}, 
      {"From Stubs to Running" = "FROM_STUBS_TO_RUNNING.md"},
-     {Exporting = "EXPORTING.md"}
+     {Exporting = "EXPORTING.md"},
+     {"Using with pi" = "PI_SETUP.md"}
   ]},
    {"Tutorials" = [
      {"Four Skills, Five Minutes Each" = "TUTORIAL.md"},
@@ -63,10 +64,6 @@ paths = ["src"]
 docstring_style = "google"
 inherited_members = true
 show_source = false
-
-[project.markdown_extensions.zensical.extensions.macros]
-module_name = "macros"
-include_dir = "includes"
 
 [project.markdown_extensions.pymdownx.snippets]
 
