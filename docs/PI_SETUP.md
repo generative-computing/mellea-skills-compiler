@@ -53,19 +53,13 @@ Flags are passed through to the CLI unchanged. See the [CLI reference](CLI.md) o
 
 ### Install
 
-From npm:
-
-```bash
-pi install npm:mellea-skills-compiler-pi
-```
-
-Or from the root of a clone of this repo:
+From the root of a clone of this repo:
 
 ```bash
 pi install ./extensions/pi
 ```
 
-Both add the extension to your global pi settings. Add `-l` (for example,
+This adds the extension to your global pi settings. Add `-l` (for example,
 `pi install -l ./extensions/pi`) to install it for the current project only.
 
 To try it for one session without installing:

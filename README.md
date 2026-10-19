@@ -335,7 +335,7 @@ session from the repo root:
 
 ```bash
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.2.0
-pi install npm:mellea-skills-compiler-pi   # or, from a clone: pi install ./extensions/pi
+pi install ./extensions/pi
 pi
 ```
 
