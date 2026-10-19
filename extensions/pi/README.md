@@ -1,6 +1,6 @@
 # Mellea Skills Compiler — pi extension
 
-Run the [Mellea Skills Compiler](../../README.md) `compile`, `validate`, `run`,
+Run the [Mellea Skills Compiler](https://generative-computing.github.io/mellea-skills-compiler/) `compile`, `validate`, `run`,
 and `certify` commands from inside a [pi](https://pi.dev) session, as
 `/mellea-compile`, `/mellea-validate`, `/mellea-run`, and `/mellea-certify`.
 
@@ -8,7 +8,7 @@ and `certify` commands from inside a [pi](https://pi.dev) session, as
 
 This extension shells out to the `mellea-skills` CLI — it does not bundle or
 install it. Before using `/mellea-compile` or `/mellea-certify`, install the
-compiler following the [main README's Install section](../../README.md#installation)
+compiler following the [Installation guide](https://generative-computing.github.io/mellea-skills-compiler/INSTALLATION/)
 (`pip install -e .` from a clone of this repo), and confirm `mellea-skills`
 resolves on your `PATH`:
 
@@ -44,7 +44,13 @@ pi --version
 
 ### 2. Install this extension
 
-From the root of a local clone of this repo:
+From npm:
+
+```bash
+pi install npm:mellea-skills-compiler-pi
+```
+
+Or from the root of a local clone of this repo:
 
 ```bash
 pi install ./extensions/pi
@@ -52,8 +58,7 @@ pi install ./extensions/pi
 
 This adds the extension to your global pi settings, so it loads in every pi
 session. Use `pi install -l ./extensions/pi` to install it for this project
-only (`.pi/settings.json`) instead. Once this package is published, it will
-also be installable from a git/npm source — see pi's package docs.
+only (`.pi/settings.json`) instead.
 
 To try it for a single session without installing anything:
 
