@@ -307,10 +307,10 @@ mellea-skills compile --repair-mode <Your-local-path>/skills/weather --model aws
 
 **Using Claude Code**
 
-Run `/mellea-fy` directly inside Claude Code:
+Run the `/mellea-fy` slash command inside a Claude Code session:
 
-```bash
-./mellea-fy <Your-local-path>/skills/weather/spec.md
+```
+/mellea-fy <Your-local-path>/skills/weather/spec.md
 ```
 
 **Using IBM Bob**
@@ -321,7 +321,7 @@ Run `/mellea-fy` directly inside Bob Shell:
 /mellea-fy <Your-local-path>/skills/weather/spec.md
 ```
 
-See [`mellea-fy/README.md`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/mellea-fy/README.md) for detailed usage of the Claude Code command.
+See [`.claude/commands/README.md`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/.claude/commands/README.md) for detailed usage of the `/mellea-fy` command.
 
 **Using pi**
 
@@ -357,26 +357,26 @@ list, flags, and known limitations.
 
 ### Run Skill Pipeline
 
-Run skill pipeline for a given fixture
+Run a compiled skill pipeline against an input or a fixture. The examples below use the pre-compiled `examples/weather/weather_mellea`. After compiling `skills/weather/spec.md` yourself, `skills/weather/weather_mellea` works the same way.
 
 ```bash
 # provide a raw string as an input
-mellea-skills run <Your-local-path>/weather/weather_mellea --input "Whats the weather like in Dublin?"
+mellea-skills run examples/weather/weather_mellea --input "What's the weather like in Dublin?"
 
 # provide a JSON file as an input
-mellea-skills run <Your-local-path>/weather/weather_mellea --input file://<Your-local-path>/input.json
+mellea-skills run examples/weather/weather_mellea --input file://<Your-local-path>/input.json
 
 # provide input as stdin for each required parameters
-mellea-skills run <Your-local-path>/weather/weather_mellea --input -
+mellea-skills run examples/weather/weather_mellea --input -
 
 # provide a fixture name as an input
-mellea-skills run <Your-local-path>/weather/weather_mellea --fixture rain_check
+mellea-skills run examples/weather/weather_mellea --fixture rain_check_city
 
- # Block execution when Guardian detects risks (default: audit-only)
-mellea-skills run <Your-local-path>/weather/weather_mellea --enforce
+# Block execution when Guardian detects risks (default: audit-only)
+mellea-skills run examples/weather/weather_mellea --enforce
 
 # Skip Guardian checks even if a policy manifest exists.
-mellea-skills run <Your-local-path>/weather/weather_mellea --no-guardian
+mellea-skills run examples/weather/weather_mellea --no-guardian
 ```
 
 #### Input Format Examples
@@ -385,21 +385,21 @@ mellea-skills run <Your-local-path>/weather/weather_mellea --no-guardian
 
 For skills with a single parameter, you can pass a plain string directly:
 ```
-mellea-skills run skills/weather/weather_mellea --input "What's the weather like in Dublin?"
+mellea-skills run examples/weather/weather_mellea --input "What's the weather like in Dublin?"
 ```
 
 2. JSON String
 
-For skills with multiple parameters, pass a JSON object with parameter names as keys:
+Pass a JSON object with parameter names as keys. This is required for skills with more than one parameter. The weather pipeline takes a single `query` parameter:
 ```
-mellea-skills run skills/sentry/sentry_mellea --input '{"query": "What's the weather like in Dublin right now?"}'
+mellea-skills run examples/weather/weather_mellea --input '{"query": "What is the weather like in Dublin right now?"}'
 ```
 
 3. File Input (JSON)
 
 Use file:// prefix to read structured JSON from a file:
 ```
-mellea-skills run skills/weather/weather_mellea --input file://input.json
+mellea-skills run examples/weather/weather_mellea --input file://input.json
 ```
 input.json:
 ```
@@ -412,7 +412,7 @@ input.json:
 
 YAML files are also supported via file:// prefix:
 ```
-mellea-skills run skills/example/example_mellea --input file://input.yaml
+mellea-skills run examples/weather/weather_mellea --input file://input.yaml
 ```
 input.yaml:
 ```
@@ -423,7 +423,7 @@ query: What's the weather like in Dublin right now?
 
 Use - to prompt for each parameter interactively:
 ```bash
-mellea-skills run skills/weather/weather_mellea --input -
+mellea-skills run examples/weather/weather_mellea --input -
 # This will prompt:
 Enter query: What's the weather like in Dublin right now?
 ```
@@ -432,7 +432,7 @@ Enter query: What's the weather like in Dublin right now?
 
 Use a pre-defined fixture instead of --input:
 ```bash
-mellea-skills run skills/weather/weather_mellea --fixture current_weather_city
+mellea-skills run examples/weather/weather_mellea --fixture current_weather_city
 ```
 
 ### Run Full Certification Pipeline for Mellea skill
@@ -449,7 +449,7 @@ mellea-skills certify examples/weather/weather_mellea
 mellea-skills certify examples/weather/weather_mellea --enforce
 
 # Number of fixtures to evaluate for pipeline certification. Default is 3.
-mellea-skills certify examples/weather/weather_mellea --n_fixtures 4
+mellea-skills certify examples/weather/weather_mellea -n 4
 
 # Using Ollama risk model, guardian model and inference engine
 mellea-skills certify examples/weather/weather_mellea --risk-model granite4.1:3b --guardian-model ibm/granite3.3-guardian:8b --inference-engine ollama
@@ -479,16 +479,18 @@ mellea-skills export --target mcp --force <Your-local-path>/skills/weather/weath
 
 ### Certification artifacts
 
-All outputs are written to `audit/` adjacent to the compiled directory:
+Each `certify` run writes to a new timestamped directory under `audit/`, next to the compiled directory:
 
 ```
-skills/weather/audit/
+skills/weather/audit/<DD-MM-YYYY_HH-MM-SS>/
 ├── policy_manifest.json        # Policy manifest (risks + governance actions)
 ├── POLICY.md                   # Human-readable policy document
 ├── CERTIFICATION.md            # Certification report with coverage summary
 ├── audit_trail.jsonl           # Runtime Guardian verdicts
-└── pipeline_report.json        # Pipeline execution output
+└── fixture_results.json        # Fixture execution results
 ```
+
+`run` writes its outputs to `runs/<DD-MM-YYYY_HH-MM-SS>/` in the same place.
 
 ## Example Outputs
 

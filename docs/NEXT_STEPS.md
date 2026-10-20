@@ -32,7 +32,7 @@ Mellea Skills Compiler is an active research project. The current release demons
 ## Known Limitations
 
 - **Research preview** — APIs, CLI, and artifact formats may change
-- **Claude Code required for compilation** — Both `mellea-skills compile` and `/mellea-fy` invoke Claude Code under the hood for specification decomposition
+- **An agent backend is required for compilation** — `mellea-skills compile` runs specification decomposition through Claude Code (default), IBM Bob, or pi. Results are tuned for Claude-class models
 - **Static compliance classification** — YAML-based action-to-control mapping, not yet validated against ground truth
 - **Single domain evaluation** — Certification pipeline has been tested primarily on security and utility skills
 - **Python version constraints** — Python >=3.11 and <3.14.4 (ai-atlas-nexus requires 3.11+ and <3.14.4; Mellea supports 3.11+)

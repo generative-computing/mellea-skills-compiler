@@ -38,107 +38,37 @@ Begin operation by using the Mellea Skills Compiler Node.js Interactive CLI or s
 
 ### Command-based CLI
 
-### Compile Agent Skill - Option 1 (Recommended)
+The steps below take the weather skill from spec to certified pipeline. The [CLI reference](CLI.md) covers every command and flag.
 
-Compile a skill into a typed Mellea pipeline via the CLI:
-
-```bash
-# if skill is a single spec file.
-mellea-skills compile <Your-local-path>/skills/weather/spec.md
-
-# if skill is a directory containing spec files
-mellea-skills compile <Your-local-path>/skills/weather
-```
-
-The `--backend` flag allows you to specify which compilation backend to use (currently `claude` and `bob` are supported):
-```bash
-# Explicit backend selection as claude
-mellea-skills compile <Your-local-path>/skills/weather/spec.md --backend claude
-
-# Explicit backend selection as bob
-mellea-skills compile <Your-local-path>/skills/weather/spec.md --backend bob
-
-# Uses 'claude' by default
-mellea-skills compile <Your-local-path>/skills/weather/spec.md
-```
-
-Compile uses Sonnet as the default claude model. To use different claude model,
+**1. Compile** the spec into a typed Mellea pipeline. This creates `skills/weather/weather_mellea/`:
 
 ```bash
-mellea-skills compile <Your-local-path>/skills/weather/spec.md --model aws/claude-opus-4-5
-mellea-skills compile <Your-local-path>/skills/weather --model aws/claude-opus-4-5
+mellea-skills compile skills/weather/spec.md                  # Claude Code backend (default)
+mellea-skills compile skills/weather/spec.md --backend bob    # or IBM Bob
+mellea-skills compile skills/weather/spec.md --backend pi     # or pi, see Using with pi
 ```
 
-Melleafy Repair: Identify and correct any errors effectively in Mellea skill compilation
+To skip compiling, use the pre-compiled copy at `examples/weather/weather_mellea` in the steps below.
+
+**2. Validate** the compiled pipeline (static lints + a fixture smoke-check):
 
 ```bash
-mellea-skills compile --repair-mode <Your-local-path>/skills/weather --model aws/claude-opus-4-5
+mellea-skills validate skills/weather/weather_mellea
 ```
 
-### Compile Agent Skill - Option 2 (Using Claude Code)
-
-**Using Claude Code**
-
-Run `/mellea-fy` directly inside Claude Code:
+**3. Run** it against an input or a fixture:
 
 ```bash
-./mellea-fy <Your-local-path>/skills/weather/spec.md
+mellea-skills run skills/weather/weather_mellea --input "What's the weather like in Dublin?"
+mellea-skills run skills/weather/weather_mellea --fixture rain_check_city
 ```
 
-**Using IBM Bob**
-
-Run `/mellea-fy` directly inside Bob Shell:
+**4. Certify** it: risk identification, Guardian instrumentation, fixture execution, and a compliance report:
 
 ```bash
-/mellea-fy <Your-local-path>/skills/weather/spec.md
+mellea-skills certify skills/weather/weather_mellea
 ```
 
-See [`mellea-fy/README.md`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/mellea-fy/README.md) for detailed usage of the Claude Code command.
+Certification artifacts are written to a timestamped directory under `skills/weather/audit/`. See [Output directories](CLI.md#output-directories).
 
-### Run Skill Pipeline
-
-Run skill pipeline for a given fixture
-
-```bash
-mellea-skills run <Your-local-path>/weather/weather_mellea --input "Whats the weather like in Dublin?" # provide a raw string as an input
-mellea-skills run <Your-local-path>/weather/weather_mellea --input file://<Your-local-path>/input.json  # provide a JSON file as an input
-mellea-skills run <Your-local-path>/weather/weather_mellea --input -  # provide input as stdin for each required parameters
-mellea-skills run <Your-local-path>/weather/weather_mellea --fixture rain_check   # provide a fixture name as an input
-mellea-skills run <Your-local-path>/weather/weather_mellea --enforce              # Block execution when Guardian detects risks (default: audit-only)
-mellea-skills run <Your-local-path>/weather/weather_mellea --no-guardian          # Skip Guardian checks even if a policy manifest exists.
-```
-
-### Run Full Certification Pipeline for Mellea skill
-
-Run end-to-end certification — risk identification via AI Atlas Nexus, Guardian hook instrumentation, fixture execution, and compliance report — in a single command:
-
-```bash
-mellea-skills certify <Your-local-path>/skills/weather/weather_mellea                      # provide path to the compiled skill directory
-mellea-skills certify <Your-local-path>/skills/weather/weather_mellea --enforce            # Block on risk detection
-mellea-skills certify <Your-local-path>/skills/weather/weather_mellea --fixture rain_check # Run specific fixture - rain_check
-mellea-skills certify <Your-local-path>/skills/weather/weather_mellea --model granite4.1:3b --guardian-model ibm/granite3.3-guardian:8b --inference-engine ollama    # Using different risk model, guardian model and inference engine
-```
-
-### Export Compiled Mellea Skill
-
-Export a compiled Mellea skill to a deployment target - langgraph, claude-code, or mcp
-
-**Note**: This command is experimental. Output structure and CLI interface may change in future releases without a deprecation period.
-
-```bash
-mellea-skills export --target mcp <Your-local-path>/skills/weather/weather_mellea         # Supported deployment target: mcp, langgraph, claude-code
-mellea-skills export --target mcp --force <Your-local-path>/skills/weather/weather_mellea # '--force' overwrites output directory if it already exists.
-```
-
-### Certification artifacts
-
-All outputs are written to `audit/` adjacent to the compiled directory:
-
-```
-skills/weather/audit/
-├── policy_manifest.json        # Policy manifest (risks + governance actions)
-├── POLICY.md                   # Human-readable policy document
-├── CERTIFICATION.md            # Certification report with coverage summary
-├── audit_trail.jsonl           # Runtime Guardian verdicts
-└── pipeline_report.json        # Pipeline execution output
-```
+You can also compile from inside an agent session with the `/mellea-fy` slash command (Claude Code, IBM Bob), or with `/mellea-compile` in pi. See [Using with pi](PI_SETUP.md).

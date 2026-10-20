@@ -2,7 +2,7 @@
 
 `/mellea-fy` is the Claude Code slash command that compiles agent specifications into governed Mellea pipelines. It runs the LLM-driven decomposition phase of the Mellea Skills Compiler workflow.
 
-In most cases you don't invoke `/mellea-fy` directly — `mellea-skills compile` calls it under the hood and adds deterministic plumbing on either side (companion-directory mirroring, grounding pre-population, runtime-defaults injection, structural lints, fixture smoke check). For an end-to-end walkthrough see [`docs/TUTORIAL.md`](../docs/TUTORIAL.md).
+In most cases you don't invoke `/mellea-fy` directly — `mellea-skills compile` calls it under the hood and adds deterministic plumbing on either side (companion-directory mirroring, grounding pre-population, runtime-defaults injection, structural lints, fixture smoke check). For an end-to-end walkthrough see [`TUTORIAL.md`](TUTORIAL.md).
 
 ## Usage
 
@@ -58,15 +58,15 @@ skills/checklist/
         ├── mellea_api_ref.json        # Live mellea introspection (from compile pipeline)
         ├── mellea_doc_index.json      # docs.mellea.ai page index (from compile pipeline)
         ├── step_7_report.json         # Static lint results
-        └── step_7b_report.json        # Smoke check results (when --no-run not set)
+        └── step_7b_report.json        # Smoke check results (when --skip-smoke-check not set)
 ```
 
 ## Architecture
 
 Two parts of the compile output are **wrapper-rendered, not LLM-emitted**:
 
-- `config.py` — rendered from `intermediate/config_emission.json` by [`src/mellea_skills_compiler/compile/writers/config_writer.py`](../src/mellea_skills_compiler/compile/writers/config_writer.py)
-- `fixtures/` — rendered from `intermediate/fixtures_emission.json` by [`src/mellea_skills_compiler/compile/writers/fixtures_writer.py`](../src/mellea_skills_compiler/compile/writers/fixtures_writer.py)
+- `config.py` — rendered from `intermediate/config_emission.json` by [`src/mellea_skills_compiler/compile/writers/config_writer.py`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/src/mellea_skills_compiler/compile/writers/config_writer.py)
+- `fixtures/` — rendered from `intermediate/fixtures_emission.json` by [`src/mellea_skills_compiler/compile/writers/fixtures_writer.py`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/src/mellea_skills_compiler/compile/writers/fixtures_writer.py)
 
 `mellea-skills compile` enforces this by injecting `--settings` deny rules that block the LLM from writing those paths during the slash-command phase. The LLM emits the typed JSON intermediate; the wrapper renders the source. This makes drift in those two artifacts structurally impossible.
 
@@ -81,13 +81,15 @@ mellea-skills run skills/checklist/checklist_mellea --fixture <fixture_name>
 mellea-skills certify skills/checklist/checklist_mellea
 ```
 
+`skills/checklist/checklist_mellea` exists only after you compile `skills/checklist/spec.md`.
+
 ## The Skill Spec
 
-The mellea-fy command spec lives at [`./claude/commands/mellea-fy.md`](../.claude/commands/mellea-fy.md) (orchestrator) and nine sub-command files (`mellea-fy-classify.md`, `mellea-fy-inventory.md`, `mellea-fy-map.md`, `mellea-fy-deps.md`, `mellea-fy-fixtures.md`, `mellea-fy-generate.md`, `mellea-fy-artifacts.md`, `mellea-fy-validate.md`, `mellea-fy-repair.md`) in the same directory. Together they define the eight-step decomposition methodology (Steps 0–7).
+The mellea-fy command spec lives at [`.claude/commands/mellea-fy.md`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/.claude/commands/mellea-fy.md) (orchestrator) and nine sub-command files (`mellea-fy-classify.md`, `mellea-fy-inventory.md`, `mellea-fy-map.md`, `mellea-fy-deps.md`, `mellea-fy-fixtures.md`, `mellea-fy-generate.md`, `mellea-fy-artifacts.md`, `mellea-fy-validate.md`, `mellea-fy-repair.md`) in the same directory. Together they define the eight-step decomposition methodology (Steps 0–7).
 
-For IBM Bob, the mellea-fy and related sub-command files live in [.bob/skills/](../.bob/skills/)
+For IBM Bob, the mellea-fy and related sub-command files live in [`.bob/skills/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/.bob/skills)
 
 Supporting infrastructure used during code generation:
 
-- [`./claude/schemas/`](../.claude/schemas/) — JSON Schema contracts for intermediate IR files (`classification`, `inventory`, `element_mapping`, `dependency_plan`, `melleafy`, `config_emission`, `fixtures_emission`, `runtime_defaults`)
-- [`./claude/data/runtime_defaults.json`](../.claude/data/runtime_defaults.json) — default backend and model_id baked into compiled skills (override per compile via `--backend` / `--model-id`)
+- [`.claude/schemas/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/.claude/schemas) — JSON Schema contracts for intermediate IR files (`classification`, `inventory`, `element_mapping`, `dependency_plan`, `melleafy`, `config_emission`, `fixtures_emission`, `runtime_defaults`)
+- [`.claude/data/runtime_defaults.json`](https://github.com/generative-computing/mellea-skills-compiler/blob/main/.claude/data/runtime_defaults.json) — default backend and model_id baked into compiled skills (override per compile via `--skill-backend` / `--skill-model`)

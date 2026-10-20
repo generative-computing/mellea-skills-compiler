@@ -1,7 +1,7 @@
 # Four Skills, Five Minutes Each
 
-This tutorial assumes you have already followed [`README.md`](README.md) §
-_Install_: `pip install -e .` succeeds in your virtual environment, an Ollama
+This tutorial assumes you have already followed [Installation](INSTALLATION.md):
+`pip install -e .` succeeds in your virtual environment, an Ollama
 backend is running on the host given by `OLLAMA_API_URL`, and the
 `granite4.1:3b` model has been pulled.
 
@@ -59,21 +59,21 @@ unreachable. Check `OLLAMA_API_URL` and that `ollama list` shows
 
 For skills with a single parameter, you can pass a plain string directly:
 ```
-mellea-skills run skills/weather/weather_mellea --input "Will it rain in Tokyo tomorrow?"
+mellea-skills run examples/weather/weather_mellea --input "Will it rain in Tokyo tomorrow?"
 ```
 
 2. JSON String
 
-For skills with multiple parameters, pass a JSON object with parameter names as keys:
+Pass a JSON object with parameter names as keys. This is required for skills with more than one parameter. The weather pipeline takes a single `query` parameter:
 ```
-mellea-skills run skills/sentry/sentry_mellea --input '{"query": "Will it rain in Tokyo tomorrow?"}'
+mellea-skills run examples/weather/weather_mellea --input '{"query": "Will it rain in Tokyo tomorrow?"}'
 ```
 
 3. File Input (JSON)
 
 Use file:// prefix to read structured JSON from a file:
 ```
-mellea-skills run skills/weather/weather_mellea --input file://input.json
+mellea-skills run examples/weather/weather_mellea --input file://input.json
 ```
 input.json:
 ```
@@ -86,7 +86,7 @@ input.json:
 
 YAML files are also supported via file:// prefix:
 ```
-mellea-skills run skills/example/example_mellea --input file://input.yaml
+mellea-skills run examples/weather/weather_mellea --input file://input.yaml
 ```
 input.yaml:
 ```
@@ -97,7 +97,7 @@ query: Will it rain in Tokyo tomorrow?
 
 Use - to prompt for each parameter interactively:
 ```bash
-mellea-skills run skills/weather/weather_mellea --input -
+mellea-skills run examples/weather/weather_mellea --input -
 # This will prompt:
 Enter query: Will it rain in Tokyo tomorrow?
 ```
@@ -106,7 +106,7 @@ Enter query: Will it rain in Tokyo tomorrow?
 
 Use a pre-defined fixture instead of --input:
 ```bash
-mellea-skills run skills/weather/weather_mellea --fixture rain_check
+mellea-skills run examples/weather/weather_mellea --fixture rain_check_city
 ```
 
 ---
@@ -305,7 +305,7 @@ worked against `sentry-find-bugs` (`search_fn`, `read_file_fn`).
 
 ## 7. Compiling Your Own Skill
 
-The compile path is unchanged from the README's _Quick Start_:
+The compile path is the same as in the [Quick Start](QUICK_START.md):
 
 ```bash
 mellea-skills compile skills/weather/spec.md
@@ -313,13 +313,16 @@ mellea-skills compile skills/weather/spec.md
 
 `mellea-skills compile` runs `/mellea-fy` for specification
 decomposition, then chains into a deterministic writer pipeline that
-renders `config.py` and `fixtures/` from the intermediate JSONs. Deny
-rules (`src/mellea_skills_compiler/compile/writer_renderer.py`)
+renders `config.py` and `fixtures/` from the intermediate JSONs
+(`src/mellea_skills_compiler/compile/writers/renderer.py`). Deny
+rules (`src/mellea_skills_compiler/compile/claude_directives.py`)
 prevent the LLM from overwriting those two artefacts. The structural
 lints (Step 7) run next, followed by one fixture as a smoke check.
-`--no-run` skips the smoke check in CI; lints still run. Exit code
-`12` = a fixture raised; `0` = passed or skipped because the backend
-was unreachable. See `src/mellea_skills_compiler/compile/smoke_check.py`.
+`--skip-smoke-check` skips the smoke check; lints still run. To re-run
+both later, use `mellea-skills validate` (add `--no-run` for lints
+only). A failure exits non-zero; a smoke check skipped because the
+backend was unreachable still exits `0`. See
+`src/mellea_skills_compiler/compile/smoke_check.py`.
 
 When the smoke check fails with a `NotImplementedError`, work through
 [`FROM_STUBS_TO_RUNNING.md`](FROM_STUBS_TO_RUNNING.md).
@@ -328,7 +331,7 @@ When the smoke check fails with a `NotImplementedError`, work through
 
 ## Reference
 
-- Compile flow: [`README.md`](README.md) §Quick Start, step 2
+- Compile flow: [Quick Start](QUICK_START.md), step 1
 - Smoke check verdicts: `src/mellea_skills_compiler/compile/smoke_check.py`
 - Fixture loader convention: `src/mellea_skills_compiler/toolkit/file_utils.py`
 - Stub catalogue (per skill): each compiled package's `SETUP.md §8`
