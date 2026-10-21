@@ -6,20 +6,27 @@ and `certify` commands from inside a [pi](https://pi.dev) session, as
 
 ## Prerequisites
 
-This extension shells out to the `mellea-skills` CLI — it does not bundle or
-install it. Before using `/mellea-compile` or `/mellea-certify`, install the
-compiler following the [Installation guide](https://generative-computing.github.io/mellea-skills-compiler/INSTALLATION/)
-(`pip install -e .` from a clone of this repo), and confirm `mellea-skills`
-resolves on your `PATH`:
+- **`git`**, and either **[uv](https://docs.astral.sh/uv/)** or **Python 3.11
+  to 3.14.3**. These are used to install the compiler on first use (see below).
+- **pi 1.2.0 or later.**
+- **For `/mellea-run` and `/mellea-certify`:** an inference engine (Ollama or
+  vLLM). See the [Installation guide](https://generative-computing.github.io/mellea-skills-compiler/INSTALLATION/#choose-inference-engine).
 
-```bash
-mellea-skills version
-```
+macOS and Linux only.
 
-Claude Code and an inference engine (Ollama or vLLM) are also required by the
-underlying CLI — see the main README for setup. This extension does not
-install any of these for you; if a command isn't found, it reports which one
-and points back here.
+### The compiler is installed automatically
+
+You don't need to install the `mellea-skills` CLI yourself. The first time
+you run any `/mellea-*` command, the extension:
+
+1. clones the compiler at the release this extension was built for,
+2. creates a Python environment for it, and
+3. installs `mellea-skills` into that environment,
+
+all under `~/.cache/mellea-skills-compiler/<version>/`. Each step is shown in
+the session as it runs. This takes a few minutes and only happens once per
+version; later commands reuse the install. If setup is interrupted, the next
+command starts it again from scratch. To reset an install, delete that folder.
 
 ## Install
 
@@ -29,10 +36,6 @@ If you don't already have the [pi](https://pi.dev) coding agent, install it
 with one of:
 
 ```bash
-# macOS / Linux
-curl -fsSL https://pi.dev/install.sh | sh
-
-# or via npm
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 ```
 
@@ -70,8 +73,8 @@ pi -e ./extensions/pi/extensions/mellea-skills.ts
 
 The `/mellea-*` commands are pi slash commands, **not** shell commands —
 typing `/mellea-run ...` directly into zsh/bash will fail with
-`no such file or directory`. Start pi first, from the repo root so the
-example paths below resolve:
+`no such file or directory`. Start pi from the folder that holds your skills;
+paths you pass to the commands are relative to it:
 
 ```bash
 pi
@@ -83,9 +86,12 @@ autocomplete.
 
 ## Commands
 
-- `/mellea-compile <path-to-spec.md> [flags...]` — runs `mellea-skills compile`.
-  Flags are passed through as-is; see `mellea-skills compile --help` for the
-  full list (`--backend`, `--model`, `--timeout`, `--repair-mode`, etc.).
+- `/mellea-compile <path-to-spec.md> [flags...]` — runs `mellea-skills compile`
+  with the **pi backend**, using this session's current provider and model.
+  The compiled package is written next to the spec. Pass `--backend`,
+  `--provider` or `--model` to override (for example `--backend claude` to
+  compile with Claude Code instead); other flags are passed through as-is
+  (`--timeout`, `--repair-mode`, etc.).
 - `/mellea-validate <compiled-skill-dir> [flags...]` — runs `mellea-skills
   validate` (Step 7 lints + fixture smoke-check). Flags are passed through
   as-is; see `mellea-skills validate --help` (`--no-run`, `--all`).
@@ -100,21 +106,23 @@ autocomplete.
 
 ## Examples
 
-Run these **inside the pi session** started from the repo root (paths are
-relative to pi's working directory):
+Run these **inside a pi session**, with a skill spec at `weather/spec.md`
+under the folder pi was started in (any skill from the
+[`skills/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/skills)
+directory works):
 
 ```
-# Compile a spec into a Mellea pipeline (needs Claude Code configured)
-/mellea-compile skills/weather/spec.md
+# Compile a spec into a Mellea pipeline, using this session's model
+/mellea-compile weather/spec.md
 
-# Validate a compiled skill (lints + fixture smoke-check)
-/mellea-validate examples/weather/weather_mellea
+# Validate the compiled skill (lints + fixture smoke-check)
+/mellea-validate weather/weather_mellea
 
-# Run a compiled skill against a natural-language input
-/mellea-run examples/weather/weather_mellea --input "What's the weather like in Dublin?"
+# Run it against a natural-language input (needs Ollama or vLLM running)
+/mellea-run weather/weather_mellea --input "What's the weather like in Dublin?"
 
-# Certify a compiled skill (needs Ollama or vLLM running)
-/mellea-certify examples/weather/weather_mellea
+# Certify it (needs Ollama or vLLM running)
+/mellea-certify weather/weather_mellea
 ```
 
 Each command shows a status indicator while it runs, then a single
@@ -138,12 +146,24 @@ payload.
 
 ## Known limitations
 
-- No auto-install: missing `mellea-skills`, Claude Code, or an inference
-  engine surfaces as an error with a pointer to setup docs, not an automatic
-  fix.
-- No cancellation: pi's per-command abort signal (`ctx.signal`) is only
+- **No cancellation.** pi's per-command abort signal (`ctx.signal`) is only
   populated while the agent is actively streaming a turn, not during a
-  command handler — so a long-running `/mellea-compile`, `/mellea-validate`,
-  `/mellea-run`, or `/mellea-certify` cannot currently be cancelled from
-  within the extension. Use pi's own process-level interrupt if you need to
-  stop one early.
+  command handler, so a running `/mellea-*` command cannot be cancelled from
+  within the extension. Use pi's own process-level interrupt to stop one early.
+- **No progress during a command.** A compile shows "Compiling..." until it
+  finishes, then one notification with the CLI's output. In headless mode
+  (`pi -p`) there is no output and pi exits 0 even if the command failed. Run
+  the `mellea-skills` CLI directly for scripts and CI.
+- **Compile time varies a lot** with the model and with pi's thinking level,
+  from a couple of minutes to over half an hour for larger skills. A compile
+  that stops partway can be resumed with `/mellea-compile <spec> --repair-mode`.
+- **Compiling writes next to the spec**: a `<name>_mellea/` package and a
+  `pyproject.toml`. Compile from a copy if you don't want your skill folder
+  changed.
+- **The compile trusts the managed install's pi config.** The compile runs pi
+  with `--approve` inside the extension's own copy of the compiler
+  (`~/.cache/mellea-skills-compiler/<version>/repo`), so it can load the
+  compiler's prompt templates. It does not do this in your own folders.
+- **Export is experimental.** Exported skills can get a generic description,
+  and the exported `run.sh` can drop arguments for some pipeline signatures.
+  Check the exported `SKILL.md` and `scripts/run.sh` before sharing a bundle.

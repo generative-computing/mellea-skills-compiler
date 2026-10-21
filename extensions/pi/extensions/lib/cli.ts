@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+
 export type PiExecResult = {
 	stdout: string;
 	stderr: string;
@@ -8,26 +10,53 @@ export type PiExecResult = {
 export type PiExec = (
 	command: string,
 	args: string[],
-	options?: { cwd?: string },
+	options?: { cwd?: string; timeout?: number },
 ) => Promise<PiExecResult>;
-
-export const CLI_MISSING_MESSAGE =
-	"mellea-skills CLI not found on PATH. Install it first — see " +
-	"https://github.com/generative-computing/mellea-skills-compiler#install " +
-	"(pip install -e . from a clone of the repo).";
-
-export async function checkCliAvailable(exec: PiExec): Promise<boolean> {
-	const result = await exec("mellea-skills", ["version"]);
-	return result.code === 0;
-}
 
 export async function runMelleaSkills(
 	exec: PiExec,
+	cli: string,
 	subcommand: string,
 	args: string[],
 	options?: { cwd?: string },
 ): Promise<PiExecResult> {
-	return exec("mellea-skills", [subcommand, ...args], options);
+	return exec(cli, [subcommand, ...args], options);
+}
+
+/** Makes a leading positional path absolute, so it survives a change of cwd. */
+export function resolveLeadingPath(tokens: string[], userCwd: string): string[] {
+	if (tokens.length === 0 || tokens[0].startsWith("-")) return tokens;
+	return [resolve(userCwd, tokens[0]), ...tokens.slice(1)];
+}
+
+/**
+ * Builds `mellea-skills compile` argv for a pi session: the spec path is made
+ * absolute (compile runs from the managed clone, not the user's folder), and
+ * the backend defaults to pi using the session's own provider and model.
+ * Flags the user passed always win.
+ */
+export function buildCompileArgv(
+	tokens: string[],
+	userCwd: string,
+	model?: { provider: string; id: string },
+): string[] {
+	const argv = resolveLeadingPath(tokens, userCwd);
+	const backend = flagValue(argv, ["--backend", "-b"]);
+	if (backend === undefined) argv.push("--backend", "pi");
+	if ((backend ?? "pi") !== "pi" || !model) return argv;
+	if (flagValue(argv, ["--provider"]) === undefined) argv.push("--provider", model.provider);
+	if (flagValue(argv, ["--model", "-m"]) === undefined) argv.push("--model", model.id);
+	return argv;
+}
+
+function flagValue(argv: string[], names: string[]): string | undefined {
+	for (let i = 0; i < argv.length; i++) {
+		for (const name of names) {
+			if (argv[i] === name) return argv[i + 1] ?? "";
+			if (argv[i].startsWith(`${name}=`)) return argv[i].slice(name.length + 1);
+		}
+	}
+	return undefined;
 }
 
 /**
