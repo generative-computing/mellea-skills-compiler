@@ -42,13 +42,17 @@ through unchanged. See the [CLI reference](CLI.md) for what each command accepts
     ```
 
 - **`git`**, and either **[uv](https://docs.astral.sh/uv/)** or **Python 3.11 to
-  3.14.3**, which the extension uses to install the compiler (see below).
+  3.14.3** (on Windows, the `py` launcher is enough), which the extension uses to
+  install the compiler (see below).
 - **A provider configured in pi** for compiling. See
   [Pi compilation backend](#pi-compilation-backend).
 - **For `/mellea-run` and `/mellea-certify`:** an inference engine (Ollama or vLLM).
   See [Choose Inference Engine](INSTALLATION.md#choose-inference-engine).
 
-macOS and Linux only.
+Works on macOS, Linux and Windows. On Windows, `git` must be on `PATH` (Git for
+Windows adds it), and long paths should be enabled
+(`git config --global core.longpaths true`) because compiled packages nest deeply. WSL
+also works.
 
 ### Install
 
@@ -66,9 +70,13 @@ session without installing.
 **You don't need to install the `mellea-skills` CLI yourself.** The first time you run
 any `/mellea-*` command, the extension clones the compiler at the release it was built
 for, creates a Python environment, and installs the CLI into it, all under
-`~/.cache/mellea-skills-compiler/<version>/`. Each step is shown in the session as it
+`~/.cache/mellea-skills-compiler/<version>/` (`%USERPROFILE%\.cache\…` on Windows).
+Each step is shown in the session as it
 runs. This takes a few minutes, once per version. If setup is interrupted, the next
-command starts again from scratch; to reset an install, delete that folder.
+command starts again from scratch. If an existing install stops working, a new one is
+built beside it and the old one is kept until the new one works, so a failed rebuild
+(for example, offline) leaves the existing install in place. If two pi sessions start
+at once, one installs and the other waits. To reset an install, delete that folder.
 
 ### Usage
 

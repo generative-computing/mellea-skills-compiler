@@ -142,7 +142,7 @@ class TestValidateEnvironment:
         backend.validate_environment()
 
         args = mock_run.call_args[0][0]
-        assert args == ["pi", "auth", "check", "--provider", "anthropic", "--json"]
+        assert args == ["/usr/local/bin/pi", "auth", "check", "--provider", "anthropic", "--json"]
 
     @patch("mellea_skills_compiler.compile.backends.pi.shutil.which")
     @patch("mellea_skills_compiler.compile.backends.pi.subprocess.run")
@@ -159,7 +159,7 @@ class TestValidateEnvironment:
         backend.validate_environment(provider="ollama")
 
         args = mock_run.call_args[0][0]
-        assert args == ["pi", "auth", "check", "--provider", "ollama", "--json"]
+        assert args == ["/usr/local/bin/pi", "auth", "check", "--provider", "ollama", "--json"]
 
     @patch("mellea_skills_compiler.compile.backends.pi.shutil.which")
     @patch("mellea_skills_compiler.compile.backends.pi.subprocess.run")
@@ -368,10 +368,32 @@ class TestCompileMethod:
         assert "/mellea-fy " in joined or joined.endswith("/mellea-fy")
 
 
+class TestPiExecutable:
+    """pi is an npm shim; on Windows that's pi.cmd, which needs a full path."""
+
+    @patch("mellea_skills_compiler.compile.backends.pi.shutil.which")
+    def test_build_pi_argv_uses_resolved_executable(self, mock_which, backend, tmp_path):
+        mock_which.return_value = r"C:\Users\u\AppData\Roaming\npm\pi.CMD"
+        argv = backend._build_pi_argv(spec_path=tmp_path / "spec.md", repair_mode=False, model=None)
+
+        assert argv[0] == r"C:\Users\u\AppData\Roaming\npm\pi.CMD"
+
+    @patch("mellea_skills_compiler.compile.backends.pi.shutil.which")
+    @patch("mellea_skills_compiler.compile.backends.pi.subprocess.run")
+    def test_auth_check_uses_resolved_executable(self, mock_run, mock_which, backend):
+        mock_which.return_value = r"C:\Users\u\AppData\Roaming\npm\pi.CMD"
+        mock_run.return_value = Mock(returncode=0, stdout=json.dumps({"status": "ready"}), stderr="")
+
+        backend.validate_environment()
+
+        assert mock_run.call_args[0][0][0] == r"C:\Users\u\AppData\Roaming\npm\pi.CMD"
+
+
 class TestHelperMethods:
     """Test argv-building helper."""
 
-    def test_build_pi_argv_normal_mode(self, backend, tmp_path):
+    @patch("mellea_skills_compiler.compile.backends.pi.shutil.which", return_value=None)
+    def test_build_pi_argv_normal_mode(self, _mock_which, backend, tmp_path):
         spec_path = tmp_path / "spec.md"
         argv = backend._build_pi_argv(spec_path=spec_path, repair_mode=False, model=None)
 

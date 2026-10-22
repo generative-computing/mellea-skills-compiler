@@ -7,12 +7,16 @@ and `certify` commands from inside a [pi](https://pi.dev) session, as
 ## Prerequisites
 
 - **`git`**, and either **[uv](https://docs.astral.sh/uv/)** or **Python 3.11
-  to 3.14.3**. These are used to install the compiler on first use (see below).
+  to 3.14.3** (on Windows, the `py` launcher from python.org's installer is
+  enough). These are used to install the compiler on first use (see below).
 - **pi 1.2.0 or later.**
 - **For `/mellea-run` and `/mellea-certify`:** an inference engine (Ollama or
   vLLM). See the [Installation guide](https://generative-computing.github.io/mellea-skills-compiler/INSTALLATION/#choose-inference-engine).
 
-macOS and Linux only.
+Works on macOS, Linux and Windows. On Windows, `git` must be on `PATH`
+(Git for Windows adds it), and long paths should be enabled
+(`git config --global core.longpaths true`) because the compiled packages
+nest deeply. WSL also works.
 
 ### The compiler is installed automatically
 
@@ -23,10 +27,19 @@ you run any `/mellea-*` command, the extension:
 2. creates a Python environment for it, and
 3. installs `mellea-skills` into that environment,
 
-all under `~/.cache/mellea-skills-compiler/<version>/`. Each step is shown in
+all under `~/.cache/mellea-skills-compiler/<version>/`
+(`%USERPROFILE%\.cache\mellea-skills-compiler\<version>\` on Windows). Each step is shown in
 the session as it runs. This takes a few minutes and only happens once per
-version; later commands reuse the install. If setup is interrupted, the next
-command starts it again from scratch. To reset an install, delete that folder.
+version; later commands reuse the install.
+
+- **Interrupted setup:** the next command starts it again from scratch.
+- **Broken install:** if an existing install stops working, a new one is built
+  beside it, and the old one is only removed once the new one works. If the
+  rebuild fails (for example, offline), the existing install is kept and you
+  see a warning.
+- **Several pi sessions:** if two sessions start at once, one installs and the
+  other waits for it.
+- **Reset:** delete `~/.cache/mellea-skills-compiler/<version>/`.
 
 ## Install
 
@@ -162,7 +175,7 @@ payload.
   changed.
 - **The compile trusts the managed install's pi config.** The compile runs pi
   with `--approve` inside the extension's own copy of the compiler
-  (`~/.cache/mellea-skills-compiler/<version>/repo`), so it can load the
+  (under `~/.cache/mellea-skills-compiler/<version>/`), so it can load the
   compiler's prompt templates. It does not do this in your own folders.
 - **Export is experimental.** Exported skills can get a generic description,
   and the exported `run.sh` can drop arguments for some pipeline signatures.
