@@ -168,14 +168,22 @@ def build_system_prompt(
 
 
 def build_pi_system_prompt(
-    backend: str, model_id: str, source: str, mellea_package_dir: Path
+    backend: str,
+    model_id: str,
+    source: str,
+    mellea_package_dir: Path,
+    prompts_dir: Path,
+    schemas_dir: Path,
 ) -> str:
     """Same directive as `build_system_prompt`, worded for pi.
 
-    Pi has no mechanical deny-rule equivalent to Claude Code's `--settings`
-    (no path-scoped Write/Edit block), so this instructs pi not to write the
-    wrapper-rendered paths rather than claiming the tools are denied for
-    them, which would be false for pi.
+    Pi has no deny-rule equivalent to Claude Code's `--settings`, so
+    `PiBackend` makes the wrapper-rendered paths read-only placeholders for
+    the run instead; this tells pi a write there fails with a permission error.
+
+    Pi expands only the invoked template, not the sub-commands it names, so
+    this tells pi to Read each sub-command's template file (under
+    ``prompts_dir``) before that step.
     """
     wrapper_rendered_lines = "\n".join(
         f"  - {mellea_package_dir}/{p}" for p in _WRAPPER_RENDERED_PATHS
@@ -183,22 +191,38 @@ def build_pi_system_prompt(
     return (
         "Run the complete 10-step pipeline (Steps 0 through 7) autonomously from start to finish. "
         "Do NOT pause between steps, do NOT ask for user confirmation to proceed, and do NOT stop "
-        "after any individual step completes. All sub-command content you need is already inline "
-        "in the expanded prompt below — treat each 'Sub-command: /mellea-fy-xxx' reference as the "
-        "section of this same prompt covering that step, not as a separate command to invoke or a "
-        "dependency you need to look up elsewhere. Invoke each step in sequence and continue "
-        "immediately to the next step.\n\n"
+        "after any individual step completes.\n\n"
+        "The expanded prompt below is only the orchestrator overview. The full specification "
+        "for each step is NOT included in it. Each 'Sub-command: /mellea-fy-xxx' reference names "
+        f"a file at `{prompts_dir}/mellea-fy-xxx.md` (e.g. `/mellea-fy-classify` → "
+        f"`{prompts_dir}/mellea-fy-classify.md`). Before starting each step, use the read tool to "
+        "read that step's file in full and follow it exactly. These step files already exist "
+        "and are read-only: read them, never write or recreate them. Also read "
+        f"`{prompts_dir}/mellea-fy-behaviours.md` before Step 4. JSON schemas for every "
+        f"intermediate artifact are in `{schemas_dir}/`; read the matching schema before "
+        "writing each JSON file. Do not invent step behaviour from the overview alone. "
+        "Run each step in sequence and continue immediately to the next step.\n\n"
         f"The compiled package directory path is exactly `{mellea_package_dir}`. "
         f"Use this exact path wherever the slash-command directives reference "
         f"`<package_name>`; do NOT re-derive it from the frontmatter.\n\n"
+        f"Every `intermediate/` path in the step files is relative to the compiled package "
+        f"directory, not to the directory containing the spec. Write ALL intermediate "
+        f"artifacts (classification.json, inventory.json, element_mapping.json, "
+        f"dependency_plan.json, *_emission.json, step_7_report.json, etc.) to "
+        f"`{mellea_package_dir}/intermediate/`. Never create an `intermediate/` directory next "
+        f"to the spec file or anywhere outside the `*_mellea` package directory; the one next "
+        f"to the spec is read-only and writes there fail. The compile pipeline has already "
+        f"written runtime_directive.json, mellea_api_ref.json and mellea_doc_index.json in "
+        f"`{mellea_package_dir}/intermediate/`; they are read-only — read them, never rewrite "
+        f"them.\n\n"
         f"The following paths are rendered by the compile pipeline from the JSON you emit "
-        f"in {mellea_package_dir}/intermediate/ — you MUST NOT write or edit them yourself, even "
-        f"though your tools are not mechanically blocked from doing so; the wrapper renders them "
-        f"deterministically after you exit, and writing them yourself will be overwritten and "
-        f"causes an inconsistent package:\n"
+        f"in {mellea_package_dir}/intermediate/ — do NOT write or edit them yourself. They are "
+        f"read-only placeholders during this run, so any write or edit to them fails with a "
+        f"permission error; do not retry or work around it. The wrapper renders them "
+        f"deterministically after you exit:\n"
         f"{wrapper_rendered_lines}\n"
         f"Emit the corresponding *_emission.json files under {mellea_package_dir}/intermediate/ "
-        f"conforming to .claude/schemas/*_emission.schema.json instead.\n\n"
+        f"conforming to {schemas_dir}/*_emission.schema.json instead.\n\n"
         f"Runtime defaults (source: {source}). The values below MUST appear in "
         f"config_emission.json so the wrapper renders them into {mellea_package_dir}/config.py:\n"
         f"  BACKEND = {backend!r}\n"

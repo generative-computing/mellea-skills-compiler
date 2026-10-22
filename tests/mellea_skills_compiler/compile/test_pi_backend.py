@@ -5,6 +5,7 @@ and error handling without requiring the actual pi CLI or credentials.
 """
 
 import json
+import stat
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -12,7 +13,13 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from mellea_skills_compiler.compile.backend import CompilationContext, CompilationResult
-from mellea_skills_compiler.compile.backends.pi import PiBackend
+from mellea_skills_compiler.compile.backends.pi import (
+    PiBackend,
+    _lock_protected_paths,
+    _render_prompt_templates,
+    _resolve_provider_and_model,
+    _unlock_protected_paths,
+)
 from mellea_skills_compiler.enums import PiMessageType
 
 
@@ -415,7 +422,7 @@ class TestHelperMethods:
 
         assert "--tools" in argv
         tools_index = argv.index("--tools")
-        assert argv[tools_index + 1] == "read,write,edit"
+        assert argv[tools_index + 1] == "read,write,edit,ls,find,grep"
 
     def test_build_pi_argv_repair_mode(self, backend, tmp_path):
         spec_path = tmp_path / "spec.md"
@@ -486,3 +493,388 @@ class TestHelperMethods:
         model_idx = argv.index("--model")
         assert argv[provider_idx + 1] == "ollama"
         assert argv[model_idx + 1] == "llama3"
+
+    def test_build_pi_argv_with_prompts_dir(self, backend, tmp_path):
+        spec_path = tmp_path / "spec.md"
+        prompts_dir = tmp_path / "prompts"
+        argv = backend._build_pi_argv(
+            spec_path=spec_path, repair_mode=False, model=None, prompts_dir=prompts_dir
+        )
+
+        assert "--no-prompt-templates" in argv
+        template_idx = argv.index("--prompt-template")
+        assert argv[template_idx + 1] == str(prompts_dir)
+
+    def test_build_pi_argv_without_prompts_dir_omits_flags(self, backend, tmp_path):
+        spec_path = tmp_path / "spec.md"
+        argv = backend._build_pi_argv(spec_path=spec_path, repair_mode=False, model=None)
+
+        assert "--no-prompt-templates" not in argv
+        assert "--prompt-template" not in argv
+
+
+class TestRenderPromptTemplates:
+    """Tests for _render_prompt_templates path substitution."""
+
+    def test_substitutes_intermediate_paths(self, tmp_path, monkeypatch):
+        src = tmp_path / ".pi" / "prompts"
+        src.mkdir(parents=True)
+        (src / "mellea-fy-classify.md").write_text(
+            "Output `intermediate/classification.json` now.\n"
+            "Compare against `<package_name>/intermediate/runtime_directive.json`.\n"
+            "Locate `<package_dir>/intermediate/` and `<name>_mellea/intermediate/`.\n"
+        )
+        (src / "other.md").write_text("`intermediate/x.json`")
+        monkeypatch.chdir(tmp_path)
+        out = tmp_path / "out"
+        out.mkdir()
+
+        _render_prompt_templates(Path("skills/foo/foo_mellea"), out)
+
+        text = (out / "mellea-fy-classify.md").read_text()
+        assert "`skills/foo/foo_mellea/intermediate/classification.json`" in text
+        assert "`skills/foo/foo_mellea/intermediate/runtime_directive.json`" in text
+        assert "`skills/foo/foo_mellea/intermediate/` and `skills/foo/foo_mellea/intermediate/`" in text
+        assert "<package_name>" not in text
+        assert not (out / "other.md").exists()
+
+    def test_substitutes_package_dir_paths(self, tmp_path, monkeypatch):
+        src = tmp_path / ".pi" / "prompts"
+        src.mkdir(parents=True)
+        (src / "mellea-fy-artifacts.md").write_text(
+            "Step 6 files are written inside `<package_name>/`.\n"
+            "Write `<package_dir>/melleafy.json`.\n"
+            "Repair accepts any compiled package (`<name>_mellea/`).\n"
+        )
+        monkeypatch.chdir(tmp_path)
+        out = tmp_path / "out"
+        out.mkdir()
+
+        _render_prompt_templates(Path("skills/foo/foo_mellea"), out)
+
+        text = (out / "mellea-fy-artifacts.md").read_text()
+        assert "inside `skills/foo/foo_mellea/`" in text
+        assert "`skills/foo/foo_mellea/melleafy.json`" in text
+        assert "`<name>_mellea/`" in text
+
+    def test_makes_claude_paths_absolute(self, tmp_path, monkeypatch):
+        src = tmp_path / ".pi" / "prompts"
+        src.mkdir(parents=True)
+        (src / "mellea-fy-classify.md").write_text(
+            "Conform to `.claude/schemas/classification.schema.json`."
+        )
+        monkeypatch.chdir(tmp_path)
+        out = tmp_path / "out"
+        out.mkdir()
+
+        _render_prompt_templates(Path("skills/foo/foo_mellea"), out)
+
+        expected = f"`{(tmp_path / '.claude').resolve().as_posix()}/schemas/classification.schema.json`"
+        assert expected in (out / "mellea-fy-classify.md").read_text()
+
+    def test_leaves_unquoted_references_alone(self, tmp_path, monkeypatch):
+        src = tmp_path / ".pi" / "prompts"
+        src.mkdir(parents=True)
+        tree = "```\npkg/\n    └── intermediate/\n```\n[REPAIR] Removing intermediate/x.json\n"
+        (src / "mellea-fy.md").write_text(tree)
+        monkeypatch.chdir(tmp_path)
+        out = tmp_path / "out"
+        out.mkdir()
+
+        _render_prompt_templates(Path("skills/foo/foo_mellea"), out)
+
+        assert (out / "mellea-fy.md").read_text() == tree
+
+    def test_rendered_templates_are_read_only(self, tmp_path, monkeypatch):
+        src = tmp_path / ".pi" / "prompts"
+        src.mkdir(parents=True)
+        (src / "mellea-fy-classify.md").write_text("spec")
+        monkeypatch.chdir(tmp_path)
+        out = tmp_path / "out"
+        out.mkdir()
+
+        _render_prompt_templates(Path("skills/foo/foo_mellea"), out)
+
+        with pytest.raises(PermissionError):
+            (out / "mellea-fy-classify.md").write_text("overwritten")
+        with pytest.raises(PermissionError):
+            (out / "mellea-fy-new.md").write_text("new")
+        out.chmod(0o700)
+
+
+def _assistant_end(stop_reason=None, error_message=None):
+    message = {"role": "assistant", "content": [{"type": "text", "text": "step"}]}
+    if stop_reason:
+        message["stopReason"] = stop_reason
+    if error_message:
+        message["errorMessage"] = error_message
+    return _pi_event_line({"type": "message_end", "message": message})
+
+
+@patch("mellea_skills_compiler.compile.backends.pi.CompileMetadata.record_backend")
+@patch("mellea_skills_compiler.compile.backends.pi.subprocess.Popen")
+class TestProviderErrorHandling:
+    """Only an error on pi's final assistant message fails the compile."""
+
+    def _run(self, mock_popen, backend, mock_context, events):
+        events = events + [_pi_event_line({"type": "agent_settled"}), ""]
+        (mock_context.intermediate_dir / "classification.json").write_text("{}")
+        mock_process = MagicMock()
+        mock_process.stdout.readline.side_effect = events
+        mock_process.stderr.readline.side_effect = [""]
+        mock_process.poll.side_effect = [None] * (len(events) - 1) + [0]
+        mock_process.wait.return_value = 0
+        mock_popen.return_value = mock_process
+        return backend.compile(mock_context)
+
+    def test_recovered_provider_error_succeeds(
+        self, mock_popen, _record, backend, mock_context
+    ):
+        result = self._run(
+            mock_popen,
+            backend,
+            mock_context,
+            [
+                _assistant_end("error", "Stream ended without finish_reason"),
+                _assistant_end(),
+            ],
+        )
+
+        assert result.success is True
+
+    def test_final_provider_error_fails(self, mock_popen, _record, backend, mock_context):
+        result = self._run(
+            mock_popen,
+            backend,
+            mock_context,
+            [_assistant_end(), _assistant_end("error", "401 invalid x-api-key")],
+        )
+
+        assert result.success is False
+        assert "401 invalid x-api-key" in result.error_message
+
+
+class TestResolveProviderAndModel:
+    """--provider without --model is filled in from pi's settings."""
+
+    SETTINGS = {"defaultProvider": "anthropic-proxy", "defaultModel": "claude-sonnet-4-6"}
+
+    def test_default_provider_gets_default_model(self, capsys):
+        assert _resolve_provider_and_model("anthropic-proxy", None, self.SETTINGS) == (
+            "anthropic-proxy",
+            "claude-sonnet-4-6",
+        )
+        assert "doesn't match" not in capsys.readouterr().out
+
+    def test_other_provider_falls_back_to_defaults_with_notice(self, capsys):
+        assert _resolve_provider_and_model("anthropic", None, self.SETTINGS) == (
+            "anthropic-proxy",
+            "claude-sonnet-4-6",
+        )
+        out = " ".join(capsys.readouterr().out.split())
+        assert "--provider anthropic doesn't match your default provider anthropic-proxy" in out
+        assert "please provide a --model too" in out
+
+    @pytest.mark.parametrize(
+        "provider, model, settings",
+        [
+            ("ollama", "llama3", SETTINGS),
+            (None, None, SETTINGS),
+            (None, "claude-opus-4-7", SETTINGS),
+            ("anthropic", None, {}),
+            ("anthropic", None, {"defaultProvider": "anthropic"}),
+        ],
+    )
+    def test_left_unchanged(self, provider, model, settings):
+        assert _resolve_provider_and_model(provider, model, settings) == (provider, model)
+
+    @patch("mellea_skills_compiler.compile.backends.pi.CompileMetadata.record_backend")
+    @patch("mellea_skills_compiler.compile.backends.pi.subprocess.Popen")
+    @patch(
+        "mellea_skills_compiler.compile.backends.pi._get_default_settings",
+        return_value=SETTINGS,
+    )
+    def test_compile_passes_resolved_model_to_pi(
+        self, _settings, mock_popen, _record, backend, mock_context
+    ):
+        mock_context.provider = "anthropic-proxy"
+        mock_context.model = None
+        (mock_context.intermediate_dir / "classification.json").write_text("{}")
+        events = [_assistant_end(), _pi_event_line({"type": "agent_settled"}), ""]
+        mock_process = MagicMock()
+        mock_process.stdout.readline.side_effect = events
+        mock_process.stderr.readline.side_effect = [""]
+        mock_process.poll.side_effect = [None] * (len(events) - 1) + [0]
+        mock_process.wait.return_value = 0
+        mock_popen.return_value = mock_process
+
+        backend.compile(mock_context)
+
+        argv = mock_popen.call_args[0][0]
+        assert argv[argv.index("--provider") + 1] == "anthropic-proxy"
+        assert argv[argv.index("--model") + 1] == "claude-sonnet-4-6"
+
+
+class TestProtectedPathLock:
+    """Tests for the read-only paths during a pi run."""
+
+    @pytest.fixture
+    def package_dir(self, tmp_path):
+        package_dir = tmp_path / "skill" / "skill_mellea"
+        (package_dir / "intermediate").mkdir(parents=True)
+        return package_dir
+
+    def test_lock_blocks_writes_and_unlock_removes_placeholders(self, package_dir):
+        created = _lock_protected_paths(package_dir)
+
+        with pytest.raises(PermissionError):
+            (package_dir / "config.py").write_text("BACKEND = 'x'")
+        with pytest.raises(PermissionError):
+            (package_dir / "fixtures" / "case.py").write_text("x")
+
+        _unlock_protected_paths(created)
+
+        assert not (package_dir / "config.py").exists()
+        assert not (package_dir / "fixtures").exists()
+
+    def test_unlock_keeps_and_restores_existing_paths(self, package_dir):
+        (package_dir / "config.py").write_text("BACKEND = 'ollama'")
+        (package_dir / "fixtures").mkdir()
+        (package_dir / "fixtures" / "case.py").write_text("x")
+
+        created = _lock_protected_paths(package_dir)
+        assert created[package_dir / "config.py"] is not None
+        with pytest.raises(PermissionError):
+            (package_dir / "config.py").write_text("overwritten")
+
+        _unlock_protected_paths(created)
+
+        (package_dir / "config.py").write_text("BACKEND = 'ollama'")
+        (package_dir / "fixtures" / "new.py").write_text("x")
+        assert (package_dir / "fixtures" / "case.py").read_text() == "x"
+
+    def test_pipeline_written_intermediates_are_read_only(self, package_dir):
+        directive = package_dir / "intermediate" / "runtime_directive.json"
+        directive.write_text('{"backend": "ollama"}')
+
+        created = _lock_protected_paths(package_dir)
+
+        with pytest.raises(PermissionError):
+            directive.write_text('{"BACKEND": "ollama"}')
+        (package_dir / "intermediate" / "classification.json").write_text("{}")
+
+        _unlock_protected_paths(created)
+
+        assert directive.read_text() == '{"backend": "ollama"}'
+        directive.write_text('{"backend": "ollama", "source": "x"}')
+
+    def test_skill_root_intermediate_is_blocked_then_removed(self, package_dir):
+        skill_root_intermediate = package_dir.parent / "intermediate"
+
+        created = _lock_protected_paths(package_dir)
+
+        assert skill_root_intermediate.is_dir()
+        with pytest.raises(PermissionError):
+            (skill_root_intermediate / "classification.json").write_text("{}")
+
+        _unlock_protected_paths(created)
+
+        assert not skill_root_intermediate.exists()
+
+    def test_existing_skill_root_intermediate_is_left_alone(self, package_dir):
+        skill_root_intermediate = package_dir.parent / "intermediate"
+        skill_root_intermediate.mkdir()
+        (skill_root_intermediate / "notes.json").write_text("{}")
+
+        created = _lock_protected_paths(package_dir)
+        (skill_root_intermediate / "other.json").write_text("{}")
+        _unlock_protected_paths(created)
+
+        assert skill_root_intermediate not in created
+        assert (skill_root_intermediate / "notes.json").exists()
+
+    def test_unlock_restores_original_modes(self, package_dir):
+        config = package_dir / "config.py"
+        config.write_text("BACKEND = 'ollama'")
+        config.chmod(0o600)
+        (package_dir / "fixtures").mkdir()
+        script = package_dir / "fixtures" / "run.py"
+        script.write_text("x")
+        script.chmod(0o755)
+        directive = package_dir / "intermediate" / "runtime_directive.json"
+        directive.write_text("{}")
+        directive.chmod(0o640)
+
+        _unlock_protected_paths(_lock_protected_paths(package_dir))
+
+        assert stat.S_IMODE(config.stat().st_mode) == 0o600
+        assert stat.S_IMODE(script.stat().st_mode) == 0o755
+        assert stat.S_IMODE(directive.stat().st_mode) == 0o640
+
+    def test_failed_lock_undoes_partial_work(self, package_dir):
+        (package_dir / "config.py").write_text("BACKEND = 'ollama'")
+        real_mkdir = Path.mkdir
+
+        def failing_mkdir(self, *args, **kwargs):
+            if self.name == "fixtures":
+                raise OSError("disk full")
+            return real_mkdir(self, *args, **kwargs)
+
+        with patch.object(Path, "mkdir", failing_mkdir):
+            with pytest.raises(OSError, match="disk full"):
+                _lock_protected_paths(package_dir)
+
+        (package_dir / "config.py").write_text("still writable")
+        assert not (package_dir / "fixtures").exists()
+        assert not (package_dir.parent / "intermediate").exists()
+
+    def test_failed_lock_removes_created_placeholders(self, package_dir):
+        real_chmod = Path.chmod
+
+        def failing_chmod(self, mode, *args, **kwargs):
+            if self.name == "fixtures" and mode == 0o555:
+                raise PermissionError("chmod refused")
+            return real_chmod(self, mode, *args, **kwargs)
+
+        with patch.object(Path, "chmod", failing_chmod):
+            with pytest.raises(PermissionError, match="chmod refused"):
+                _lock_protected_paths(package_dir)
+
+        assert not (package_dir / "config.py").exists()
+        assert not (package_dir / "fixtures").exists()
+
+
+@patch("mellea_skills_compiler.compile.backends.pi.CompileMetadata.record_backend")
+@patch("mellea_skills_compiler.compile.backends.pi.subprocess.Popen")
+def test_compile_passes_absolute_paths_to_pi(mock_popen, _record, backend, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    package_dir = Path("skills/foo/foo_mellea")
+    (package_dir / "intermediate").mkdir(parents=True)
+    (package_dir / "intermediate" / "classification.json").write_text("{}")
+    Path("skills/foo/spec.md").write_text("# Foo")
+    context = CompilationContext(
+        spec_path=Path("skills/foo/spec.md"),
+        package_dir=package_dir,
+        intermediate_dir=package_dir / "intermediate",
+        model="granite3.3:8b",
+        timeout=300,
+        repair_mode=False,
+        skill_backend="ollama",
+        skill_model="granite4.1:3b",
+        refresh_cache=False,
+    )
+    events = [_assistant_end(), _pi_event_line({"type": "agent_settled"}), ""]
+    mock_process = MagicMock()
+    mock_process.stdout.readline.side_effect = events
+    mock_process.stderr.readline.side_effect = [""]
+    mock_process.poll.side_effect = [None] * (len(events) - 1) + [0]
+    mock_process.wait.return_value = 0
+    mock_popen.return_value = mock_process
+
+    backend.compile(context)
+
+    argv = mock_popen.call_args[0][0]
+    assert f"/mellea-fy {(tmp_path / 'skills/foo/spec.md').resolve()}" in argv
+    system_prompt = argv[argv.index("--append-system-prompt") + 1]
+    assert f"`{package_dir.resolve()}/intermediate/`" in system_prompt
+    assert f"{(tmp_path / '.claude/schemas').resolve()}/" in system_prompt
