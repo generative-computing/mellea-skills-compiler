@@ -2,7 +2,7 @@
 
 **Version**: 4.1.1 | **Prereq**: Step 3 complete (skeleton emitted with finalised `run_pipeline` signature) | **Produces**: `intermediate/fixtures_emission.json` (rendered into `<package_name>/fixtures/` by the writer)
 
-> **Output path rule** (Rule OUT-4): `fixtures/` is written **inside `<package_name>/`** — NOT at the skill root. It is test-only and intentionally excluded from the installed package by `pyproject.toml`'s `[tool.setuptools.packages.find]`. Run fixtures via `python -m pytest <package_name>/fixtures/` from the skill root.
+> **Output path rule** (Rule OUT-4): the writer renders `fixtures/` **inside `<package_name>/`** — NOT at the skill root. Write only `intermediate/fixtures_emission.json`; never write files under `fixtures/` directly. `fixtures/` is test-only and intentionally excluded from the installed package by `pyproject.toml`'s `[tool.setuptools.packages.find]`. Run fixtures via `python -m pytest <package_name>/fixtures/` from the skill root.
 
 Step 4 generates 5–8 test fixtures covering ≥3 C-categories. Fixtures are the primary means by which the generated package can be validated at runtime (Step 7's lints are static-only).
 

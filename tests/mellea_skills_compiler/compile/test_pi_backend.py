@@ -5,6 +5,7 @@ and error handling without requiring the actual pi CLI or credentials.
 """
 
 import json
+import stat
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -16,6 +17,7 @@ from mellea_skills_compiler.compile.backends.pi import (
     PiBackend,
     _lock_protected_paths,
     _render_prompt_templates,
+    _resolve_provider_and_model,
     _unlock_protected_paths,
 )
 from mellea_skills_compiler.enums import PiMessageType
@@ -652,6 +654,67 @@ class TestProviderErrorHandling:
         assert "401 invalid x-api-key" in result.error_message
 
 
+class TestResolveProviderAndModel:
+    """--provider without --model is filled in from pi's settings."""
+
+    SETTINGS = {"defaultProvider": "anthropic-proxy", "defaultModel": "claude-sonnet-4-6"}
+
+    def test_default_provider_gets_default_model(self, capsys):
+        assert _resolve_provider_and_model("anthropic-proxy", None, self.SETTINGS) == (
+            "anthropic-proxy",
+            "claude-sonnet-4-6",
+        )
+        assert "doesn't match" not in capsys.readouterr().out
+
+    def test_other_provider_falls_back_to_defaults_with_notice(self, capsys):
+        assert _resolve_provider_and_model("anthropic", None, self.SETTINGS) == (
+            "anthropic-proxy",
+            "claude-sonnet-4-6",
+        )
+        out = " ".join(capsys.readouterr().out.split())
+        assert "--provider anthropic doesn't match your default provider anthropic-proxy" in out
+        assert "please provide a --model too" in out
+
+    @pytest.mark.parametrize(
+        "provider, model, settings",
+        [
+            ("ollama", "llama3", SETTINGS),
+            (None, None, SETTINGS),
+            (None, "claude-opus-4-7", SETTINGS),
+            ("anthropic", None, {}),
+            ("anthropic", None, {"defaultProvider": "anthropic"}),
+        ],
+    )
+    def test_left_unchanged(self, provider, model, settings):
+        assert _resolve_provider_and_model(provider, model, settings) == (provider, model)
+
+    @patch("mellea_skills_compiler.compile.backends.pi.CompileMetadata.record_backend")
+    @patch("mellea_skills_compiler.compile.backends.pi.subprocess.Popen")
+    @patch(
+        "mellea_skills_compiler.compile.backends.pi._get_default_settings",
+        return_value=SETTINGS,
+    )
+    def test_compile_passes_resolved_model_to_pi(
+        self, _settings, mock_popen, _record, backend, mock_context
+    ):
+        mock_context.provider = "anthropic-proxy"
+        mock_context.model = None
+        (mock_context.intermediate_dir / "classification.json").write_text("{}")
+        events = [_assistant_end(), _pi_event_line({"type": "agent_settled"}), ""]
+        mock_process = MagicMock()
+        mock_process.stdout.readline.side_effect = events
+        mock_process.stderr.readline.side_effect = [""]
+        mock_process.poll.side_effect = [None] * (len(events) - 1) + [0]
+        mock_process.wait.return_value = 0
+        mock_popen.return_value = mock_process
+
+        backend.compile(mock_context)
+
+        argv = mock_popen.call_args[0][0]
+        assert argv[argv.index("--provider") + 1] == "anthropic-proxy"
+        assert argv[argv.index("--model") + 1] == "claude-sonnet-4-6"
+
+
 class TestProtectedPathLock:
     """Tests for the read-only paths during a pi run."""
 
@@ -669,7 +732,7 @@ class TestProtectedPathLock:
         with pytest.raises(PermissionError):
             (package_dir / "fixtures" / "case.py").write_text("x")
 
-        _unlock_protected_paths(package_dir, created)
+        _unlock_protected_paths(created)
 
         assert not (package_dir / "config.py").exists()
         assert not (package_dir / "fixtures").exists()
@@ -680,11 +743,11 @@ class TestProtectedPathLock:
         (package_dir / "fixtures" / "case.py").write_text("x")
 
         created = _lock_protected_paths(package_dir)
-        assert package_dir / "config.py" not in created
+        assert created[package_dir / "config.py"] is not None
         with pytest.raises(PermissionError):
             (package_dir / "config.py").write_text("overwritten")
 
-        _unlock_protected_paths(package_dir, created)
+        _unlock_protected_paths(created)
 
         (package_dir / "config.py").write_text("BACKEND = 'ollama'")
         (package_dir / "fixtures" / "new.py").write_text("x")
@@ -700,7 +763,7 @@ class TestProtectedPathLock:
             directive.write_text('{"BACKEND": "ollama"}')
         (package_dir / "intermediate" / "classification.json").write_text("{}")
 
-        _unlock_protected_paths(package_dir, created)
+        _unlock_protected_paths(created)
 
         assert directive.read_text() == '{"backend": "ollama"}'
         directive.write_text('{"backend": "ollama", "source": "x"}')
@@ -714,7 +777,7 @@ class TestProtectedPathLock:
         with pytest.raises(PermissionError):
             (skill_root_intermediate / "classification.json").write_text("{}")
 
-        _unlock_protected_paths(package_dir, created)
+        _unlock_protected_paths(created)
 
         assert not skill_root_intermediate.exists()
 
@@ -725,10 +788,60 @@ class TestProtectedPathLock:
 
         created = _lock_protected_paths(package_dir)
         (skill_root_intermediate / "other.json").write_text("{}")
-        _unlock_protected_paths(package_dir, created)
+        _unlock_protected_paths(created)
 
         assert skill_root_intermediate not in created
         assert (skill_root_intermediate / "notes.json").exists()
+
+    def test_unlock_restores_original_modes(self, package_dir):
+        config = package_dir / "config.py"
+        config.write_text("BACKEND = 'ollama'")
+        config.chmod(0o600)
+        (package_dir / "fixtures").mkdir()
+        script = package_dir / "fixtures" / "run.py"
+        script.write_text("x")
+        script.chmod(0o755)
+        directive = package_dir / "intermediate" / "runtime_directive.json"
+        directive.write_text("{}")
+        directive.chmod(0o640)
+
+        _unlock_protected_paths(_lock_protected_paths(package_dir))
+
+        assert stat.S_IMODE(config.stat().st_mode) == 0o600
+        assert stat.S_IMODE(script.stat().st_mode) == 0o755
+        assert stat.S_IMODE(directive.stat().st_mode) == 0o640
+
+    def test_failed_lock_undoes_partial_work(self, package_dir):
+        (package_dir / "config.py").write_text("BACKEND = 'ollama'")
+        real_mkdir = Path.mkdir
+
+        def failing_mkdir(self, *args, **kwargs):
+            if self.name == "fixtures":
+                raise OSError("disk full")
+            return real_mkdir(self, *args, **kwargs)
+
+        with patch.object(Path, "mkdir", failing_mkdir):
+            with pytest.raises(OSError, match="disk full"):
+                _lock_protected_paths(package_dir)
+
+        (package_dir / "config.py").write_text("still writable")
+        assert not (package_dir / "fixtures").exists()
+        assert not (package_dir.parent / "intermediate").exists()
+
+    def test_failed_lock_removes_created_placeholders(self, package_dir):
+        real_chmod = Path.chmod
+
+        def failing_chmod(self, mode, *args, **kwargs):
+            if self.name == "fixtures" and mode == 0o555:
+                raise PermissionError("chmod refused")
+            return real_chmod(self, mode, *args, **kwargs)
+
+        with patch.object(Path, "chmod", failing_chmod):
+            with pytest.raises(PermissionError, match="chmod refused"):
+                _lock_protected_paths(package_dir)
+
+        assert not (package_dir / "config.py").exists()
+        assert not (package_dir / "fixtures").exists()
 
 
 @patch("mellea_skills_compiler.compile.backends.pi.CompileMetadata.record_backend")

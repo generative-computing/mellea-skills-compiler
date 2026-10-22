@@ -124,8 +124,8 @@ def compile(
             "--provider",
             help="Provider for the pi compilation backend (e.g. 'anthropic', "
             "'ollama'). Only used with --backend pi; ignored otherwise. "
-            "Defaults to 'anthropic' when --backend pi is used and this is "
-            "not set.",
+            "Defaults to pi's defaultProvider when not set. Without --model, "
+            "pi's defaultModel is used, and with it its defaultProvider.",
         ),
     ] = None,
 ) -> None:

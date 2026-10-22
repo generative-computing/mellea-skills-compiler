@@ -172,8 +172,8 @@ def build_pi_system_prompt(
     model_id: str,
     source: str,
     mellea_package_dir: Path,
-    prompts_dir: Path = Path(".pi/prompts"),
-    schemas_dir: Path = Path(".claude/schemas"),
+    prompts_dir: Path,
+    schemas_dir: Path,
 ) -> str:
     """Same directive as `build_system_prompt`, worded for pi.
 

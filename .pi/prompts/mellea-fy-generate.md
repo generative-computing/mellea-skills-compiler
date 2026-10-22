@@ -2,7 +2,7 @@
 
 **Version**: 4.3.0 (2026-04-28) | **Prereq**: `dependency_plan.json` (Step 2.5 complete) | **Produces**: Populated Python package
 
-> **Output path rule** (Rule OUT-3): All `.py` files (`pipeline.py`, `config.py`, `schemas.py`, `main.py`, etc.) are written inside `<package_name>/`. `pyproject.toml` is the only file written at the skill root (NOT inside `<package_name>/`). See `mellea-fy.md` §Output directory layout for the full tree.
+> **Output path rule** (Rule OUT-3): All `.py` files (`pipeline.py`, `schemas.py`, `main.py`, etc.) are written inside `<package_name>/`. `config.py` and `fixtures/` are also inside `<package_name>/`, but the writers render them from `intermediate/config_emission.json` and `intermediate/fixtures_emission.json`; never write them directly. `pyproject.toml` is the only file written at the skill root (NOT inside `<package_name>/`). See `mellea-fy.md` §Output directory layout for the full tree.
 
 Step 3 emits skeleton files (imports, signatures, docstring placeholders) from the element mapping and dependency plan. Step 5 invokes the LLM to fill in every code body. Read `/mellea-fy-behaviours` before generating any code — the Known Behaviours mitigations must be baked into every generated file.
 
@@ -16,7 +16,7 @@ Step 3 emits skeleton files (imports, signatures, docstring placeholders) from t
 | ---------------------- | ---------------------------------------------------------------------------------------- |
 | `pipeline.py`          | Always                                                                                   |
 | `schemas.py`           | Always (at minimum contains `Final[str]` placeholder if no schemas found)                |
-| `config.py`            | Always (persona text, model ID, loop budgets from `dependency_plan.json:bundle` entries) |
+| `config.py`            | Always (persona text, model ID, loop budgets from `dependency_plan.json:bundle` entries); rendered by the writer from `intermediate/config_emission.json` |
 | `requirements.py`      | When any `VALIDATE_OUTPUT` elements exist                                                |
 | `slots.py`             | When any `EXTRACT` or `CLASSIFY` elements map to `@generative`                           |
 | `tools.py`             | When any C6 element has disposition `real_impl`                                          |
@@ -25,7 +25,7 @@ Step 3 emits skeleton files (imports, signatures, docstring placeholders) from t
 | `loader.py`            | When any C3 element has disposition `load_from_disk`                                     |
 | `main.py`              | Always (CLI entry point)                                                                 |
 | `pyproject.toml`       | Always                                                                                   |
-| `fixtures/`            | Always (5–8 fixtures, generated in Step 4)                                               |
+| `fixtures/`            | Always (5–8 fixtures, generated in Step 4); rendered by the writer from `intermediate/fixtures_emission.json` |
 | `SETUP.md`             | When any C4, C5, C9, non-bundled C6, C7, non-default C8, or host-needing modality        |
 | `README.md`            | Always                                                                                   |
 | `melleafy.json`        | Always (skeleton in Step 3; finalised in Step 6)                                         |
@@ -288,7 +288,7 @@ Note: the `openai-agents` package is NOT added to dependencies for Agents SDK so
 Step 5 fills every skeleton placeholder with real code. For `config.py`, the model emits JSON and the writer renders Python source (invariant 1).
 
 **Parallelization strategy**: Step 5 is structured in **three phases** to maximize throughput:
-- **Phase A (parallel)**: Emit all 7 independent files in a single turn using parallel tool calls: schemas.py, config.py, requirements.py, slots.py, tools.py/constrained_slots.py, mobjects.py, loader.py. These files have no inter-file dependencies at generation time.
+- **Phase A (parallel)**: Emit all 7 independent outputs in a single turn using parallel tool calls: schemas.py, `intermediate/config_emission.json` (not config.py), requirements.py, slots.py, tools.py/constrained_slots.py, mobjects.py, loader.py. These files have no inter-file dependencies at generation time.
 - **Phase B (sequential, after A completes)**: Generate pipeline.py (references all Phase A symbols).
 - **Phase C (sequential, after B completes)**: Generate main.py (references pipeline.py).
 
@@ -317,7 +317,7 @@ If `grounding_unavailable: true`, fall back to the KB patterns in `/mellea-fy-be
 
 **6. Step 7 lint failures, not these instructions, are the source of truth for correctness.** Generate per spec; let the repair loop correct lint failures rather than anticipating every possible check.
 
-> **Rule 5-3 — File-level batching**: Generate all code bodies for a given output file in a single LLM invocation. Do not make one invocation per element. For each file in the skeleton (e.g. `pipeline.py`, `config.py`, `slots.py`, `tools.py`), issue one invocation that generates the complete file contents, guided by all relevant element mapping entries for that file. KB5 schema priming concerns do not apply to melleafy compilation calls (KB5 governs Mellea pipeline sessions inside compiled skills, not the compilation process itself).
+> **Rule 5-3 — File-level batching**: Generate all code bodies for a given output file in a single LLM invocation. Do not make one invocation per element. For each file in the skeleton (e.g. `pipeline.py`, `slots.py`, `tools.py`), issue one invocation that generates the complete file contents, guided by all relevant element mapping entries for that file. KB5 schema priming concerns do not apply to melleafy compilation calls (KB5 governs Mellea pipeline sessions inside compiled skills, not the compilation process itself).
 
 Each invocation uses a prompt template with all element-specific mapping entries for that file as variable substitution.
 
@@ -336,7 +336,7 @@ Before generating any body, include in the context:
 Generate all of these simultaneously in one turn. They are mutually independent at generation time:
 
 1. `schemas.py` — Pydantic models (referenced by Phase B)
-2. `config.py` — emit JSON conforming to `.claude/schemas/config_emission.schema.json`; the writer at `.claude/melleafy/writers/config_writer.py` renders the Python source
+2. `intermediate/config_emission.json` — JSON conforming to `.claude/schemas/config_emission.schema.json`; the writer at `.claude/melleafy/writers/config_writer.py` renders `config.py` from it. Do not write `config.py` itself
 3. `requirements.py` — requirement functions (referenced by Phase B)
 4. `slots.py` — `@generative` slot bodies (referenced by Phase B)
 5. `tools.py` / `constrained_slots.py` — tool implementations (referenced by Phase B)

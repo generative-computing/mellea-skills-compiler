@@ -262,6 +262,13 @@ Local models are much slower than hosted Claude. A small skill such as `weather`
 about 110 minutes with `granite4.2:30b`, longer than the default 75-minute `--timeout`,
 so raise it as shown above.
 
+The compiler doesn't save its output to a file, and a long run's output is lost when the
+terminal closes. To keep a log, pipe the compile through `tee`:
+
+```bash
+mellea-skills compile skills/weather/spec.md --backend pi --provider ollama --model granite4.2:30b --timeout 21600 2>&1 | tee compile.log
+```
+
 #### Choosing an Ollama model
 
 The compile reads roughly 200 KB of step instructions and has to follow strict rules
@@ -318,3 +325,4 @@ curl -s http://127.0.0.1:11434/api/tags
 | `Mellea-fy skill compilation failed due to timeout` with an Ollama model | Local models take far longer than the default 75-minute limit | Re-run with a larger `--timeout`, e.g. `--timeout 21600` (6 hours) |
 | `config_emission.json not found` or `fixtures_emission.json not found` | The model wrote `config.py` / `fixtures/` directly (blocked during pi runs) instead of emitting the JSON the compiler renders from | Use a more capable model; see [Choosing an Ollama model](#choosing-an-ollama-model) |
 | `Pi exited with return code 0 but produced no .../classification.json` | The model stopped without doing any work — it asked a question or replied with text instead of calling tools | Use a model that supports tool calling reliably; see [Choosing an Ollama model](#choosing-an-ollama-model) |
+| `--provider X doesn't match your default provider Y, so using your default` | `--provider` was passed without `--model`, and pi's `defaultModel` belongs to a different provider | Pass `--model` as well to compile with the provider you named |

@@ -19,12 +19,13 @@ This backend requires:
 import json
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from rich.console import Console
 
@@ -135,7 +136,7 @@ class PiBackend:
         process = None
         process_exited = False
         prompts_dir = Path(tempfile.mkdtemp(prefix="mellea-pi-prompts-"))
-        placeholders: Optional[List[Path]] = None
+        locked: Dict[Path, Optional[int]] = {}
         try:
             classification_path = context.intermediate_dir / "classification.json"
             never_compiled = not classification_path.exists()
@@ -149,8 +150,11 @@ class PiBackend:
                 )
 
             pi_default_settings = _get_default_settings()
-            provider_label = context.provider or pi_default_settings.get("defaultProvider", "anthropic")
-            model_label = context.model or pi_default_settings.get("defaultModel", "default")
+            provider, model = _resolve_provider_and_model(
+                context.provider, context.model, pi_default_settings
+            )
+            provider_label = provider or pi_default_settings.get("defaultProvider", "anthropic")
+            model_label = model or pi_default_settings.get("defaultModel", "default")
             console.print(
                 f"\n[green]{'Repairing' if effective_repair_mode else 'Compiling'} using {self.name()}, "
                 f"provider:[/] {provider_label}[green], model:[/] {model_label}\n"
@@ -179,13 +183,13 @@ class PiBackend:
             pi_argv = self._build_pi_argv(
                 spec_path=context.spec_path.resolve(),
                 repair_mode=effective_repair_mode,
-                model=context.model,
-                provider=context.provider,
+                model=model,
+                provider=provider,
                 system_prompt=system_prompt,
                 prompts_dir=prompts_dir,
             )
 
-            placeholders = _lock_protected_paths(context.package_dir)
+            locked = _lock_protected_paths(context.package_dir)
 
             start_time = time.time()
             processing = console.status(
@@ -321,8 +325,7 @@ class PiBackend:
                     process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     process.kill()
-            if placeholders is not None:
-                _unlock_protected_paths(context.package_dir, placeholders)
+            _unlock_protected_paths(locked)
             prompts_dir.chmod(0o700)
             shutil.rmtree(prompts_dir, ignore_errors=True)
 
@@ -481,7 +484,7 @@ def _render_prompt_templates(package_dir: Path, out_dir: Path) -> None:
     out_dir.chmod(0o555)
 
 
-def _lock_protected_paths(package_dir: Path) -> List[Path]:
+def _lock_protected_paths(package_dir: Path) -> Dict[Path, Optional[int]]:
     """Make paths the model must not write read-only for the pi run.
 
     Pi has no path-scoped deny rule like Claude Code's ``--settings``, and
@@ -495,63 +498,102 @@ def _lock_protected_paths(package_dir: Path) -> List[Path]:
       ``intermediate/`` against the skill directory is refused rather than
       silently writing there. An existing directory there is left alone.
 
+    If locking fails partway, whatever was already locked is undone before
+    the error is raised.
+
     Args:
         package_dir: The compiled package directory.
 
     Returns:
-        The placeholders this call created, for `_unlock_protected_paths`.
+        Each locked path mapped to its original mode, or ``None`` for a
+        placeholder this call created, for `_unlock_protected_paths`.
     """
-    created: List[Path] = []
-    for rel in _WRAPPER_RENDERED_PATHS:
-        is_dir = rel.endswith("/**")
-        path = package_dir / rel.removesuffix("/**")
-        if not path.exists():
-            path.mkdir() if is_dir else path.touch()
-            created.append(path)
-        if is_dir:
-            for child in path.rglob("*"):
-                child.chmod(0o555 if child.is_dir() else 0o444)
-            path.chmod(0o555)
-        else:
-            path.chmod(0o444)
-    for rel in _PIPELINE_WRITTEN_PATHS:
-        path = package_dir / rel
-        if path.exists():
-            path.chmod(0o444)
-    skill_root_intermediate = package_dir.parent / "intermediate"
-    if not skill_root_intermediate.exists():
-        skill_root_intermediate.mkdir()
-        skill_root_intermediate.chmod(0o555)
-        created.append(skill_root_intermediate)
-    return created
+    locked: Dict[Path, Optional[int]] = {}
+
+    def lock(path: Path, mode: int) -> None:
+        locked.setdefault(path, stat.S_IMODE(path.stat().st_mode))
+        path.chmod(mode)
+
+    def create(path: Path, is_dir: bool) -> None:
+        path.mkdir() if is_dir else path.touch()
+        locked[path] = None
+
+    try:
+        for rel in _WRAPPER_RENDERED_PATHS:
+            is_dir = rel.endswith("/**")
+            path = package_dir / rel.removesuffix("/**")
+            if not path.exists():
+                create(path, is_dir)
+            if is_dir:
+                for child in path.rglob("*"):
+                    lock(child, 0o555 if child.is_dir() else 0o444)
+                lock(path, 0o555)
+            else:
+                lock(path, 0o444)
+        for rel in _PIPELINE_WRITTEN_PATHS:
+            path = package_dir / rel
+            if path.exists():
+                lock(path, 0o444)
+        skill_root_intermediate = package_dir.parent / "intermediate"
+        if not skill_root_intermediate.exists():
+            create(skill_root_intermediate, is_dir=True)
+            lock(skill_root_intermediate, 0o555)
+    except BaseException:
+        _unlock_protected_paths(locked)
+        raise
+    return locked
 
 
-def _unlock_protected_paths(package_dir: Path, created: List[Path]) -> None:
+def _unlock_protected_paths(locked: Dict[Path, Optional[int]]) -> None:
     """Undo `_lock_protected_paths` so the wrapper can render and clean up.
 
-    Restores write permission and removes placeholders that are still empty.
+    Restores each existing path's original mode and removes placeholders
+    that are still empty.
     """
-    for rel in _WRAPPER_RENDERED_PATHS:
-        path = package_dir / rel.removesuffix("/**")
+    for path, mode in locked.items():
         if not path.exists():
             continue
-        if path.is_dir():
-            path.chmod(0o755)
-            for child in path.rglob("*"):
-                child.chmod(0o755 if child.is_dir() else 0o644)
-        else:
-            path.chmod(0o644)
-    for rel in _PIPELINE_WRITTEN_PATHS:
-        path = package_dir / rel
-        if path.exists():
-            path.chmod(0o644)
-    for path in created:
-        if path.is_dir():
+        if mode is not None:
+            path.chmod(mode)
+        elif path.is_dir():
             path.chmod(0o755)
             if not any(path.iterdir()):
                 path.rmdir()
-        elif path.is_file() and path.stat().st_size == 0:
-            path.unlink()
+        else:
+            path.chmod(0o644)
+            if path.stat().st_size == 0:
+                path.unlink()
+
+
+def _resolve_provider_and_model(
+    provider: Optional[str], model: Optional[str], settings: dict
+) -> tuple[Optional[str], Optional[str]]:
+    """Fill in ``--model`` when only ``--provider`` was given.
+
+    Pi refuses ``--provider`` without ``--model``. pi's ``defaultModel``
+    belongs to its ``defaultProvider``, so it is only used with that provider;
+    any other provider falls back to the defaults for both, with a notice.
+
+    Args:
+        provider: The ``--provider`` the user passed, if any.
+        model: The ``--model`` the user passed, if any.
+        settings: pi's settings, from `_get_default_settings`.
+
+    Returns:
+        The provider and model to pass to pi. Unchanged unless ``provider`` is
+        set, ``model`` is not, and pi's settings name a default model.
+    """
+    default_provider = settings.get("defaultProvider")
+    default_model = settings.get("defaultModel")
+    if not provider or model or not default_provider or not default_model:
+        return provider, model
+    if provider != default_provider:
+        console.print(
+            f"\n[yellow]--provider {provider} doesn't match your default provider "
+            f"{default_provider}, so using your default. If you need to use what you "
+            f"provided, then please provide a --model too.[/]"
+        )
+    return default_provider, default_model
 
 
 def _get_default_settings() -> dict:
