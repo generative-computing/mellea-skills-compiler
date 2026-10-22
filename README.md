@@ -173,7 +173,7 @@ Mellea Skills Compiler requires a backend to compile skills. You can use **Claud
 
       See pi's `docs/providers.md` for other providers and for loading keys from a secret manager.
 
-  3. Without `--provider`, the compiler uses `anthropic`. Credentials must resolve for that provider (or the one you pass with `--provider`), otherwise compilation fails up front. If pi accepts the credentials but the provider rejects them (e.g. an invalid key or token type), the compile error now includes the provider's message.
+  3. Pass `--provider` (and `--model`) to choose the provider pi compiles with. Credentials must resolve for that provider, otherwise compilation fails up front. If pi accepts the credentials but the provider rejects them (e.g. an invalid key or token type), the compile error includes the provider's message. Custom providers, such as a proxy, go in `~/.pi/agent/models.json`; see [`docs/PI_SETUP.md`](docs/PI_SETUP.md#choosing-a-provider).
 
 ### Project Code
 
@@ -325,35 +325,30 @@ See [`.claude/commands/README.md`](https://github.com/generative-computing/melle
 
 **Using pi**
 
-If you use the [pi](https://pi.dev) coding agent, install the
-`extensions/pi/` extension package in this repo to run `compile`, `validate`,
-`run`, and `certify` as slash commands from inside a pi session (it shells out
-to the same `mellea-skills` CLI installed above — install it first).
-
-Install pi (if you don't have it), install the extension, then start a pi
-session from the repo root:
+If you use the [pi](https://pi.dev) coding agent, the pi extension runs
+`compile`, `validate`, `run`, and `certify` as slash commands from inside a pi
+session. It installs its own copy of the compiler on first use, so you don't
+need the steps above:
 
 ```bash
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.2.0
-pi install ./extensions/pi
+pi install npm:mellea-skills-compiler-pi
 pi
 ```
 
 Then, **inside the pi session** (these are pi slash commands, not shell
-commands):
+commands), with a skill spec at `weather/spec.md`:
 
 ```
-/mellea-compile skills/weather/spec.md
-/mellea-validate examples/weather/weather_mellea
-/mellea-run examples/weather/weather_mellea --input "What's the weather like in Dublin?"
-/mellea-certify examples/weather/weather_mellea
+/mellea-compile weather/spec.md
+/mellea-validate weather/weather_mellea
 ```
 
+`/mellea-compile` uses the pi backend and your session's model by default.
 This is a different feature from the `pi` **export target** below (compiled
 skill → pi-loadable `SKILL.md` bundle) — this extension runs the compiler
 *from inside* pi, the export target instead packages an already-compiled
-skill *for* pi. See [Using with pi](docs/PI_SETUP.md#pi-extension) for the full command
-list, flags, and known limitations.
+skill *for* pi. See [Using with pi](docs/PI_SETUP.md#pi-extension) for
+prerequisites, the first-run install, and known limitations.
 
 ### Run Skill Pipeline
 

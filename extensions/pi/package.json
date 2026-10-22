@@ -12,14 +12,18 @@
   "homepage": "https://github.com/generative-computing/mellea-skills-compiler/tree/main/extensions/pi",
   "files": [
     "extensions/",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "type": "module",
+  "scripts": {
+    "test": "tsx --test test/*.test.ts"
+  },
   "devDependencies": {
     "tsx": "^4.19.0"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "1.2.0"
+    "@earendil-works/pi-coding-agent": "^1.2.0"
   },
   "pi": {
     "extensions": ["./extensions"]

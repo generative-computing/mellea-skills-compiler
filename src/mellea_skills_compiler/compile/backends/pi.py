@@ -292,7 +292,8 @@ class PiBackend:
         """
         effective_provider = provider or "anthropic"
 
-        if shutil.which("pi") is None:
+        pi_executable = shutil.which("pi")
+        if pi_executable is None:
             return False, (
                 "pi CLI not found in PATH. "
                 "Install it via 'npm install -g @earendil-works/pi-coding-agent'."
@@ -304,7 +305,7 @@ class PiBackend:
         ):
             try:
                 result = subprocess.run(
-                    ["pi", "auth", "check", "--provider", effective_provider, "--json"],
+                    [pi_executable, "auth", "check", "--provider", effective_provider, "--json"],
                     capture_output=True,
                     text=True,
                     timeout=30,
@@ -367,7 +368,9 @@ class PiBackend:
         """
         command = "/mellea-fy-repair" if repair_mode else "/mellea-fy"
         pi_argv: List[str] = [
-            "pi",
+            # On Windows npm installs pi as pi.cmd, which CreateProcess only
+            # finds by full path.
+            shutil.which("pi") or "pi",
             "-p",
             f"{command} {spec_path}",
             "--mode",

@@ -181,3 +181,7 @@ cython_debug/
 .python-version
 
 node_modules
+
+# pi provider configs can hold API keys
+model.json
+models.json
