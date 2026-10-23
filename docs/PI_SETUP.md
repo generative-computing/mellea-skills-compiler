@@ -57,7 +57,7 @@ also works.
 ### Install
 
 ```bash
-pi install npm:mellea-skills-compiler-pi
+pi install npm:@ibm/mellea-skills-compiler-pi
 ```
 
 This adds the extension to your global pi settings. Add `-l` to install it for the
