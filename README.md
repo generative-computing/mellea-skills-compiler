@@ -331,7 +331,7 @@ session. It installs its own copy of the compiler on first use, so you don't
 need the steps above:
 
 ```bash
-pi install npm:mellea-skills-compiler-pi
+pi install npm:@ibm/mellea-skills-compiler-pi
 pi
 ```
 

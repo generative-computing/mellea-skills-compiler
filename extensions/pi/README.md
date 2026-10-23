@@ -63,7 +63,7 @@ pi --version
 From npm:
 
 ```bash
-pi install npm:mellea-skills-compiler-pi
+pi install npm:@ibm/mellea-skills-compiler-pi
 ```
 
 Or from the root of a local clone of this repo:
