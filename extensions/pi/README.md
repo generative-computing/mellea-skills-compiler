@@ -7,7 +7,7 @@ commands: `/mellea-compile`, `/mellea-validate`, `/mellea-run`, and
 `/mellea-certify`. You don't need to install the compiler yourself, the
 extension sets it up the first time you use it.
 
-## Pre-requisites
+## Prerequisites
 
 You need:
 
@@ -23,6 +23,13 @@ You need:
 - **`git`**, and either **[uv](https://docs.astral.sh/uv/)** or **Python 3.11
   to 3.14.3** (on Windows, the `py` launcher is enough). The extension uses
   these to install the compiler.
+- **Already using pi?** `npm install -g` replaces your global pi, and
+  `pi install` writes to your shared agent folder (`~/.pi/agent`). To keep an
+  existing pi setup as it is, install pi 1.2.0 into its own folder
+  folder (`npm install --ignore-scripts @earendil-works/pi-coding-agent` there), put
+  that folder's `node_modules/.bin` first on `PATH`, and set
+  `PI_CODING_AGENT_DIR` to a separate folder before running `pi install`. Use
+  `pi install -l` instead to install the extension for one project only.
 - **Ollama (or vLLM), running, with the default models pulled.** Compiled
   skills run on Ollama, so `/mellea-run` and `/mellea-certify` need it.
   `/mellea-compile` and `/mellea-validate` also run one fixture as a smoke
@@ -84,8 +91,13 @@ You need:
 The first command takes a few extra minutes while the compiler is set up.
 Compiling writes a `weather_mellea/` package and a `pyproject.toml` next to the
 spec, and can take from a couple of minutes to over half an hour depending on
-the model. Each command shows a status indicator while it runs, then one
-notification with the output.
+the model; use a frontier-class model, as smaller models often stop partway.
+Each command shows a status indicator while it runs, then one notification
+with the output.
+
+pi's status bar shows your session's model, not the one being compiled with.
+The compile prints the provider and model it used when it finishes, and records
+them in `<package>_mellea/compile_metadata.json`.
 
 ## First run
 
@@ -103,7 +115,7 @@ On Windows, `git` must be on `PATH`, and long paths should be enabled
 
 | Command | Runs |
 |---------|------|
-| `/mellea-compile <path-to-spec.md> [flags...]` | `mellea-skills compile`, with the pi backend and this session's provider and model |
+| `/mellea-compile <path-to-spec.md or skill-dir> [flags...]` | `mellea-skills compile`, with the pi backend and this session's provider and model |
 | `/mellea-validate <compiled-skill-dir> [flags...]` | `mellea-skills validate` |
 | `/mellea-run <compiled-skill-dir> [flags...]` | `mellea-skills run` |
 | `/mellea-certify <compiled-skill-dir> [flags...]` | `mellea-skills certify` |
@@ -111,8 +123,10 @@ On Windows, `git` must be on `PATH`, and long paths should be enabled
 Paths are relative to the folder pi was started in. Flags are passed to the
 CLI unchanged; see the
 [CLI reference](https://generative-computing.github.io/mellea-skills-compiler/CLI/).
-On `/mellea-compile`, `--provider` or `--model` override the
-session defaults. A flag value with spaces can be wrapped in `"..."` or
+On `/mellea-compile`, `--provider` and `--model` override the session's
+provider and model: pass both, or pass only the one that matches your session.
+A skill directory works in place of a spec file if it contains a `SKILL.md` or
+`spec.md`; the package is then named after the directory. A flag value with spaces can be wrapped in `"..."` or
 `'...'` (no backslash escapes or nested quotes).
 
 ## Known limitations

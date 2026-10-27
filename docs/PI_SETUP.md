@@ -26,7 +26,7 @@ and shows its output in the pi session. You don't need to install the CLI yourse
 the extension sets it up the first time you use it.
 
 
-### Pre-requisites
+### Prerequisites
 
 - **pi 1.2.0 or later, with a model provider set up** (run `pi` and use `/login`, or
   set your provider's API key). To install pi:
@@ -39,6 +39,13 @@ the extension sets it up the first time you use it.
 - **`git`**, and either **[uv](https://docs.astral.sh/uv/)** or **Python 3.11 to
   3.14.3** (on Windows, the `py` launcher is enough). The extension uses these to
   install the compiler.
+- **Already using pi?** `npm install -g` replaces your global pi, and `pi install`
+  writes to your shared agent folder (`~/.pi/agent`). To keep an existing pi setup
+  as it is, install pi 1.2.0 into its own folder (`npm install --ignore-scripts
+  @earendil-works/pi-coding-agent` there), put that folder's `node_modules/.bin`
+  first on `PATH`, and set `PI_CODING_AGENT_DIR` to a separate folder before running
+  `pi install`. Use `pi install -l` instead to install the extension for one project
+  only.
 - **Ollama (or vLLM), running, with the default models pulled.** Compiled skills run
   on Ollama, so `/mellea-run` and `/mellea-certify` need it. `/mellea-compile` and
   `/mellea-validate` also run one fixture as a smoke check; without Ollama that check
@@ -58,8 +65,9 @@ the extension sets it up the first time you use it.
 
 ### Quick start
 
-From a clone of this repo, simply doing `pi install ./extensions/pi` installs your local copy instead. The extension's source is in
-[`extensions/pi/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/extensions/pi). However, if you've NOT ALREADY CLONED the repo, you can use the steps below:
+These steps install the extension from npm. If you have a clone of this repo, you can
+run `pi install ./extensions/pi` from its root instead to install your local copy of
+[`extensions/pi/`](https://github.com/generative-computing/mellea-skills-compiler/tree/main/extensions/pi).
 
 1. Install the extension:
 
@@ -76,11 +84,13 @@ From a clone of this repo, simply doing `pi install ./extensions/pi` installs yo
       https://raw.githubusercontent.com/generative-computing/mellea-skills-compiler/main/skills/weather/spec.md
     ```
 
-3. Confirm pi has credentials for the provider you'll compile with
-      ```
-      pi auth check --provider <provider>   # prints "ready" when configured
-      ```
-   If not properly configured, see [Verifying credentials](#verifying-credentials) below.
+3. Confirm pi has credentials for the provider you'll compile with:
+
+    ```bash
+    pi auth check --provider <provider>   # prints "ready" when configured
+    ```
+
+   If it doesn't, see [Verifying credentials](#verifying-credentials) below.
 
 4. Start pi in that folder, and check that `mellea-skills.ts` is listed under
    `[Extensions]` in the startup banner:
@@ -103,11 +113,21 @@ The first command takes a few extra minutes while the compiler is cloned and
 installed under `~/.cache/mellea-skills-compiler/<version>/` (once per version; delete
 that folder to reset). Compiling writes a `weather_mellea/` package next to the spec
 and can take from a couple of minutes to over half an hour depending on the model.
+Use a frontier-class model: smaller models often stop partway through a compile.
+
+pi's status bar shows your session's model, not the one being compiled with. The
+compile prints the provider and model it used when it finishes, and records them in
+`<package>/compile_metadata.json`.
+
+You can also pass a skill directory instead of a spec file, for example
+`/mellea-compile skills/weather`. The directory must contain a `SKILL.md` or
+`spec.md`, and the package is named after the directory (`weather_mellea`).
 
 Paths are relative to the folder pi was started in. Flags are passed to the CLI
-unchanged (see the [CLI reference](CLI.md)); on `/mellea-compile`,
-`--provider` or `--model` override the session defaults. If the compile fails because
-of your provider, see [Choosing a provider](#choosing-a-provider) below.
+unchanged (see the [CLI reference](CLI.md)). On `/mellea-compile`, `--provider` and
+`--model` override the session's provider and model: pass both, or pass only the one
+that matches your session. If the compile fails because of your provider, see
+[Choosing a provider](#choosing-a-provider) below.
 
 On Windows, `git` must be on `PATH`, and long paths should be enabled
 (`git config --global core.longpaths true`). WSL also works.
@@ -125,6 +145,11 @@ pi auth check --provider ollama             # local Ollama
 Each should print `ready` when the credentials are correctly resolved. This only checks
 that credentials resolve; it does not contact the provider, so `ready` doesn't mean the
 endpoint is up.
+
+`invalid_state` (from `pi auth check --json`) usually means pi couldn't load your
+`models.json`: it isn't valid JSON, or a `headers` value refers to an environment
+variable that isn't set in this terminal. An unset variable in `apiKey` shows as
+`credentials_not_configured` instead.
 
 For Ollama, check the server directly:
 
@@ -153,13 +178,9 @@ curl -s http://127.0.0.1:11434/api/tags
 
 ## Choosing a provider
 
-You can Configure credentials for the provider pi will use. Either run:
-
-```
-pi  #then from inside your pi session use `/login` to authenticate interactively.
-```
-
-OR pi reads custom providers from `models.json` in its agent folder: `~/.pi/agent/models.json`,
+Configure credentials for the provider pi will use. Either run `pi` and use `/login`
+inside the session to authenticate interactively, or define the provider in
+`models.json`. Pi reads custom providers from `models.json` in its agent folder: `~/.pi/agent/models.json`,
 or `$PI_CODING_AGENT_DIR/models.json` if you set that variable. It does not read a file
 from your working directory. The file can hold API keys, so keep it out of any git
 repository. The right choice depends on how you are accessing your model:
@@ -170,11 +191,11 @@ repository. The right choice depends on how you are accessing your model:
 | LiteLLM proxy / AWS Bedrock gateway | a name you choose, e.g. `anthropic-proxy` | Define it with `baseUrl` + `apiKey` in `models.json` |
 | Ollama (local models) | `ollama` | Set `baseUrl` in `models.json` |
 
-Whichever provider you choose, make sure `defaultProvider` in
-`~/.pi/agent/settings.json` names it, and that `defaultModel` is one of that
-provider's models. `/mellea-compile` uses your pi session's provider and model, and if
-you pass `--provider` without `--model`, your defaults are used instead. For example,
-for a proxy provider named `anthropic-proxy`:
+Whichever provider you choose, make sure `defaultProvider` in `settings.json`, in the
+same agent folder (`~/.pi/agent/` or `$PI_CODING_AGENT_DIR`), names it, and that
+`defaultModel` is one of that provider's models. To compile with a different provider,
+pass both `--provider` and `--model`. For example, for a proxy provider named
+`anthropic-proxy`:
 
 ```json
 {
@@ -300,6 +321,11 @@ Then compile with additional flags `--provider ollama --model granite4.2:30b --t
 Local models are much slower than hosted Claude. A small skill such as `weather` took
 about 110 minutes with `granite4.2:30b`, longer than the default 75-minute `--timeout`,
 so raise it as shown above.
+
+The compiler doesn't write its output to a file, so a long run's output is lost when the
+terminal closes. With the CLI, pipe the compile through `tee` to keep a log (append
+`2>&1 | tee compile.log`). With the extension, the output appears in the pi session
+when the compile finishes.
 
 #### Choosing an Ollama model
 

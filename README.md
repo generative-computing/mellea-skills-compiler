@@ -362,7 +362,7 @@ or use the extension commands:
 ```
 
 Paths are relative to the folder you started pi in, and the compiled package
-is written next to the spec.
+is written next to the spec (inside the clone, these show up as untracked files).
 
 `/mellea-compile` uses the pi backend and your session's model by default.
 This is a different feature from the `pi` **export target** below (compiled
