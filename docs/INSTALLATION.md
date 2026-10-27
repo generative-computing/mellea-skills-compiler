@@ -85,7 +85,7 @@ npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.2.0
 pi --version
 ```
 
-See [Using with pi](PI_SETUP.md#pi-compilation-backend) to configure a provider (direct Anthropic, LiteLLM / Bedrock proxy, or Ollama).
+See [Using with pi](PI_SETUP.md#choosing-a-provider) to configure a provider (direct Anthropic, LiteLLM / Bedrock proxy, or Ollama).
 
 ### Project Code
 

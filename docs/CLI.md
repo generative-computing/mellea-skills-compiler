@@ -54,7 +54,7 @@ mellea-skills compile <Your-local-path>/skills/weather/spec.md --backend pi --pr
 mellea-skills compile <Your-local-path>/skills/weather/spec.md
 ```
 
-For pi provider setup (direct Anthropic, LiteLLM / Bedrock proxy, Ollama), see [Using with pi](PI_SETUP.md#pi-compilation-backend).
+For pi provider setup (direct Anthropic, LiteLLM / Bedrock proxy, Ollama), see [Using with pi](PI_SETUP.md#choosing-a-provider).
 
 Compile uses Sonnet as the default claude model. To use different claude model,
 
