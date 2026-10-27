@@ -66,6 +66,18 @@ async function runCommand(pi: ExtensionAPI, spec: CommandSpec, args: string, ctx
 		return;
 	}
 
+	// compile must run from the managed clone, where the compile agent finds
+	// its instructions; the other commands run from the user's folder.
+	// Built before setup so a bad flag combination fails straight away.
+	const isCompile = spec.subcommand === "compile";
+	let argv: string[];
+	try {
+		argv = isCompile ? buildCompileArgv(tokens, ctx.cwd, ctx.model) : resolveLeadingPath(tokens, ctx.cwd);
+	} catch (err) {
+		ctx.ui.notify(err instanceof Error ? err.message : String(err), "error");
+		return;
+	}
+
 	let install;
 	ctx.ui.setStatus("mellea-skills", "Setting up compiler...");
 	try {
@@ -79,10 +91,6 @@ async function runCommand(pi: ExtensionAPI, spec: CommandSpec, args: string, ctx
 		ctx.ui.setStatus("mellea-skills", undefined);
 	}
 
-	// compile must run from the managed clone, where the compile agent finds
-	// its instructions; the other commands run from the user's folder.
-	const isCompile = spec.subcommand === "compile";
-	const argv = isCompile ? buildCompileArgv(tokens, ctx.cwd, ctx.model) : resolveLeadingPath(tokens, ctx.cwd);
 	const cwd = isCompile ? install.repoDir : ctx.cwd;
 
 	ctx.ui.setStatus("mellea-skills", spec.status);
