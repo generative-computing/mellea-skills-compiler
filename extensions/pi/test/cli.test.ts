@@ -24,27 +24,55 @@ test("explicit --backend claude is kept and gets no provider", () => {
 	]);
 });
 
-test("explicit -b pi and -m are respected", () => {
-	assert.deepEqual(buildCompileArgv(["spec.md", "-b", "pi", "-m", "glm-5.3"], "/u", sonnet), [
+test("explicit -b pi, --provider and -m are respected", () => {
+	assert.deepEqual(
+		buildCompileArgv(["spec.md", "-b", "pi", "--provider", "zai", "-m", "glm-5.3"], "/u", sonnet),
+		["/u/spec.md", "-b", "pi", "--provider", "zai", "-m", "glm-5.3"],
+	);
+});
+
+test("--provider matching the session gets the session model", () => {
+	assert.deepEqual(buildCompileArgv(["spec.md", "--provider", "anthropic"], "/u", sonnet), [
 		"/u/spec.md",
-		"-b",
+		"--provider",
+		"anthropic",
+		"--backend",
 		"pi",
+		"--model",
+		"claude-sonnet-5-5",
+	]);
+});
+
+test("--provider for another provider without --model is refused", () => {
+	assert.throws(
+		() => buildCompileArgv(["spec.md", "--provider", "ollama"], "/u", sonnet),
+		/--provider ollama.*--model/,
+	);
+});
+
+test("--model matching the session gets the session provider", () => {
+	assert.deepEqual(buildCompileArgv(["spec.md", "-m", "claude-sonnet-5-5"], "/u", sonnet), [
+		"/u/spec.md",
 		"-m",
-		"glm-5.3",
+		"claude-sonnet-5-5",
+		"--backend",
+		"pi",
 		"--provider",
 		"anthropic",
 	]);
 });
 
-test("explicit --provider is respected", () => {
-	assert.deepEqual(buildCompileArgv(["spec.md", "--provider", "ollama"], "/u", sonnet), [
+test("--model for another model without --provider is refused", () => {
+	assert.throws(() => buildCompileArgv(["spec.md", "-m", "glm-5.3"], "/u", sonnet), /--model glm-5.3.*--provider/);
+});
+
+test("--provider without --model is passed through when there is no session model", () => {
+	assert.deepEqual(buildCompileArgv(["spec.md", "--provider", "ollama"], "/u", undefined), [
 		"/u/spec.md",
 		"--provider",
 		"ollama",
 		"--backend",
 		"pi",
-		"--model",
-		"claude-sonnet-5-5",
 	]);
 });
 
