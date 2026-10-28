@@ -149,7 +149,7 @@ Mellea Skills Compiler requires a backend to compile skills. You can use **Claud
 
 ### Pi Setup
 
-> For a full walkthrough of provider options (direct Anthropic, LiteLLM proxy / AWS Bedrock, Ollama) and troubleshooting common errors (including the `eager_input_streaming` error on Bedrock), see **[`docs/PI_SETUP.md`](docs/PI_SETUP.md)**.
+> For a full walkthrough of provider options (direct Anthropic, LiteLLM proxy / AWS Bedrock, Ollama) and troubleshooting common errors (including the `eager_input_streaming` error on Bedrock), see **[Choosing a provider](docs/PI_SETUP.md#choosing-a-provider)** in `docs/PI_SETUP.md`.
 
   1. The pi CLI is required to compile a Mellea skill with the pi backend. Install it via:
 
@@ -325,23 +325,44 @@ See [`.claude/commands/README.md`](https://github.com/generative-computing/melle
 
 **Using pi**
 
-If you use the [pi](https://pi.dev) coding agent, the pi extension runs
-`compile`, `validate`, `run`, and `certify` as slash commands from inside a pi
-session. It installs its own copy of the compiler on first use, so you don't
-need the steps above:
+If you use the [pi](https://pi.dev) coding agent, you can compile from inside a
+pi session started at the root of your clone of this repo. Two sets of pi slash
+commands are available there (these are pi slash commands, not shell commands):
+
+- **`/mellea-fy*`** — prompt templates that ship with this repo in
+  `.pi/prompts/`. Pi loads them when you start it in the repo root and trust
+  the folder. No install needed.
+- **`/mellea-*`** — the pi extension in `extensions/pi/`, which runs
+  `compile`, `validate`, `run`, and `certify` as slash commands. It installs
+  its own copy of the compiler on first use, so you don't need the steps
+  above. Install it once from the repo root.
 
 ```bash
-pi install npm:@ibm/mellea-skills-compiler-pi
+pi install ./extensions/pi
 pi
 ```
 
-Then, **inside the pi session** (these are pi slash commands, not shell
-commands), with a skill spec at `weather/spec.md`:
+When pi starts, trust the folder if asked, and check that `mellea-skills.ts`
+is listed under `[Extensions]` in the startup banner. Type `/` to see both
+sets of commands. If you only see `/mellea-fy*`, the extension isn't loaded:
+run `pi list` to check it is installed.
+
+Then, **inside the pi session**, either run the `/mellea-fy` prompt directly,
+in your current pi session, as with Claude Code and IBM Bob above:
 
 ```
-/mellea-compile weather/spec.md
-/mellea-validate weather/weather_mellea
+/mellea-fy skills/weather/spec.md
 ```
+
+or use the extension commands:
+
+```
+/mellea-compile skills/weather/spec.md
+/mellea-validate skills/weather/weather_mellea
+```
+
+Paths are relative to the folder you started pi in, and the compiled package
+is written next to the spec (inside the clone, these show up as untracked files).
 
 `/mellea-compile` uses the pi backend and your session's model by default.
 This is a different feature from the `pi` **export target** below (compiled

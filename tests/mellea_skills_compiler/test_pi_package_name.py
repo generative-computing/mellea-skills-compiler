@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 PACKAGE_NAME = "@ibm/mellea-skills-compiler-pi"
 INSTALL_COMMAND = f"pi install npm:{PACKAGE_NAME}"
-INSTALL_DOCS = ["README.md", "docs/PI_SETUP.md", "extensions/pi/README.md"]
+INSTALL_DOCS = ["docs/PI_SETUP.md", "extensions/pi/README.md"]
 
 # The unscoped name on its own, not as the tail of the scoped one.
 _UNSCOPED_NAME = re.compile(r"(?<!@ibm/)\bmellea-skills-compiler-pi\b")

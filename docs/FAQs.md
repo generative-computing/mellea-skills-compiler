@@ -249,7 +249,7 @@ mellea-skills compile <spec> --backend bob      # IBM Bob
 mellea-skills compile <spec> --backend pi       # pi; choose a provider with --provider
 ```
 
-All three run the same compilation steps and produce the same kind of package (typed pipelines, validation, fixtures). They differ in setup, cost, and which models you can use. See [Installation](INSTALLATION.md#prerequisites) for each backend's setup, and [Using with pi](PI_SETUP.md#pi-compilation-backend) for pi providers.
+All three run the same compilation steps and produce the same kind of package (typed pipelines, validation, fixtures). They differ in setup, cost, and which models you can use. See [Installation](INSTALLATION.md#prerequisites) for each backend's setup, and [Using with pi](PI_SETUP.md#choosing-a-provider) for pi providers.
 
 ### Is the compliance classification verified?
 
