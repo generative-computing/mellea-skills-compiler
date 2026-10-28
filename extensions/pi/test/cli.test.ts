@@ -76,6 +76,11 @@ test("--provider without --model is passed through when there is no session mode
 	]);
 });
 
+test("--provider=value and --model=value forms are refused the same way", () => {
+	assert.throws(() => buildCompileArgv(["spec.md", "--provider=ollama"], "/u", sonnet), /--provider ollama.*--model/);
+	assert.throws(() => buildCompileArgv(["spec.md", "--model=glm-5.3"], "/u", sonnet), /--model glm-5.3.*--provider/);
+});
+
 test("--flag=value forms count as explicit", () => {
 	assert.deepEqual(buildCompileArgv(["spec.md", "--backend=bob"], "/u", sonnet), ["/u/spec.md", "--backend=bob"]);
 });

@@ -18,7 +18,7 @@ const COMMANDS: CommandSpec[] = [
 		subcommand: "compile",
 		description: "Compile a Mellea skill specification (.md) into a typed pipeline",
 		usage:
-			"Usage: /mellea-compile <path-to-spec.md> [flags...] — compiles with this session's provider and model unless you pass --backend/--provider/--model",
+			"Usage: /mellea-compile <path-to-spec.md or skill-dir> [flags...] — compiles with this session's provider and model. To override, pass both --provider and --model, or only the one matching your session (or --backend claude|bob)",
 		status: "Compiling...",
 		label: "Compile",
 	},

@@ -5,7 +5,7 @@ import type { PiExec, PiExecResult } from "./cli.ts";
 // Until the compiler is on PyPI with its instruction files packaged, the
 // compile agent needs a full checkout (it reads .claude/, .pi/prompts/ and
 // docs/dialects/ relative to its working directory).
-export const COMPILER_REF = "v0.3.0";
+export const COMPILER_REF = "v0.3.1";
 export const COMPILER_REPO = "https://github.com/generative-computing/mellea-skills-compiler.git";
 
 const PYTHON_RANGE = ">=3.11,<3.14.4";
