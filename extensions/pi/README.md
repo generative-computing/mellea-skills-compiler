@@ -26,7 +26,7 @@ You need:
 - **Already using pi?** `npm install -g` replaces your global pi, and
   `pi install` writes to your shared agent folder (`~/.pi/agent`). To keep an
   existing pi setup as it is, install pi 1.2.0 into its own folder
-  folder (`npm install --ignore-scripts @earendil-works/pi-coding-agent` there), put
+  (`npm install --ignore-scripts @earendil-works/pi-coding-agent` there), put
   that folder's `node_modules/.bin` first on `PATH`, and set
   `PI_CODING_AGENT_DIR` to a separate folder before running `pi install`. Use
   `pi install -l` instead to install the extension for one project only.
