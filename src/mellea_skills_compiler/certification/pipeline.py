@@ -193,8 +193,9 @@ def run_pipeline(
             except Exception as e:
                 console.print(
                     f"[yellow]Warning:[/] {str(e)}"
-                    f" Run [bold]mellea-skills ingest[/] or "
-                    f"[bold]mellea-skills certify[/] first for Guardian protection. "
+                    f" Certify this skill first for Guardian protection "
+                    f"([bold]certify[/] or [bold]ingest[/] in the CLI, "
+                    f"[bold]/mellea-certify[/] in pi). "
                 )
                 LOGGER.info("Running unguarded.")
 
