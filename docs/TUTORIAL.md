@@ -2,7 +2,7 @@
 
 This tutorial assumes you have already followed [Installation](INSTALLATION.md):
 `pip install -e .` succeeds in your virtual environment, an Ollama
-backend is running on the host given by `OLLAMA_API_URL`, and the
+backend is running on the host given by `OLLAMA_HOST` or `OLLAMA_API_URL`, and the
 `granite4.1:3b` model has been pulled.
 
 The goal: from a fresh checkout to (1) seeing a compiled skill produce
@@ -50,7 +50,7 @@ deterministically. This is the Pattern 2 contract — typed extraction,
 then code.
 
 If the run fails with `ConnectionError`, your Ollama endpoint is
-unreachable. Check `OLLAMA_API_URL` and that `ollama list` shows
+unreachable. Check `OLLAMA_HOST` or `OLLAMA_API_URL` and that `ollama list` shows
 `granite4.1:3b`.
 
 ### Input Format Examples

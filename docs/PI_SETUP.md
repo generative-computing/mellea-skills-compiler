@@ -58,10 +58,9 @@ the extension sets it up the first time you use it.
     ollama pull ibm/granite3.3-guardian:8b
     ```
 
-  Ollama is expected at `http://localhost:11434`. If yours is elsewhere, set both
-  `OLLAMA_HOST` (used by the compiled skill) and `OLLAMA_API_URL` (used for
-  certification's risk and Guardian checks) to its URL before starting pi. For vLLM,
-  see [Choose Inference Engine](INSTALLATION.md#choose-inference-engine).
+  Ollama is expected at `http://localhost:11434`. If yours is elsewhere, set
+  `OLLAMA_HOST` to its URL before starting pi. For vLLM,
+see [Choose Inference Engine](INSTALLATION.md#choose-inference-engine).
 
 ### Quick start
 
