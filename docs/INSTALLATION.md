@@ -110,7 +110,7 @@ pip install -e .
 
 | Engine | Use Case | Deployment | Configuration | Characteristics |
 |--------|----------|-----------|---------------|-----------------|
-| **Ollama** | Development, testing, prototyping | Local workstation | `export OLLAMA_API_URL=<api-url>` (default: `http://localhost:11434`) | Lightweight, easy setup, minimal dependencies, no external services required |
+| **Ollama** | Development, testing, prototyping | Local workstation | `export OLLAMA_HOST=<api-url>` or `export OLLAMA_API_URL=<api-url>` (default: `http://localhost:11434`) | Lightweight, easy setup, minimal dependencies, no external services required |
 | **vLLM** | Production deployments, high-throughput | Local instance or hosted service | `export VLLM_API_URL_RISK_MODEL=<api-url>` and `export VLLM_API_URL_GUARDIAN_MODEL=<api-url>` | Optimized serving, dynamic batching, GPU acceleration, supports multiple model endpoints |
 
 **Engine Selection**: Specify via `--inference-engine` flag in `certify` and `run` commands. Engines are swappable without recompiling skills—risk identification and Guardian verdicts run on the selected backend transparently.
@@ -119,9 +119,12 @@ pip install -e .
 - For Ollama, set API URL in the environment variables:
 
   ```bash
+  export OLLAMA_HOST=http://localhost:11434 # Ollama api URL
+  ```
+  OR
+  ```bash
   export OLLAMA_API_URL=http://localhost:11434 # Ollama api URL
   ```
-
 - For online vLLM, set API URL and API KEY(optionally) in the environment variables:
 
   ```bash

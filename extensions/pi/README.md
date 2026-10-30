@@ -44,8 +44,7 @@ You need:
     ```
 
   Ollama is expected at `http://localhost:11434`. If yours is elsewhere, set
-  both `OLLAMA_HOST` (used by the compiled skill) and `OLLAMA_API_URL` (used
-  for certification's risk and Guardian checks) to its URL before starting pi.
+  `OLLAMA_HOST` to its URL before starting pi.
   For vLLM, see
   [Choose Inference Engine](https://generative-computing.github.io/mellea-skills-compiler/INSTALLATION/#choose-inference-engine).
 
