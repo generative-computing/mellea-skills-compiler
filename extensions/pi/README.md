@@ -68,7 +68,13 @@ You need:
       https://raw.githubusercontent.com/generative-computing/mellea-skills-compiler/main/skills/weather/spec.md
     ```
 
-3. Confirm pi has credentials for the provider you'll compile with. See
+3. Confirm pi has credentials for the provider you'll compile with:
+
+    ```bash
+    pi auth check --provider <provider>   # prints "ready" when configured
+    ```
+
+   If it doesn't, see
    [Verifying credentials](https://generative-computing.github.io/mellea-skills-compiler/PI_SETUP/#verifying-credentials).
 
 4. Start pi in that folder, and check that `mellea-skills.ts` is listed under
