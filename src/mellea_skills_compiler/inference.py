@@ -40,8 +40,18 @@ class InferenceService:
         model_name_or_path: Optional[str] = None,
         inference_engine_type: Optional[InferenceEngineType] = None,
     ):
+
+        service: InferenceService = InferenceService(inference_engine_type)
         return InferenceService(inference_engine_type).risk(
-            model_name_or_path, parameters={"temperature": 0}
+            model_name_or_path,
+            parameters=(
+                # Ollama requires num_ctx to be set explicitly per request to control the
+                # context window size. vLLM does not need it here because the context length
+                # is configured once at serve time via --max-model-len.
+                {"temperature": 0, "num_ctx": 16384}
+                if service.inference_engine_type == InferenceEngineType.OLLAMA
+                else {"temperature": 0}
+            ),
         )
 
     @classmethod
@@ -54,7 +64,10 @@ class InferenceService:
         return service.guardian(
             model_name_or_path,
             parameters=(
-                {"temperature": 0, "num_ctx": 1024, "think": False}
+                # Ollama requires num_ctx to be set explicitly per request to control the
+                # context window size. vLLM does not need it here because the context length
+                # is configured once at serve time via --max-model-len.
+                {"temperature": 0, "num_ctx": 8192, "num_predict": 1024, "think": False}
                 if service.inference_engine_type == InferenceEngineType.OLLAMA
                 else {"temperature": 0, "max_tokens": 1024}
             ),
