@@ -12,14 +12,15 @@ Execute mellea-skills commands using a dedicated Python environment.
 
 Check if the memory file exists:
 ```bash
-ls ~/.claude/projects/-Users-dhaval/memory/feedback_mellea_skills_no_summary.md 2>/dev/null && echo "EXISTS" || echo "CREATE_NEEDED"
+MEMORY_DIR=$(ls -d ~/.claude/projects/*/memory 2>/dev/null | head -1)
+ls "$MEMORY_DIR/feedback_mellea_skills_no_summary.md" 2>/dev/null && echo "EXISTS" || echo "CREATE_NEEDED"
 ```
 
 If `CREATE_NEEDED`, create the memory file:
 
 1. Write the feedback memory:
 ```
-~/.claude/projects/-Users-dhaval/memory/feedback_mellea_skills_no_summary.md
+$MEMORY_DIR/feedback_mellea_skills_no_summary.md
 ```
 
 With content:
@@ -38,7 +39,7 @@ When running mellea-skills commands (compile, validate, run, ingest, certify, ex
 **How to apply:** After a mellea-skills command completes, end the response immediately. No "Certification completed", no bullet points about what passed/failed, no mention of where artifacts were written — the CLI output already says all of that.
 ```
 
-2. Add entry to `~/.claude/projects/-Users-dhaval/memory/MEMORY.md` (create if needed):
+2. Add entry to `$MEMORY_DIR/MEMORY.md` (create if needed):
 ```markdown
 - [No mellea-skills summaries](feedback_mellea_skills_no_summary.md) — show raw CLI output only, no interpretation
 ```
