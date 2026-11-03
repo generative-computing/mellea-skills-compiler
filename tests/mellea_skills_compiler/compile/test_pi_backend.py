@@ -58,6 +58,12 @@ def _pi_event_line(event: dict) -> str:
     return json.dumps(event) + "\n"
 
 
+def _write_pipeline_outputs(intermediate_dir: Path) -> None:
+    """Write the intermediates a run that finished every step leaves behind."""
+    for name in ("classification.json", "config_emission.json", "fixtures_emission.json"):
+        (intermediate_dir / name).write_text("{}")
+
+
 class TestBackendMetadata:
     """Test backend metadata methods."""
 
@@ -191,6 +197,32 @@ class TestValidateEnvironment:
         assert is_valid is False
         assert "provider 'ollama'" in error
 
+    @pytest.mark.parametrize(
+        "reason, cause",
+        [
+            ("invalid_state", "models.json"),
+            ("credentials_not_configured", "apiKey"),
+        ],
+    )
+    @patch("mellea_skills_compiler.compile.backends.pi.shutil.which")
+    @patch("mellea_skills_compiler.compile.backends.pi.subprocess.run")
+    def test_validate_environment_not_ready_explains_reason(
+        self, mock_run, mock_which, backend, reason, cause
+    ):
+        mock_which.return_value = "/usr/local/bin/pi"
+        mock_run.return_value = Mock(
+            returncode=1,
+            stdout=json.dumps({"status": "not_ready", "reason": reason}),
+            stderr="",
+        )
+
+        _, error = backend.validate_environment(provider="rits")
+
+        assert cause in error
+        assert "Run 'pi auth'" not in error
+        assert "pi auth check --provider rits" in error
+        assert "#verifying-credentials" in error
+
 
 class TestCompileMethod:
     """Test the compile() workflow."""
@@ -230,7 +262,7 @@ class TestCompileMethod:
             "",
         ]
 
-        (mock_context.intermediate_dir / "classification.json").write_text("{}")
+        _write_pipeline_outputs(mock_context.intermediate_dir)
 
         mock_process = MagicMock()
         mock_process.stdout.readline.side_effect = events
@@ -305,6 +337,47 @@ class TestCompileMethod:
 
         assert result.success is False
         assert "classification.json" in result.error_message
+
+    @patch("mellea_skills_compiler.compile.backends.pi.subprocess.Popen")
+    def test_compile_exit_zero_after_step_0_fails(self, mock_popen, backend, mock_context):
+        """A model that classifies the skill and then ends its turn is not success.
+
+        The error names the missing emission files, the agent's last message
+        and the pi session, so the user can see where the run stopped.
+        """
+        events = [
+            _pi_event_line({"type": "session", "id": "sess-123"}),
+            _pi_event_line(
+                {
+                    "type": "message_end",
+                    "message": {
+                        "role": "assistant",
+                        "stopReason": "stop",
+                        "content": [
+                            {"type": "text", "text": "Proceeding to Step 1b"}
+                        ],
+                    },
+                }
+            ),
+            "",
+        ]
+        (mock_context.intermediate_dir / "classification.json").write_text("{}")
+
+        mock_process = MagicMock()
+        mock_process.stdout.readline.side_effect = events
+        mock_process.stderr.readline.side_effect = [""]
+        mock_process.poll.side_effect = [None] * (len(events) - 1) + [0]
+        mock_process.wait.return_value = 0
+        mock_popen.return_value = mock_process
+
+        result = backend.compile(mock_context)
+
+        assert result.success is False
+        assert "config_emission.json" in result.error_message
+        assert "fixtures_emission.json" in result.error_message
+        assert "Proceeding to Step 1b" in result.error_message
+        assert "sess-123" in result.error_message
+        assert "--repair-mode" in result.error_message
 
     @patch("mellea_skills_compiler.compile.backends.pi.subprocess.Popen")
     def test_compile_timeout(self, mock_popen, backend, mock_context):
@@ -618,7 +691,7 @@ class TestProviderErrorHandling:
 
     def _run(self, mock_popen, backend, mock_context, events):
         events = events + [_pi_event_line({"type": "agent_settled"}), ""]
-        (mock_context.intermediate_dir / "classification.json").write_text("{}")
+        _write_pipeline_outputs(mock_context.intermediate_dir)
         mock_process = MagicMock()
         mock_process.stdout.readline.side_effect = events
         mock_process.stderr.readline.side_effect = [""]
