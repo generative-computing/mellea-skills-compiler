@@ -38,6 +38,7 @@ from mellea_skills_compiler.compile.claude_directives import (
     build_pi_system_prompt,
 )
 from mellea_skills_compiler.compile.metadata import CompileMetadata
+from mellea_skills_compiler.compile.writers.renderer import DEFAULT_WRITER_SPECS
 from mellea_skills_compiler.enums import PiMessageType
 from mellea_skills_compiler.toolkit.logging import configure_logger
 
@@ -68,6 +69,23 @@ _PIPELINE_WRITTEN_PATHS: tuple[str, ...] = (
     "intermediate/runtime_directive.json",
     "intermediate/mellea_api_ref.json",
     "intermediate/mellea_doc_index.json",
+)
+
+# What `pi auth check --json` reasons usually mean (pi 1.2.0).
+_AUTH_REASON_CAUSES: Dict[str, str] = {
+    "invalid_state": (
+        "pi couldn't load ~/.pi/agent/models.json: it isn't valid JSON, or a "
+        "`headers` value refers to an environment variable that isn't set"
+    ),
+    "credentials_not_configured": (
+        "no credentials resolved: the provider's `apiKey` environment variable "
+        "isn't set, or no key is stored for it"
+    ),
+}
+
+_VERIFYING_CREDENTIALS_URL = (
+    "https://generative-computing.github.io/mellea-skills-compiler/"
+    "PI_SETUP/#verifying-credentials"
 )
 
 
@@ -131,7 +149,9 @@ class PiBackend:
             CompilationResult with success status, package directory, and metadata.
             Also fails if pi exits 0 without producing
             `intermediate/classification.json` — a clean exit with no output
-            (e.g. pi stopped to ask a question in one-shot mode) is not success.
+            (e.g. pi stopped to ask a question in one-shot mode) is not success —
+            or without the `*_emission.json` files the renderer needs (the
+            model ended its turn partway through the pipeline).
         """
         process = None
         process_exited = False
@@ -209,6 +229,8 @@ class PiBackend:
             # transient provider errors (e.g. a truncated Ollama stream), so
             # an error followed by a successful message is not a failure.
             last_api_error: Optional[str] = None
+            last_text = ""
+            session_id: Optional[str] = None
 
             def read_stderr():
                 if process.stderr:
@@ -243,7 +265,9 @@ class PiBackend:
                     try:
                         event = json.loads(output.strip())
                         event_type = event.get("type")
-                        if (
+                        if event_type == PiMessageType.SESSION:
+                            session_id = event.get("id")
+                        elif (
                             event_type == PiMessageType.MESSAGE_END
                             and event.get("message", {}).get("role") == "assistant"
                         ):
@@ -262,6 +286,7 @@ class PiBackend:
                                 if block.get("type") == "text"
                             )
                             if text:
+                                last_text = text
                                 console.print(f"\n[cyan]{text}[/]")
                         elif event_type == PiMessageType.AGENT_SETTLED:
                             console.print("[blue]Summary:[/]\n")
@@ -303,6 +328,18 @@ class PiBackend:
                         "(e.g. pi asked a clarifying question instead of "
                         "completing) rather than compiling the skill."
                     ),
+                )
+
+            missing = [
+                spec.emission_relpath
+                for spec in DEFAULT_WRITER_SPECS
+                if not (context.package_dir / spec.emission_relpath).exists()
+            ]
+            if missing:
+                return CompilationResult(
+                    success=False,
+                    package_dir=context.package_dir,
+                    error_message=_early_stop_message(missing, last_text, session_id),
                 )
 
             return CompilationResult(
@@ -378,9 +415,12 @@ class PiBackend:
 
         if result.returncode != 0 or status.get("status") != "ready":
             reason = status.get("reason", "unknown reason")
+            cause = _AUTH_REASON_CAUSES.get(reason)
             return False, (
-                f"Pi credentials are not configured for provider '{effective_provider}' ({reason}). "
-                f"Run 'pi auth' or configure the appropriate credentials for '{effective_provider}'."
+                f"Pi credentials are not configured for provider '{effective_provider}' ({reason})"
+                + (f": {cause}" if cause else "")
+                + f". Fix it, then check with 'pi auth check --provider {effective_provider}'. "
+                f"See {_VERIFYING_CREDENTIALS_URL}"
             )
 
         return True, None
@@ -594,6 +634,36 @@ def _resolve_provider_and_model(
             f"provided, then please provide a --model too.[/]"
         )
     return default_provider, default_model
+
+
+def _early_stop_message(
+    missing: List[str], last_text: str, session_id: Optional[str]
+) -> str:
+    """Explain a pi run that exited 0 before writing every emission file.
+
+    Args:
+        missing: Emission paths, relative to the package, that weren't written.
+        last_text: Text of pi's last assistant message, if any.
+        session_id: Id from pi's session header, if pi printed one.
+    """
+    message = (
+        "The compile agent stopped before finishing the pipeline: pi exited "
+        f"with return code 0 but didn't write {', '.join(missing)}."
+    )
+    if last_text:
+        snippet = last_text.strip()
+        if len(snippet) > 300:
+            snippet = snippet[:300] + "…"
+        message += f" Its last message was: {snippet!r}."
+    if session_id:
+        message += (
+            f" The full transcript is pi session {session_id}, under "
+            "~/.pi/agent/sessions/."
+        )
+    message += (
+        " Re-run with --repair-mode to resume, or use a stronger model."
+    )
+    return message
 
 
 def _get_default_settings() -> dict:
