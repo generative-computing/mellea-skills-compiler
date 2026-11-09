@@ -205,6 +205,8 @@ pip install -e .
 
 - For Ollama, set API URL in the environment variables:
 
+  **Note:** Set only one of these variables. `OLLAMA_HOST` takes precedence: if it is set, `OLLAMA_API_URL` is ignored.
+
   ```bash
   export OLLAMA_HOST=http://localhost:11434 # Ollama api URL
   ```
