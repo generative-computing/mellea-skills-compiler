@@ -16,6 +16,11 @@ from mellea_skills_compiler.toolkit.logging import configure_logger
 LOGGER: Logger = configure_logger()
 
 
+def guardian_criteria_id(tag: str) -> str:
+    """Convert a Nexus tag (``unethical-behavior``) to a Guardian criteria id (``unethical_behavior``)."""
+    return tag.strip().replace("-", "_")
+
+
 def _get_fail_safe_risks() -> List[NexusRisk]:
     return [
         NexusRisk(
@@ -73,7 +78,7 @@ def generate_policy_manifest(
 
         # sort the risks, granite guardian and other
         if risk.isDefinedByTaxonomy == GovernanceTaxonomy.IBM_GRANITE_GUARDIAN:
-            guardian_prompt = risk.tag if risk.tag else guardian_prompt
+            guardian_prompt = guardian_criteria_id(risk.tag) if risk.tag else guardian_prompt
             is_native: bool = True if risk.tag else False
             risks.append(
                 NexusRisk(
