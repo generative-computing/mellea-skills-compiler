@@ -8,11 +8,10 @@ from mellea_skills_compiler.enums import (
 )
 
 
-OLLAMA_HOST: Optional[str] = os.environ.get("OLLAMA_HOST", None)
 OLLAMA_API_URL: str = (
-    OLLAMA_HOST
-    if OLLAMA_HOST and OLLAMA_HOST != ""
-    else os.environ.get("OLLAMA_API_URL", "http://localhost:11434")
+    os.environ.get("OLLAMA_HOST")
+    or os.environ.get("OLLAMA_API_URL")
+    or "http://localhost:11434"
 )
 VLLM_API_URL_RISK_MODEL: Optional[str] = os.environ.get("VLLM_API_URL_RISK_MODEL", None)
 VLLM_API_URL_GUARDIAN_MODEL: Optional[str] = os.environ.get(
