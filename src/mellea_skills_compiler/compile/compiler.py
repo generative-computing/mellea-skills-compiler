@@ -427,6 +427,18 @@ def compile(
             f"Compilation failed with backend '{backend}': {str(e)}"
         ) from e
 
+    # Skill card
+    try:
+        from mellea_skills_compiler.compile.skill_card import write_card
+
+        write_card(mellea_dir)
+    except Exception as exc:
+        LOGGER.warning(
+            "Could not assemble skill card (%s). Run `mellea-skills card %s` to retry.",
+            exc,
+            mellea_dir,
+        )
+
     # Record final compile completion timestamp
     CompileMetadata.record_completion()
 

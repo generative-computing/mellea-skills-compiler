@@ -120,6 +120,15 @@ mellea-skills validate <Your-local-path>/skills/weather/weather_mellea --no-run 
 | `--no-run` | off | Skip the post-lint fixture smoke-check |
 | `--all` | off | Run all fixtures (default: first only) |
 
+### Skill Card
+
+Compile writes `skill_card.json` and `skill_card.md` into the package, following the [agent skill card](https://github.com/evaleval/agent-skill-cards) schema v1.2. Every value is read from the package; the card's stamp lists the sections it leaves unfilled. Risks come from the newest `audit/<timestamp>/policy_manifest.json` next to the package. `certify` refreshes the card when it finishes, and `card --check` also fails when a newer audit exists.
+
+```bash
+mellea-skills card <Your-local-path>/skills/weather/weather_mellea          # (re)write the card
+mellea-skills card <Your-local-path>/skills/weather/weather_mellea --check  # exit 1 if missing or stale
+```
+
 ### Run Skill Pipeline
 
 Run a compiled skill pipeline against an input or a fixture:
