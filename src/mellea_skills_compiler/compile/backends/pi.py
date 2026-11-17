@@ -81,6 +81,14 @@ _AUTH_REASON_CAUSES: Dict[str, str] = {
         "no credentials resolved: the provider's `apiKey` environment variable "
         "isn't set, or no key is stored for it"
     ),
+    "provider_not_found": (
+        "pi doesn't know this provider: check the name, or add the provider "
+        "to ~/.pi/agent/models.json"
+    ),
+    "credential_not_available": (
+        "a credential is stored for the provider but couldn't be retrieved "
+        "or refreshed: log in to the provider again"
+    ),
 }
 
 _VERIFYING_CREDENTIALS_URL = (
@@ -417,7 +425,7 @@ class PiBackend:
             reason = status.get("reason", "unknown reason")
             cause = _AUTH_REASON_CAUSES.get(reason)
             return False, (
-                f"Pi credentials are not configured for provider '{effective_provider}' ({reason})"
+                f"pi auth check failed for provider '{effective_provider}' ({reason})"
                 + (f": {cause}" if cause else "")
                 + f". Fix it, then check with 'pi auth check --provider {effective_provider}'. "
                 f"See {_VERIFYING_CREDENTIALS_URL}"

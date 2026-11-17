@@ -202,6 +202,8 @@ class TestValidateEnvironment:
         [
             ("invalid_state", "models.json"),
             ("credentials_not_configured", "apiKey"),
+            ("provider_not_found", "doesn't know this provider"),
+            ("credential_not_available", "couldn't be retrieved"),
         ],
     )
     @patch("mellea_skills_compiler.compile.backends.pi.shutil.which")
@@ -219,6 +221,7 @@ class TestValidateEnvironment:
         _, error = backend.validate_environment(provider="rits")
 
         assert cause in error
+        assert "credentials are not configured" not in error
         assert "Run 'pi auth'" not in error
         assert "pi auth check --provider rits" in error
         assert "#verifying-credentials" in error
