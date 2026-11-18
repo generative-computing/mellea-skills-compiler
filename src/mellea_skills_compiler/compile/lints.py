@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import json
+import tomllib
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -2440,12 +2441,80 @@ def lint_fixture_data_files_exist(package_dir: Path) -> LintResult:
     return result
 
 
+# ─── Lint: pyproject-package-discovery ───
+
+
+def lint_pyproject_package_discovery(package_dir: Path) -> LintResult:
+    """Skill-root ``pyproject.toml`` must restrict setuptools package discovery.
+
+    ``pyproject.toml`` lives at the skill root beside ``scripts/``,
+    ``references/`` and ``assets/``; without an explicit discovery config,
+    setuptools' flat-layout auto-discovery aborts with "Multiple top-level
+    packages discovered". Requires ``[tool.setuptools.packages.find].include``
+    or an explicit ``[tool.setuptools].packages`` list.
+    """
+    result = LintResult(lint_id="pyproject-package-discovery", verdict="pass")
+
+    pyproject = package_dir.parent / "pyproject.toml"
+    if not pyproject.is_file():
+        result.verdict = "skipped"
+        result.skipped_reason = "pyproject.toml not found at skill root"
+        return result
+
+    result.files_checked = 1
+    try:
+        data = tomllib.loads(pyproject.read_text())
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        result.verdict = "fail"
+        result.failures.append(
+            LintFailure(
+                file="pyproject.toml",
+                line=None,
+                column=None,
+                message=f"pyproject.toml could not be parsed: {exc}",
+                rule_ref="Step 3 pyproject template (mellea-fy-generate.md)",
+            )
+        )
+        return result
+
+    setuptools_cfg = data.get("tool", {}).get("setuptools", {})
+    packages = setuptools_cfg.get("packages")
+    if isinstance(packages, dict):
+        include = packages.get("find", {}).get("include")
+    else:
+        include = packages  # explicit list of package names (or None)
+    if isinstance(include, list) and include:
+        return result
+
+    result.verdict = "fail"
+    result.failures.append(
+        LintFailure(
+            file="pyproject.toml",
+            line=None,
+            column=None,
+            message=(
+                "pyproject.toml has no [tool.setuptools.packages.find] with a "
+                "non-empty `include`. Add:\n"
+                "[tool.setuptools.packages.find]\n"
+                'where = ["."]\n'
+                f'include = ["{package_dir.name}*"]\n'
+                "Otherwise setuptools may fail with 'Multiple top-level packages "
+                "discovered in a flat-layout' because the skill root also holds "
+                "scripts/, references/ and assets/."
+            ),
+            rule_ref="Step 3 pyproject template (mellea-fy-generate.md)",
+        )
+    )
+    return result
+
+
 # ─── Runner ───
 
 
 ALL_LINTS: Tuple[Callable[[Path], LintResult], ...] = (
     lint_fixtures_loader_contract,
     lint_fixture_data_files_exist,
+    lint_pyproject_package_discovery,
     lint_bundled_asset_path_resolution,
     lint_runtime_defaults_bound,
     lint_session_method_arity,
