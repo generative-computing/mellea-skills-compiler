@@ -595,15 +595,15 @@ def stage5_lint(
         else:
             try:
                 tree = ast.parse(server_py.read_text())
-                has_fastmcp_import = any(
+                has_mcpserver_import = any(
                     isinstance(n, ast.ImportFrom)
-                    and n.module == "mcp.server.fastmcp"
-                    and any(a.name == "FastMCP" for a in n.names)
+                    and n.module == "mcp.server.mcpserver"
+                    and any(a.name == "MCPServer" for a in n.names)
                     for n in ast.walk(tree)
                 )
-                if not has_fastmcp_import:
+                if not has_mcpserver_import:
                     failures.append(
-                        "server.py: missing 'from mcp.server.fastmcp import FastMCP'"
+                        "server.py: missing 'from mcp.server.mcpserver import MCPServer'"
                     )
 
                 def _has_mcp_tool_decorator(node: ast.AST) -> bool:
