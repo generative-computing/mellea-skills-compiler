@@ -96,6 +96,8 @@ For `mellea.stdlib.*` calls to functions **not** in the table above: if `interme
 
 **`runtime-defaults-bound`** (C8 invariant): `<package_name>/config.py` `BACKEND` and `MODEL_ID` values must match the directive recorded at `<package_name>/intermediate/runtime_directive.json`. The compile pipeline writes the directive pre-mellea-fy from `.bob/data/runtime_defaults.json` (or CLI overrides) and injects the same values into the LLM's system prompt; this lint verifies the LLM honoured the instruction. Detection: AST-parse `config.py`; find module-level `Assign` or `AnnAssign` to `BACKEND` and `MODEL_ID` with `Constant` values; compare against the directive. Hard failure on mismatch with a message naming actual vs expected and pointing at `.bob/data/runtime_defaults.json` for the fix. Skipped when the directive file is absent (e.g. package compiled with an older pipeline that did not write the directive).
 
+**`pyproject-package-discovery`** (Step 3 pyproject template): the skill-root `pyproject.toml` (the parent of `<package_name>/`) must restrict setuptools package discovery. `pyproject.toml` sits next to `scripts/`, `references/`, `assets/`, so without it setuptools' flat-layout auto-discovery can abort with "Multiple top-level packages discovered". Detection: parse `pyproject.toml` with `tomllib`; require a non-empty `[tool.setuptools.packages.find].include` list or an explicit `[tool.setuptools].packages` list. Hard failure otherwise, with a message to add `[tool.setuptools.packages.find]` with `where = ["."]` and `include = ["<package_name>*"]`. Skipped when `pyproject.toml` is absent.
+
 ### Tier 3 — Cross-artifact lints (run only when Tier 2 passes)
 
 **`category-specific`**: conditional per C-category detected in `dependency_plan.json`:

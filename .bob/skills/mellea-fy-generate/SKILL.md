@@ -265,6 +265,15 @@ dependencies = [
 [project.scripts]
 <package-name> = "<package_module>.main:main"
 
+# REQUIRED — restrict package discovery to the generated package. pyproject.toml
+# sits at the skill root next to scripts/, references/, assets/ and other
+# companion dirs; without this block setuptools' flat-layout auto-discovery
+# aborts with "Multiple top-level packages discovered". Step 7's
+# `pyproject-package-discovery` lint enforces it.
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["<package_module>*"]
+
 # Rule OUT-6 — declare mirrored companion directories as package data so
 # bundled scripts/references/assets ship with the installed wheel. Include
 # only the directories that exist after Step 3a-pre's mirror.
