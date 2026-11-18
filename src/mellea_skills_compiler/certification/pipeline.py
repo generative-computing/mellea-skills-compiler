@@ -590,6 +590,20 @@ def full_pipeline(
         if not (has_flagged or has_failed):
             LOGGER.info("ALL STATUS CHECKS PASSED")
 
+        all_verdicts = verdict_summary["all_verdicts"]
+        if all_verdicts and len(has_failed) == len(all_verdicts):
+            message = (
+                "🔴 All Guardian checks failed to produce a usable verdict. "
+                "Certification is inconclusive — see CERTIFICATION.md and logs."
+            )
+            LOGGER.error(message)
+            return RunResult.failed(
+                run_dir=audit_dir,
+                input_parameters=input_parameters,
+                guardian_verdicts=verdict_summary,
+                error_details={"type": "Guardian", "message": message},
+            )
+
         # Return RunResult with the summary of the run
         return RunResult.success(
             run_dir=audit_dir,

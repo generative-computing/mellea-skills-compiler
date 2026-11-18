@@ -98,7 +98,7 @@ async def _query_batch(
             for risk in risks
         }
 
-    return {
+    verdicts = {
         risk.name: GuardianVerdict(
             risk=risk.name,
             label=_parse_guardian_score(raw_prediction),
@@ -107,6 +107,15 @@ async def _query_batch(
         )
         for risk, raw_prediction in zip(risks, raw_predictions)
     }
+    for name, verdict in verdicts.items():
+        if verdict.label == GuardianScore.FAILED:
+            LOGGER.warning(
+                "Could not parse Guardian output for risk=%s (stage=%s): %r",
+                name,
+                hook_stage,
+                verdict.raw_output,
+            )
+    return verdicts
 
 
 async def _call_guardian(

@@ -399,3 +399,45 @@ class TestGenerateCertificationReport:
 
         assert "Audit Trail Summary" in report
         assert "1 total audit events recorded" in report
+
+
+class TestGuardianEvidenceFailures:
+    """Failed/errored Guardian checks must not be reported as 'no incidents'."""
+
+    @staticmethod
+    def _trail(labels):
+        return [
+            {
+                "hook": "generation_post_call",
+                "guardian_verdicts": [
+                    {"risk": f"r{i}", "label": label} for i, label in enumerate(labels)
+                ],
+            }
+        ]
+
+    def test_all_failed_is_inconclusive(self):
+        from mellea_skills_compiler.certification.report import (
+            _extract_guardian_evidence,
+        )
+
+        text = " ".join(_extract_guardian_evidence(self._trail(["Failed", "Error"])))
+        assert "No risk incidents detected" not in text
+        assert "INCONCLUSIVE" in text
+        assert "2 of 2 checks could not be evaluated" in text
+
+    def test_mixed_reports_failures(self):
+        from mellea_skills_compiler.certification.report import (
+            _extract_guardian_evidence,
+        )
+
+        text = " ".join(_extract_guardian_evidence(self._trail(["No", "Failed"])))
+        assert "1 of 2 checks could not be evaluated" in text
+        assert "1 checks that completed" in text
+
+    def test_all_no_is_clean(self):
+        from mellea_skills_compiler.certification.report import (
+            _extract_guardian_evidence,
+        )
+
+        evidence = _extract_guardian_evidence(self._trail(["No", "No"]))
+        assert "No risk incidents detected." in evidence
