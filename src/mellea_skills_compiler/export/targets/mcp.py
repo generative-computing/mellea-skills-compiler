@@ -282,11 +282,11 @@ def _render_server_py(
 
     return (
         "import sys\n"
-        "from mcp.server.fastmcp import FastMCP\n"
+        "from mcp.server.mcpserver import MCPServer\n"
         f"from {package_name}.{entry_module} import {entry_function}\n"
         f"{env_note}\n"
         f"{guardian_block}"
-        f'mcp = FastMCP(name="{tool_name}")\n'
+        f'mcp = MCPServer(name="{tool_name}")\n'
         "\n"
         "\n"
         "@mcp.tool()\n"
@@ -361,7 +361,7 @@ def _render_pyproject_toml(
     # (constants is a leaf module; this target module is imported at compile time).
     from mellea_skills_compiler.constants import MELLEA_PIN
 
-    deps = ['    "mcp>=1.2.0",\n', f'    "{MELLEA_PIN}",\n']
+    deps = ['    "mcp>=2.0.0",\n', f'    "{MELLEA_PIN}",\n']
     if has_policy_manifest:
         deps.append(
             '    "mellea-skills-compiler@git+https://github.com/generative-computing/mellea-skills-compiler.git",\n'
@@ -509,7 +509,7 @@ def _render_readme(
         f"## Troubleshooting\n"
         f"\n"
         f"- **Authentication**: The generated server has no authentication. "
-        f"For streamable-http in production, add authentication via FastMCP middleware or a reverse proxy.\n"
+        f"For streamable-http in production, add authentication via MCPServer middleware or a reverse proxy.\n"
         f"- **Dependencies**: `pip install -e .` installs the MCP SDK and the bundled pipeline package.\n"
     )
 
