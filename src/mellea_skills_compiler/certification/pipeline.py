@@ -15,7 +15,7 @@ End-to-end demonstration:
 import json
 import random
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import datetime
 from logging import Logger
 from pathlib import Path
@@ -29,6 +29,7 @@ from mellea_skills_compiler.certification.classification import (
     classify_governance_requirements,
 )
 from mellea_skills_compiler.certification.data import get_data_path
+from mellea_skills_compiler.certification.exceptions import CertificationInterrupted
 from mellea_skills_compiler.certification.input_resolver import resolve_input
 from mellea_skills_compiler.certification.policy import (
     generate_policy_manifest,
@@ -83,7 +84,9 @@ def _dump_fixture_results(
         )
 
 
-def _run_single_fixture(pipeline_fn: Callable, fixture: Fixture):
+def _run_single_fixture(
+    pipeline_fn: Callable[..., Any], fixture: Fixture
+) -> FixtureResult:
     try:
         if isinstance(fixture.context, Dict):
             output = pipeline_fn(**fixture.context)
@@ -95,6 +98,37 @@ def _run_single_fixture(pipeline_fn: Callable, fixture: Fixture):
         return FixtureResult.failed(fixture=fixture, e=e)
 
     return FixtureResult.success(fixture=fixture, output=output)
+
+
+def _run_fixtures(
+    pipeline_fn: Callable[..., Any], fixtures: List[Fixture]
+) -> List[FixtureResult]:
+    executor = ThreadPoolExecutor()
+    futures: List[Future[FixtureResult]] = []
+    try:
+        for fixture in fixtures:
+            futures.append(executor.submit(_run_single_fixture, pipeline_fn, fixture))
+        fixture_results = []
+        pending = set(futures)
+        while pending:
+            try:
+                # Keep the wait bounded so Python can dispatch signal handlers.
+                for future in as_completed(fs=pending, timeout=0.1):
+                    pending.remove(future)
+                    fixture_results.append(future.result(timeout=300))
+            except TimeoutError:
+                continue
+    except CertificationInterrupted:
+        for future in futures:
+            future.cancel()
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise
+    except BaseException:
+        executor.shutdown(wait=True)
+        raise
+    else:
+        executor.shutdown(wait=True)
+        return fixture_results
 
 
 def run_pipeline(
@@ -180,6 +214,7 @@ def run_pipeline(
                         ),
                     )
                     import asyncio
+
                     from mellea.plugins.manager import initialize_plugins
 
                     asyncio.run(initialize_plugins(timeout=30))
@@ -366,7 +401,7 @@ def full_pipeline(
 
         # ── Step 3: Configure plugins from manifest ───────────────────────
         print()
-        
+
         LOGGER.info(
             "Configuring Guardian hooks from Policy Manifest...",
         )
@@ -376,12 +411,13 @@ def full_pipeline(
             InferenceService.guardian_engine(guardian_model, inference_engine_type),
         )
         import asyncio
+
         from mellea.plugins.manager import initialize_plugins
 
-        asyncio.run(initialize_plugins(timeout=30)) 
-        
+        asyncio.run(initialize_plugins(timeout=30))
+
         guardian_plugin.register()
-        
+
         audit_plugin = AuditTrailPlugin(
             log_path=audit_dir / "audit_trail.jsonl", guardian_plugin=guardian_plugin
         )
@@ -405,23 +441,11 @@ def full_pipeline(
         LOGGER.info("  - Audit Trail checks every end points (pre + post).")
 
         # run input fixtures
-        fixture_results: List[FixtureResult] = []
         try:
-            with ThreadPoolExecutor() as executor:
-
-                # Submit all fixtures
-                future_to_fixture = {
-                    executor.submit(_run_single_fixture, pipeline_fn, f): f
-                    for f in sample_fixtures
-                }
-
-                # Collect results as they complete
-                for future in as_completed(fs=future_to_fixture):
-                    fixture: Fixture = future_to_fixture[future]
-                    fixture_result: FixtureResult = future.result(timeout=300)
-                    fixture_results.append(fixture_result)
-
-                LOGGER.info(f"✓ Executed {len(sample_fixtures)} fixture(s)")
+            fixture_results: List[FixtureResult] = _run_fixtures(
+                pipeline_fn, sample_fixtures
+            )
+            LOGGER.info(f"✓ Executed {len(sample_fixtures)} fixture(s)")
         except Exception as e:
             raise RuntimeError(
                 f"✗ Fixtures execution failed with error: {str(e)}"
