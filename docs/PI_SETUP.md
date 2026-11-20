@@ -148,7 +148,10 @@ endpoint is up.
 `invalid_state` (from `pi auth check --json`) usually means pi couldn't load your
 `models.json`: it isn't valid JSON, or a `headers` value refers to an environment
 variable that isn't set in this terminal. An unset variable in `apiKey` shows as
-`credentials_not_configured` instead.
+`credentials_not_configured` instead. `provider_not_found` means pi doesn't know the
+provider name: check its spelling, or add the provider to `models.json`.
+`credential_not_available` means a credential is stored but couldn't be retrieved or
+refreshed: log in to the provider again.
 
 For Ollama, check the server directly:
 
