@@ -1,7 +1,7 @@
 """Enforce a single-source mellea dependency pin across the compiler.
 
 If ``constants.MELLEA_PIN`` drifts from any of the four rendered locations
-(root ``pyproject.toml``, the three export targets, or the generate-step
+(root ``pyproject.toml``, the four export targets, or the generate-step
 template) an install with mismatched pins can silently resolve to a broken
 range — the mellea 0.7 upgrade landed precisely because we had four
 different values in the tree.
@@ -34,11 +34,12 @@ def test_pyproject_pin_matches_constant():
         "src/mellea_skills_compiler/export/targets/mcp.py",
         "src/mellea_skills_compiler/export/targets/claude_code.py",
         "src/mellea_skills_compiler/export/targets/langgraph.py",
+        "src/mellea_skills_compiler/export/targets/pi.py",
     ],
 )
 def test_export_targets_derive_pin_from_constant(target_path):
     text = (REPO_ROOT / target_path).read_text()
-    # The three targets must import MELLEA_PIN and interpolate it — no
+    # The four targets must import MELLEA_PIN and interpolate it — no
     # hardcoded ``mellea[hooks]>=...`` string may appear.
     assert "from mellea_skills_compiler.constants import MELLEA_PIN" in text, (
         f"{target_path} does not import MELLEA_PIN; the pin is hardcoded."
