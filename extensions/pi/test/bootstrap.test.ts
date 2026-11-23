@@ -17,6 +17,8 @@ import type { PiExecResult } from "../extensions/lib/cli.ts";
 type Call = { command: string; args: string[] };
 type Responder = (call: Call) => Partial<PiExecResult> | undefined;
 
+const VERSION = COMPILER_REF.replace(/^v/, "");
+
 const ok = (stdout = ""): Partial<PiExecResult> => ({ code: 0, stdout });
 const fail = (code = 1, stderr = ""): Partial<PiExecResult> => ({ code, stderr });
 
@@ -61,7 +63,7 @@ function happyPath(extra: Responder = () => undefined): Responder {
 		if (call.command === "git" && call.args[0] === "--version") return ok("git version 2.50.0");
 		if (call.command === "git" && call.args[0] === "clone") return ok();
 		if (call.command === "uv") return ok();
-		if (call.command.endsWith("/bin/mellea-skills") && call.args[0] === "version") return ok("0.3.0");
+		if (call.command.endsWith("/bin/mellea-skills") && call.args[0] === "version") return ok(VERSION);
 		return undefined;
 	};
 }
@@ -241,11 +243,13 @@ test("clone failure reports git's stderr", async () => {
 	const home = newHome();
 	const { exec } = fakeExec(
 		happyPath((call) =>
-			call.command === "git" && call.args[0] === "clone" ? fail(128, "fatal: Remote branch v0.3.0 not found") : undefined,
+			call.command === "git" && call.args[0] === "clone" ? fail(128, `fatal: Remote branch ${COMPILER_REF} not found`) : undefined,
 		),
 	);
 
-	await assert.rejects(ensureCompiler(exec, logRecorder().log, { home }), /Remote branch v0\.3\.0 not found/);
+	await assert.rejects(ensureCompiler(exec, logRecorder().log, { home }), (error: Error) =>
+		error.message.includes(`Remote branch ${COMPILER_REF} not found`),
+	);
 });
 
 test("concurrent first runs in one session share one install", async () => {
@@ -304,7 +308,7 @@ test("windows: venv uses Scripts\\ and .exe paths", () => {
 test("windows: fresh install with uv points pip at Scripts\\python.exe", () =>
 	inWindowsTempCwd(async () => {
 		const { exec, calls } = fakeExec(
-			happyPath((call) => (call.command.endsWith("mellea-skills.exe") && call.args[0] === "version" ? ok("0.3.0") : undefined)),
+			happyPath((call) => (call.command.endsWith("mellea-skills.exe") && call.args[0] === "version" ? ok(VERSION) : undefined)),
 		);
 
 		const install = await ensureCompiler(exec, logRecorder().log, { home: "home", platform: "win32" });
@@ -322,7 +326,7 @@ test("windows: falls back to the py launcher when uv is missing", () => inWindow
 			if (call.command === "py" && call.args.join(" ") === "-3.12 --version") return ok("Python 3.12.9");
 			if (call.command === "py" && call.args[0] === "-3.12" && call.args[1] === "-m") return ok();
 			if (call.command.endsWith("python.exe") && call.args[0] === "-m") return ok();
-			if (call.command.endsWith("mellea-skills.exe")) return ok("0.3.0");
+			if (call.command.endsWith("mellea-skills.exe")) return ok(VERSION);
 			return undefined;
 		}),
 	);
