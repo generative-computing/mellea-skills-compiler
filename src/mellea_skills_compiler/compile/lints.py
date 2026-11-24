@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import tomllib
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -2707,7 +2708,8 @@ def lint_pyproject_package_discovery(package_dir: Path) -> LintResult:
     ``references/`` and ``assets/``; without an explicit discovery config,
     setuptools' flat-layout auto-discovery aborts with "Multiple top-level
     packages discovered". Requires ``[tool.setuptools.packages.find].include``
-    or an explicit ``[tool.setuptools].packages`` list.
+    or an explicit ``[tool.setuptools].packages`` list, with every entry
+    naming the package or one of its subpackages.
     """
     result = LintResult(lint_id="pyproject-package-discovery", verdict="pass")
 
@@ -2739,7 +2741,14 @@ def lint_pyproject_package_discovery(package_dir: Path) -> LintResult:
         include = packages.get("find", {}).get("include")
     else:
         include = packages  # explicit list of package names (or None)
-    if isinstance(include, list) and include:
+    name = package_dir.name
+    # The name itself, optionally followed by `*` or a dotted subpackage.
+    own = re.compile(rf"{re.escape(name)}(\*|\.[\w.*]+)?")
+    if (
+        isinstance(include, list)
+        and include
+        and all(isinstance(p, str) and own.fullmatch(p) for p in include)
+    ):
         return result
 
     result.verdict = "fail"
@@ -2750,10 +2759,11 @@ def lint_pyproject_package_discovery(package_dir: Path) -> LintResult:
             column=None,
             message=(
                 "pyproject.toml has no [tool.setuptools.packages.find] with a "
-                "non-empty `include`. Add:\n"
+                "non-empty `include` whose patterns all name "
+                f"`{name}` or its subpackages. Add:\n"
                 "[tool.setuptools.packages.find]\n"
                 'where = ["."]\n'
-                f'include = ["{package_dir.name}*"]\n'
+                f'include = ["{name}*"]\n'
                 "Otherwise setuptools may fail with 'Multiple top-level packages "
                 "discovered in a flat-layout' because the skill root also holds "
                 "scripts/, references/ and assets/."

@@ -10,7 +10,7 @@ metadata:
 
 **Version**: 4.4.0 (2026-11-18) | **Prereq**: Steps 3–6 complete | **Produces**: `intermediate/step_7_report.json`
 
-Step 7 is the workflow's final gate. Eighteen lints in three tiers. No LLM invocations. No mutation of the generated package. Outcome is binary overall — pass or halt.
+Step 7 is the workflow's final gate. Nineteen lints in three tiers. No LLM invocations. No mutation of the generated package. Outcome is binary overall — pass or halt.
 
 Run as: `melleafy lint <package_path>` (standalone), or automatically at the end of `melleafy run`.
 
@@ -32,9 +32,9 @@ If this lint fails, Step 7 halts. Tier 2 and Tier 3 don't run. The failure repor
 
 ### Tier 2 — Structural lints (collect all, halt before Tier 3)
 
-**Run all 15 lints in parallel.** Each lint is independent and can be executed concurrently. Dispatch all 15 lint operations simultaneously in a single turn (not sequentially, one per turn). All tier-2 lints run to completion even if one fails; results are collected then the tier verdict is determined.
+**Run all 16 lints in parallel.** Each lint is independent and can be executed concurrently. Dispatch all 16 lint operations simultaneously in a single turn (not sequentially, one per turn). All tier-2 lints run to completion even if one fails; results are collected then the tier verdict is determined.
 
-Do not wait for one lint to finish before starting the next — issue all 15 lint checks at once using available parallelism.
+Do not wait for one lint to finish before starting the next — issue all 16 lint checks at once using available parallelism.
 
 **`cross-reference`**: every `element_mapping.json` target symbol exists in the generated package; every external call in `pipeline.py` / `tools.py` has a corresponding `dependency_plan.json` entry. Sub-checks:
 
@@ -97,7 +97,7 @@ For `mellea.stdlib.*` calls to functions **not** in the table above: if `interme
 
 **`runtime-defaults-bound`** (C8 invariant): `<package_name>/config.py` `BACKEND` and `MODEL_ID` values must match the directive recorded at `<package_name>/intermediate/runtime_directive.json`. The compile pipeline writes the directive pre-mellea-fy from `.bob/data/runtime_defaults.json` (or CLI overrides) and injects the same values into the LLM's system prompt; this lint verifies the LLM honoured the instruction. Detection: AST-parse `config.py`; find module-level `Assign` or `AnnAssign` to `BACKEND` and `MODEL_ID` with `Constant` values; compare against the directive. Hard failure on mismatch with a message naming actual vs expected and pointing at `.bob/data/runtime_defaults.json` for the fix. Skipped when the directive file is absent (e.g. package compiled with an older pipeline that did not write the directive).
 
-**`pyproject-package-discovery`** (Step 3 pyproject template): the skill-root `pyproject.toml` (the parent of `<package_name>/`) must restrict setuptools package discovery. `pyproject.toml` sits next to `scripts/`, `references/`, `assets/`, so without it setuptools' flat-layout auto-discovery can abort with "Multiple top-level packages discovered". Detection: parse `pyproject.toml` with `tomllib`; require a non-empty `[tool.setuptools.packages.find].include` list or an explicit `[tool.setuptools].packages` list. Hard failure otherwise, with a message to add `[tool.setuptools.packages.find]` with `where = ["."]` and `include = ["<package_name>*"]`. Skipped when `pyproject.toml` is absent.
+**`pyproject-package-discovery`** (Step 3 pyproject template): the skill-root `pyproject.toml` (the parent of `<package_name>/`) must restrict setuptools package discovery. `pyproject.toml` sits next to `scripts/`, `references/`, `assets/`, so without it setuptools' flat-layout auto-discovery can abort with "Multiple top-level packages discovered". Detection: parse `pyproject.toml` with `tomllib`; require a non-empty `[tool.setuptools.packages.find].include` list or an explicit `[tool.setuptools].packages` list, with every entry naming `<package_name>` or one of its subpackages. Hard failure otherwise, with a message to add `[tool.setuptools.packages.find]` with `where = ["."]` and `include = ["<package_name>*"]`. Skipped when `pyproject.toml` is absent.
 
 ### Tier 3 — Cross-artifact lints (run only when Tier 2 passes)
 
@@ -124,7 +124,7 @@ For `mellea.stdlib.*` calls to functions **not** in the table above: if `interme
 
 **Within a tier**: collect all lint failures; don't halt on the first one.
 
-**Between tiers**: Tier 1 and structural Tier 2 failures (`cross-reference`, `validator-soundness`, `variable-safety`, `import-side-effects`, `import-soundness`, `stdlib-arity`, `grounding-context-types`, `format-annotation`, `known-behaviours`, `raw-llm-json-parse`, `doc-citation`, `bundled-asset-path-resolution`, `fixtures-loader-contract`, `runtime-defaults-bound`) trigger the top-level repair loop (see `mellea-fy.md`) before halting. `session-boundary` and `category-specific` failures always halt immediately — no repair is attempted. Tier 3 runs only when Tier 2 is entirely clean.
+**Between tiers**: Tier 1 and structural Tier 2 failures (`cross-reference`, `validator-soundness`, `variable-safety`, `import-side-effects`, `import-soundness`, `stdlib-arity`, `grounding-context-types`, `format-annotation`, `known-behaviours`, `raw-llm-json-parse`, `doc-citation`, `bundled-asset-path-resolution`, `fixtures-loader-contract`, `runtime-defaults-bound`, `pyproject-package-discovery`) trigger the top-level repair loop (see `mellea-fy.md`) before halting. `session-boundary` and `category-specific` failures always halt immediately — no repair is attempted. Tier 3 runs only when Tier 2 is entirely clean.
 
 **Timeout**: any lint exceeding 60 seconds of wall-clock time is recorded as `timed_out` (distinct from `failed`). The lint does not count as passed.
 

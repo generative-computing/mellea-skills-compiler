@@ -2448,6 +2448,45 @@ class TestPyprojectPackageDiscovery:
             pkg = self._pkg(tmp, "[tool.setuptools.packages.find]\ninclude = []\n")
             assert lint_pyproject_package_discovery(pkg).verdict == "fail"
 
+    def test_fails_when_include_misses_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp, '[tool.setuptools.packages.find]\ninclude = ["wrong*"]\n'
+            )
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_fails_when_include_is_wildcard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, '[tool.setuptools.packages.find]\ninclude = ["*"]\n')
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_fails_when_any_include_entry_misses_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                '[tool.setuptools.packages.find]\ninclude = ["demo_mellea*", "scripts*"]\n',
+            )
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_fails_when_include_matches_sibling_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp, '[tool.setuptools.packages.find]\ninclude = ["demo_mellea_other*"]\n'
+            )
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_passes_with_subpackage_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp, '[tool.setuptools]\npackages = ["demo_mellea", "demo_mellea.sub"]\n'
+            )
+            assert lint_pyproject_package_discovery(pkg).verdict == "pass"
+
+    def test_fails_when_explicit_packages_miss_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, '[tool.setuptools]\npackages = ["scripts"]\n')
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
     def test_skipped_when_pyproject_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             pkg = self._pkg(tmp, None)
