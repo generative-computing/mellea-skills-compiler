@@ -1240,6 +1240,47 @@ class TestRawLlmJsonParse:
             result = lint_raw_llm_json_parse(pkg)
             assert result.verdict == "fail"
 
+    def test_fails_for_any_instruct_receiver_name(self):
+        pipeline = (
+            "import json\n"
+            "def run_pipeline(m_fix, m_eval):\n"
+            "    fixed = m_fix.instruct('return an object')\n"
+            "    evaluated = m_eval.instruct('return a list')\n"
+            "    first = json.loads(fixed.value)\n"
+            "    second = json.loads(evaluated.value)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
+            result = lint_raw_llm_json_parse(pkg)
+            assert result.verdict == "fail"
+            assert len(result.failures) == 2
+
+    def test_fails_when_for_loop_target_comes_from_instruct(self):
+        pipeline = (
+            "import json\n"
+            "def run_pipeline(m):\n"
+            "    for response in [m.instruct('return an object')]:\n"
+            "        json.loads(response.value)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
+            result = lint_raw_llm_json_parse(pkg)
+            assert result.verdict == "fail"
+            assert len(result.failures) == 1
+
+    def test_fails_when_walrus_target_comes_from_instruct(self):
+        pipeline = (
+            "import json\n"
+            "def run_pipeline(m):\n"
+            "    if (response := m.instruct('return an object')):\n"
+            "        json.loads(response.value)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
+            result = lint_raw_llm_json_parse(pkg)
+            assert result.verdict == "fail"
+            assert len(result.failures) == 1
+
     def test_fails_load_keyword_with_raw_reply(self):
         pipeline = (
             "import json\n"

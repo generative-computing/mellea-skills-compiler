@@ -980,6 +980,8 @@ def _assignment_parts(node: ast.AST) -> Tuple[Set[str], Optional[ast.AST]]:
         return names, node.value
     if isinstance(node, ast.AnnAssign):
         return _target_names(node.target), node.value
+    if isinstance(node, ast.NamedExpr):
+        return _target_names(node.target), node.value
     return set(), None
 
 
@@ -1032,9 +1034,18 @@ def _is_json_load_call(node: ast.AST, modules: Set[str], loaders: Set[str]) -> b
     )
 
 
+def _is_llm_instruct_call(node: ast.AST) -> bool:
+    """Match `.instruct(...)` calls regardless of the session variable name."""
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "instruct"
+    )
+
+
 def _is_raw_llm_value(node: ast.AST, tainted_names: Set[str]) -> bool:
     return _uses_names(node, tainted_names) or any(
-        _is_m_instruct_call(child) for child in ast.walk(node)
+        _is_llm_instruct_call(child) for child in ast.walk(node)
     )
 
 
@@ -1052,29 +1063,29 @@ def _scope_tainted_names(
     json_loaders: Set[str],
 ) -> Set[str]:
     tainted = set(tainted_parameters)
-    for node in nodes:
-        targets, value = _assignment_parts(node)
-        if (
-            value is not None
-            and isinstance(value, ast.Call)
-            and _is_m_instruct_call(value)
-        ):
-            tainted.update(targets)
-
     changed = True
     while changed:
         changed = False
         for node in nodes:
             targets, value = _assignment_parts(node)
-            if not targets or value is None or not _uses_names(value, tainted):
-                continue
-            if _call_name(value) == _LLM_JSON_HELPER or _is_json_load_call(
-                value, json_modules, json_loaders
+            if (
+                targets
+                and value is not None
+                and _is_raw_llm_value(value, tainted)
+                and _call_name(value) != _LLM_JSON_HELPER
+                and not _is_json_load_call(value, json_modules, json_loaders)
+                and not targets.issubset(tainted)
             ):
-                continue
-            if not targets.issubset(tainted):
                 tainted.update(targets)
                 changed = True
+
+            if isinstance(node, (ast.For, ast.AsyncFor)) and _is_raw_llm_value(
+                node.iter, tainted
+            ):
+                loop_targets = _target_names(node.target)
+                if not loop_targets.issubset(tainted):
+                    tainted.update(loop_targets)
+                    changed = True
     return tainted
 
 
