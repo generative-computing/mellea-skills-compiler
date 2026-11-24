@@ -59,7 +59,7 @@ def compile(
         typer.Option(
             "--model",
             "-m",
-            help="Claude model for compiling a skill. Default to Sonnet.",
+            help="Model for compiling a skill. Default to Sonnet for the claude backend; the pi backend uses its configured default model.",
         ),
     ] = None,
     timeout: Annotated[
