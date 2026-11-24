@@ -17,6 +17,7 @@ This backend requires:
 """
 
 import json
+import os
 import re
 import shutil
 import stat
@@ -675,13 +676,20 @@ def _early_stop_message(
 
 
 def _get_default_settings() -> dict:
-    """Read pi's settings from ~/.pi/agent/settings.json.
+    """Read pi's settings from ``settings.json`` in pi's agent folder.
+
+    The folder is ``$PI_CODING_AGENT_DIR`` if set, else ``~/.pi/agent``.
 
     Returns:
         The parsed settings (e.g. ``defaultProvider``, ``defaultModel``), or an
         empty dict if the file does not exist.
     """
-    settings_path = Path.home() / ".pi" / "agent" / "settings.json"
+    agent_dir = os.environ.get("PI_CODING_AGENT_DIR")
+    if agent_dir:
+        base = Path(agent_dir).expanduser()
+    else:
+        base = Path.home() / ".pi" / "agent"
+    settings_path = base / "settings.json"
     if not settings_path.is_file():
         return {}
     with open(settings_path) as f:

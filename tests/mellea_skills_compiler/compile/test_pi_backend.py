@@ -14,6 +14,7 @@ import pytest
 
 from mellea_skills_compiler.compile.backend import CompilationContext, CompilationResult
 from mellea_skills_compiler.compile.backends.pi import (
+    _get_default_settings,
     PiBackend,
     _lock_protected_paths,
     _render_prompt_templates,
@@ -954,3 +955,28 @@ def test_compile_passes_absolute_paths_to_pi(mock_popen, _record, backend, tmp_p
     system_prompt = argv[argv.index("--append-system-prompt") + 1]
     assert f"`{package_dir.resolve()}/intermediate/`" in system_prompt
     assert f"{(tmp_path / '.claude/schemas').resolve()}/" in system_prompt
+
+
+class TestGetDefaultSettings:
+    def test_uses_pi_coding_agent_dir_when_set(self, tmp_path, monkeypatch):
+        alt = tmp_path / "alt"
+        alt.mkdir()
+        (alt / "settings.json").write_text(json.dumps({"defaultProvider": "alt"}))
+        home = tmp_path / "home"
+        (home / ".pi" / "agent").mkdir(parents=True)
+        (home / ".pi" / "agent" / "settings.json").write_text(
+            json.dumps({"defaultProvider": "home"})
+        )
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setenv("PI_CODING_AGENT_DIR", str(alt))
+        assert _get_default_settings() == {"defaultProvider": "alt"}
+
+    def test_falls_back_to_home_when_unset(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        (home / ".pi" / "agent").mkdir(parents=True)
+        (home / ".pi" / "agent" / "settings.json").write_text(
+            json.dumps({"defaultProvider": "home"})
+        )
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.delenv("PI_CODING_AGENT_DIR", raising=False)
+        assert _get_default_settings() == {"defaultProvider": "home"}
