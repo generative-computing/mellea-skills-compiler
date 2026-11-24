@@ -1,13 +1,17 @@
+import logging
+import os
 import signal
 import sys
 from logging import Logger
 from pathlib import Path
+from types import FrameType
 from typing import Annotated, Literal, Optional
 
 import typer
 from typer.main import Typer
 
 import mellea_skills_compiler
+from mellea_skills_compiler.certification.exceptions import CertificationInterrupted
 from mellea_skills_compiler.enums import (
     GuardianMode,
     InferenceEngineType,
@@ -20,14 +24,8 @@ app: Typer = typer.Typer(no_args_is_help=True)
 LOGGER: Logger = configure_logger()
 
 
-def signal_handler(sig, frame):
-    print("\nInterrupted. Exiting...")
-    sys.exit(0)
-
-
-# Register signal handler
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
+def _certification_signal_handler(signal_number: int, frame: FrameType | None) -> None:
+    raise CertificationInterrupted(signal_number)
 
 
 @app.callback()
@@ -392,7 +390,13 @@ def certify(
     Performs comprehensive certification including risk identification,
     compliance classification, and runtime Guardian checks.
     """
+    previous_handlers = {}
     try:
+        for signal_number in (signal.SIGINT, signal.SIGTERM):
+            previous_handlers[signal_number] = signal.signal(
+                signal_number, _certification_signal_handler
+            )
+
         from mellea_skills_compiler.certification.pipeline import full_pipeline
 
         full_pipeline(
@@ -403,9 +407,22 @@ def certify(
             guardian_model=guardian_model,
             inference_engine_type=InferenceEngineType[inference_engine],
         )
+    except CertificationInterrupted as e:
+        for signal_number in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(signal_number, signal.SIG_IGN)
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            logging.shutdown()
+            os.write(2, b"\nCertification interrupted. Exiting...\n")
+        finally:
+            os._exit(128 + e.signal_number)
     except Exception as e:
         LOGGER.error(f"Certify command failed - {str(e)}")
         raise typer.Exit(code=1)
+    finally:
+        for signal_number, previous_handler in previous_handlers.items():
+            signal.signal(signal_number, previous_handler)
 
 
 @app.command(
