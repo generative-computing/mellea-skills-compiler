@@ -1,8 +1,8 @@
 # Melleafy Step 7: Static Validation
 
-**Version**: 4.3.1 (2026-04-28) | **Prereq**: Steps 3–6 complete | **Produces**: `intermediate/step_7_report.json`
+**Version**: 4.4.0 (2026-11-18) | **Prereq**: Steps 3–6 complete | **Produces**: `intermediate/step_7_report.json`
 
-Step 7 is the workflow's final gate. Seventeen lints in three tiers. No LLM invocations. No mutation of the generated package. Outcome is binary overall — pass or halt.
+Step 7 is the workflow's final gate. Eighteen lints in three tiers. No LLM invocations. No mutation of the generated package. Outcome is binary overall — pass or halt.
 
 Run as: `melleafy lint <package_path>` (standalone), or automatically at the end of `melleafy run`.
 
@@ -24,9 +24,9 @@ If this lint fails, Step 7 halts. Tier 2 and Tier 3 don't run. The failure repor
 
 ### Tier 2 — Structural lints (collect all, halt before Tier 3)
 
-**Run all 13 lints in parallel.** Each lint is independent and can be executed concurrently. Dispatch all 13 lint operations simultaneously in a single turn (not sequentially, one per turn). All tier-2 lints run to completion even if one fails; results are collected then the tier verdict is determined.
+**Run all 15 lints in parallel.** Each lint is independent and can be executed concurrently. Dispatch all 15 lint operations simultaneously in a single turn (not sequentially, one per turn). All tier-2 lints run to completion even if one fails; results are collected then the tier verdict is determined.
 
-Do not wait for one lint to finish before starting the next — issue all 13 lint checks at once using available parallelism.
+Do not wait for one lint to finish before starting the next — issue all 15 lint checks at once using available parallelism.
 
 **`cross-reference`**: every `element_mapping.json` target symbol exists in the generated package; every external call in `pipeline.py` / `tools.py` has a corresponding `dependency_plan.json` entry. Sub-checks:
 
@@ -80,6 +80,7 @@ For `mellea.stdlib.*` calls to functions **not** in the table above: if `interme
 - KB6 (3f): no `@generative` function parameter uses a name from `intermediate/mellea_api_ref.json:.forbidden_param_names`. Detection: load `forbidden_param_names` from `mellea_api_ref.json`; parse `slots.py` and `constrained_slots.py` with `ast`; for each function decorated with `@generative`, assert no parameter name appears in that list. If `grounding_unavailable: true`, fall back to the static list: `m`, `context`, `backend`, `model_options`, `strategy`, `precondition_requirements`, `requirements`, `f_args`, `f_kwargs`. Hard failure.
 - KB7 (3g): no `prefix=<config_constant>` used as a persona/system-prompt mechanism — use `model_options={ModelOption.SYSTEM_PROMPT: <constant>}` instead. Detection: `prefix=` argument whose value is a name from `config.py` (e.g. `PREFIX_TEXT`). Note: `prefix=` for structured output generation (e.g. `prefix='{"result":"`)) is permitted. Import-path validation for `ModelOption` is now handled by the `import-soundness` lint.
 - KB11 (3m): every `Optional` field in a P2 `m.instruct` `BaseModel` that corresponds to a user-supplied tool parameter has extraction guidance in its `Field(description=...)`. Detection: parse `schemas.py` with `ast`; find `BaseModel` subclasses whose names end with `Schema` or `Intent` or are referenced as `format=` in a `m.instruct` call; for each `Optional`-annotated field, assert `Field(description=...)` is present and the description string contains at least one of: "extract", "do not ask", "if the" (case-insensitive). Hard failure.
+**`raw-llm-json-parse` (KB12)**: Free-text LLM JSON must pass through `_parse_llm_json()` before business logic. During validation, inspect the helper implementation itself; its name and call site are not proof of compliance. Confirm that it strips an outer Markdown fence (including an optional language tag), accepts complete JSON only when the root is an object or array, and otherwise extracts the first valid balanced object or array while respecting nesting, quoted strings, and escapes. If parsing fails, it must log one warning without logging the model reply and return `None`, never an empty object, array, or other success-shaped default. Confirm callers handle `None` explicitly and use fallback only after the warning; check the code path and relevant tests, not just the AST lint result. The lint parses each Python file independently and traces values inside function bodies: any `.instruct()` receiver name, values assigned from it, `for` loop targets and `:=` assignments, plus the first parameter of a named function passed to `simple_validate()`. It propagates those values through same-file calls to statically named functions using positional or keyword arguments and flags `json.loads` on traced values. Module-level expressions, cross-file calls, and dynamic/unresolved callees are outside this analysis; the lint enforces the parsing boundary but does not inspect the helper implementation.
 
 **`doc-citation`**: every `**Verified:**` or `**Ref:**` annotation in `mellea-fy-behaviours.md` that references a `docs.mellea.ai` path must appear in `intermediate/mellea_doc_index.json:.doc_pages`. Detection: read `mellea-fy-behaviours.md`; find all occurrences of `**Verified:**` and `**Ref:**` followed by a URL containing `docs.mellea.ai`; extract the path component; check each path against `doc_pages`. If `doc_pages` is empty (fetch failed at Step 2.5f), emit warning ("doc index unavailable — citation check skipped") rather than failing. Hard failure if `doc_pages` is populated and a cited path is absent.
 
@@ -116,7 +117,7 @@ For `mellea.stdlib.*` calls to functions **not** in the table above: if `interme
 
 **Within a tier**: collect all lint failures; don't halt on the first one.
 
-**Between tiers**: Tier 1 and structural Tier 2 failures (`cross-reference`, `validator-soundness`, `variable-safety`, `import-side-effects`, `import-soundness`, `stdlib-arity`, `grounding-context-types`, `format-annotation`, `known-behaviours`, `doc-citation`, `bundled-asset-path-resolution`, `fixtures-loader-contract`, `runtime-defaults-bound`) trigger the top-level repair loop (see `mellea-fy.md`) before halting. `session-boundary` and `category-specific` failures always halt immediately — no repair is attempted. Tier 3 runs only when Tier 2 is entirely clean.
+**Between tiers**: Tier 1 and structural Tier 2 failures (`cross-reference`, `validator-soundness`, `variable-safety`, `import-side-effects`, `import-soundness`, `stdlib-arity`, `grounding-context-types`, `format-annotation`, `known-behaviours`, `raw-llm-json-parse`, `doc-citation`, `bundled-asset-path-resolution`, `fixtures-loader-contract`, `runtime-defaults-bound`) trigger the top-level repair loop (see `mellea-fy.md`) before halting. `session-boundary` and `category-specific` failures always halt immediately — no repair is attempted. Tier 3 runs only when Tier 2 is entirely clean.
 
 **Timeout**: any lint exceeding 60 seconds of wall-clock time is recorded as `timed_out` (distinct from `failed`). The lint does not count as passed.
 

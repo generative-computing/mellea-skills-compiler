@@ -946,6 +946,262 @@ def lint_format_annotation(package_dir: Path) -> LintResult:
     return result
 
 
+# ─── Lint: raw LLM JSON parsing (KB12) ───
+
+
+_LLM_JSON_HELPER = "_parse_llm_json"
+
+
+def _call_name(node: ast.AST) -> Optional[str]:
+    if not isinstance(node, ast.Call):
+        return None
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    return None
+
+
+def _target_names(node: ast.AST) -> Set[str]:
+    if isinstance(node, ast.Name):
+        return {node.id}
+    if isinstance(node, (ast.Tuple, ast.List)):
+        names: Set[str] = set()
+        for element in node.elts:
+            names.update(_target_names(element))
+        return names
+    return set()
+
+
+def _assignment_parts(node: ast.AST) -> Tuple[Set[str], Optional[ast.AST]]:
+    if isinstance(node, ast.Assign):
+        names: Set[str] = set()
+        for target in node.targets:
+            names.update(_target_names(target))
+        return names, node.value
+    if isinstance(node, ast.AnnAssign):
+        return _target_names(node.target), node.value
+    if isinstance(node, ast.NamedExpr):
+        return _target_names(node.target), node.value
+    return set(), None
+
+
+def _scope_nodes(scope: ast.AST) -> List[ast.AST]:
+    """Walk a function body without including nodes in nested scopes."""
+    nodes: List[ast.AST] = []
+    pending = list(getattr(scope, "body", []))
+    while pending:
+        node = pending.pop()
+        if isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+        ):
+            continue
+        nodes.append(node)
+        pending.extend(ast.iter_child_nodes(node))
+    return nodes
+
+
+def _uses_names(node: ast.AST, names: Set[str]) -> bool:
+    return any(
+        isinstance(child, ast.Name) and child.id in names for child in ast.walk(node)
+    )
+
+
+def _json_loader_aliases(tree: ast.AST) -> Tuple[Set[str], Set[str]]:
+    modules = {"json"}
+    loaders: Set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "json":
+                    modules.add(alias.asname or "json")
+        elif isinstance(node, ast.ImportFrom) and node.module == "json":
+            for alias in node.names:
+                if alias.name == "loads":
+                    loaders.add(alias.asname or "loads")
+    return modules, loaders
+
+
+def _is_json_load_call(node: ast.AST, modules: Set[str], loaders: Set[str]) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    if isinstance(node.func, ast.Name):
+        return node.func.id in loaders
+    return (
+        isinstance(node.func, ast.Attribute)
+        and node.func.attr == "loads"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id in modules
+    )
+
+
+def _is_llm_instruct_call(node: ast.AST) -> bool:
+    """Match `.instruct(...)` calls regardless of the session variable name."""
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "instruct"
+    )
+
+
+def _is_raw_llm_value(node: ast.AST, tainted_names: Set[str]) -> bool:
+    return _uses_names(node, tainted_names) or any(
+        _is_llm_instruct_call(child) for child in ast.walk(node)
+    )
+
+
+def _function_parameters(node: ast.AST) -> List[str]:
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return []
+    args = node.args
+    return [arg.arg for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs)]
+
+
+def _scope_tainted_names(
+    tainted_parameters: Set[str],
+    nodes: List[ast.AST],
+    json_modules: Set[str],
+    json_loaders: Set[str],
+) -> Set[str]:
+    tainted = set(tainted_parameters)
+    changed = True
+    while changed:
+        changed = False
+        for node in nodes:
+            targets, value = _assignment_parts(node)
+            if (
+                targets
+                and value is not None
+                and _is_raw_llm_value(value, tainted)
+                and _call_name(value) != _LLM_JSON_HELPER
+                and not _is_json_load_call(value, json_modules, json_loaders)
+                and not targets.issubset(tainted)
+            ):
+                tainted.update(targets)
+                changed = True
+
+            if isinstance(node, (ast.For, ast.AsyncFor)) and _is_raw_llm_value(
+                node.iter, tainted
+            ):
+                loop_targets = _target_names(node.target)
+                if not loop_targets.issubset(tainted):
+                    tainted.update(loop_targets)
+                    changed = True
+    return tainted
+
+
+def lint_raw_llm_json_parse(package_dir: Path) -> LintResult:
+    """Require raw m.instruct/simple_validate text to use the JSON response helper."""
+    result = LintResult(lint_id="raw-llm-json-parse", verdict="pass")
+
+    for py_file in sorted(package_dir.rglob("*.py")):
+        rel = py_file.relative_to(package_dir).as_posix()
+        if _is_skipped_path(rel):
+            continue
+        result.files_checked += 1
+        try:
+            tree = ast.parse(py_file.read_text(), filename=str(py_file))
+        except SyntaxError:
+            continue
+
+        json_modules, json_loaders = _json_loader_aliases(tree)
+        validator_names: Set[str] = set()
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and _call_name(node) == "simple_validate"
+                and node.args
+                and isinstance(node.args[0], ast.Name)
+            ):
+                validator_names.add(node.args[0].id)
+
+        functions = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+        functions_by_name = {node.name: node for node in functions}
+        tainted_parameters: dict[int, Set[str]] = {
+            id(node): set() for node in functions
+        }
+        for function in functions:
+            parameters = _function_parameters(function)
+            if function.name in validator_names and parameters:
+                tainted_parameters[id(function)].add(parameters[0])
+
+        tainted_by_function: dict[int, Set[str]] = {}
+        changed = True
+        while changed:
+            changed = False
+            for function in functions:
+                nodes = _scope_nodes(function)
+                tainted = _scope_tainted_names(
+                    tainted_parameters[id(function)],
+                    nodes,
+                    json_modules,
+                    json_loaders,
+                )
+                tainted_by_function[id(function)] = tainted
+                for node in nodes:
+                    if not isinstance(node, ast.Call):
+                        continue
+                    callee_name = _call_name(node)
+                    callee = functions_by_name.get(callee_name or "")
+                    if callee is None or callee_name == _LLM_JSON_HELPER:
+                        continue
+                    parameters = _function_parameters(callee)
+                    target_params = tainted_parameters[id(callee)]
+                    for index, argument in enumerate(node.args):
+                        if index < len(parameters) and _uses_names(argument, tainted):
+                            if parameters[index] not in target_params:
+                                target_params.add(parameters[index])
+                                changed = True
+                    parameter_indexes = {
+                        name: index for index, name in enumerate(parameters)
+                    }
+                    for keyword in node.keywords:
+                        if keyword.arg in parameter_indexes and _uses_names(
+                            keyword.value, tainted
+                        ):
+                            parameter = parameters[parameter_indexes[keyword.arg]]
+                            if parameter not in target_params:
+                                target_params.add(parameter)
+                                changed = True
+
+        for function in functions:
+            tainted = tainted_by_function.get(id(function), set())
+            for node in _scope_nodes(function):
+                if not _is_json_load_call(node, json_modules, json_loaders):
+                    continue
+                json_inputs = list(node.args[:1])
+                json_inputs.extend(
+                    keyword.value for keyword in node.keywords if keyword.arg == "s"
+                )
+                for argument in json_inputs:
+                    if not _is_raw_llm_value(argument, tainted):
+                        continue
+                    if _call_name(argument) == _LLM_JSON_HELPER:
+                        continue
+                    result.failures.append(
+                        LintFailure(
+                            file=rel,
+                            line=getattr(node, "lineno", None),
+                            column=_col_offset_to_schema(node),
+                            message=(
+                                "json.loads() receives raw LLM output. Pass the reply through "
+                                "_parse_llm_json() first; that helper must strip an outer Markdown "
+                                "fence, extract the first valid balanced JSON object/array, and log "
+                                "when parsing fails before the caller applies an explicit fallback."
+                            ),
+                            rule_ref="KB12 (raw LLM JSON)",
+                        )
+                    )
+
+    if result.failures:
+        result.verdict = "fail"
+    return result
+
+
 # ─── Lint: session-boundary (KB5) ───
 #
 # Mellea schema priming: once a session has generated N objects matching schema
@@ -2520,6 +2776,7 @@ ALL_LINTS: Tuple[Callable[[Path], LintResult], ...] = (
     lint_session_method_arity,
     lint_instruct_result_parse_before_access,
     lint_format_annotation,
+    lint_raw_llm_json_parse,
     lint_session_boundary,
     lint_validation_fn_not_called_directly,
     lint_fixture_pydantic_coercion,
