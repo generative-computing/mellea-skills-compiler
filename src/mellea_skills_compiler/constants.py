@@ -17,11 +17,12 @@ from __future__ import annotations
 # Supported upstream mellea range.
 #
 # Lower bound: 0.9.0 — the version the compiler is validated against (test
-# suite and import/hook-payload probes run on 0.9.0). 0.7.x also passed the
-# suite, but 0.8 removed/renamed several APIs (streaming ``stream()``,
-# ``render_controls``, ``set_request_adapter``, ``json_util`` made private) and
-# 0.9 changed behaviour (async ``Requirement.validate`` now awaited, empty user
-# content rejected), so compiled skills are only supported on 0.9+.
+# suite and import/hook-payload probes run on 0.9.0). 0.7.x passed an earlier
+# version of the suite, but 0.9.0 is the first release validated after 0.8
+# removed/renamed several APIs (streaming ``stream()``, ``render_controls``,
+# ``set_request_adapter``, ``json_util`` made private); 0.9 changed behaviour
+# (async ``Requirement.validate`` now awaited, empty user content rejected),
+# so compiled skills are only supported on 0.9+.
 #
 # Upper bound: <0.10 — mellea is pre-1.0 and ships breaking changes in minor
 # releases (0.7 -> 0.8 did); cap at the next minor so a fresh install does not
