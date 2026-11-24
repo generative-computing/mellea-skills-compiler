@@ -426,6 +426,58 @@ def certify(
 
 
 @app.command(
+    help="Assemble (or check) the agent skill card for a compiled Mellea skill"
+)
+def card(
+    ctx: typer.Context,
+    package_path: Annotated[
+        str,
+        typer.Argument(
+            help="Compiled skill package directory (must contain melleafy.json).",
+        ),
+    ],
+    check: Annotated[
+        bool,
+        typer.Option(
+            "--check",
+            help="Do not write; exit 1 if skill_card.json is missing or stale.",
+        ),
+    ] = False,
+):
+    """
+    Write skill_card.json and skill_card.md (agent skill card schema v1.2) from
+    the compiled package's artifacts.
+    """
+    try:
+        from mellea_skills_compiler.compile import skill_card
+
+        pkg = Path(package_path)
+        if not (pkg / "melleafy.json").exists():
+            raise FileNotFoundError(f"{pkg} does not contain melleafy.json")
+
+        if check:
+            problem = skill_card.check_card(pkg)
+            if problem:
+                LOGGER.error("Skill card check failed: %s", problem)
+                raise typer.Exit(code=1)
+            LOGGER.info("Skill card is up to date.")
+            return
+
+        result = skill_card.write_card(pkg)
+        LOGGER.info(
+            "Skill card written: %s, %s (%d files hashed)",
+            pkg / skill_card.CARD_JSON,
+            pkg / skill_card.CARD_MD,
+            len(result["files"]["file_list"]),
+        )
+    except typer.Exit:
+        raise
+    except Exception as e:
+        LOGGER.error(f"Card command failed - {str(e)}")
+        raise typer.Exit(code=1)
+
+
+@app.command(
     help="[EXPERIMENTAL] Export a compiled Mellea skill to a deployment target"
 )
 def export(

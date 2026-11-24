@@ -612,6 +612,14 @@ def full_pipeline(
         if not (has_flagged or has_failed):
             LOGGER.info("ALL STATUS CHECKS PASSED")
 
+        # Refresh the skill card with the new audit
+        try:
+            from mellea_skills_compiler.compile.skill_card import write_card
+
+            write_card(pipeline_dir)
+        except Exception as exc:
+            LOGGER.warning("Could not refresh skill card: %s", exc)
+
         # Return RunResult with the summary of the run
         return RunResult.success(
             run_dir=audit_dir,
