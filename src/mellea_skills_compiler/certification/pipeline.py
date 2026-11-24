@@ -84,9 +84,7 @@ def _dump_fixture_results(
         )
 
 
-def _run_single_fixture(
-    pipeline_fn: Callable[..., Any], fixture: Fixture
-) -> FixtureResult:
+def _run_single_fixture(pipeline_fn: Callable, fixture: Fixture):
     try:
         if isinstance(fixture.context, Dict):
             output = pipeline_fn(**fixture.context)
@@ -115,7 +113,7 @@ def _run_fixtures(
                 # Keep the wait bounded so Python can dispatch signal handlers.
                 for future in as_completed(fs=pending, timeout=0.1):
                     pending.remove(future)
-                    fixture_results.append(future.result(timeout=300))
+                    fixture_results.append(future.result())
             except TimeoutError:
                 continue
     except CertificationInterrupted:

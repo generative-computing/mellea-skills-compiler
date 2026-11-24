@@ -1,5 +1,7 @@
+import logging
 import os
 import signal
+import sys
 from logging import Logger
 from pathlib import Path
 from types import FrameType
@@ -406,7 +408,12 @@ def certify(
             inference_engine_type=InferenceEngineType[inference_engine],
         )
     except CertificationInterrupted as e:
+        for signal_number in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(signal_number, signal.SIG_IGN)
         try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            logging.shutdown()
             os.write(2, b"\nCertification interrupted. Exiting...\n")
         finally:
             os._exit(128 + e.signal_number)

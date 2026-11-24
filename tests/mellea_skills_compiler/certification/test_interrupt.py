@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import mellea_skills_compiler.cli as cli
 from mellea_skills_compiler.certification import pipeline
 from mellea_skills_compiler.certification.exceptions import CertificationInterrupted
 from mellea_skills_compiler.models import Fixture
@@ -31,9 +32,7 @@ def test_fixture_interrupt_cancels_pending_work_without_waiting(monkeypatch):
     monkeypatch.setattr(
         future,
         "result",
-        lambda timeout=None: (_ for _ in ()).throw(
-            CertificationInterrupted(signal.SIGINT)
-        ),
+        lambda: (_ for _ in ()).throw(CertificationInterrupted(signal.SIGINT)),
     )
 
     with pytest.raises(CertificationInterrupted):
@@ -44,6 +43,35 @@ def test_fixture_interrupt_cancels_pending_work_without_waiting(monkeypatch):
 
     assert future.cancelled()
     assert executor.shutdown_calls == [(False, True)]
+
+
+def test_certify_ignores_repeated_signals_and_flushes_before_exit(monkeypatch):
+    events = []
+
+    class FlushProbe:
+        def __init__(self, name, signal_to_raise=None):
+            self.name = name
+            self.signal_to_raise = signal_to_raise
+
+        def flush(self):
+            events.append(self.name)
+            assert signal.getsignal(signal.SIGINT) is signal.SIG_IGN
+            assert signal.getsignal(signal.SIGTERM) is signal.SIG_IGN
+            if self.signal_to_raise is not None:
+                signal.raise_signal(self.signal_to_raise)
+
+    def interrupted_pipeline(**kwargs):
+        raise CertificationInterrupted(signal.SIGINT)
+
+    monkeypatch.setattr(pipeline, "full_pipeline", interrupted_pipeline)
+    monkeypatch.setattr(cli.sys, "stdout", FlushProbe("stdout", signal.SIGTERM))
+    monkeypatch.setattr(cli.sys, "stderr", FlushProbe("stderr"))
+    monkeypatch.setattr(cli.logging, "shutdown", lambda: events.append("logging"))
+    monkeypatch.setattr(cli.os, "_exit", lambda code: events.append(("exit", code)))
+
+    cli.certify(None, "unused", inference_engine="OLLAMA")
+
+    assert events == ["stdout", "stderr", "logging", ("exit", 128 + signal.SIGINT)]
 
 
 def test_fixture_results_are_returned_on_normal_completion():
