@@ -1,8 +1,8 @@
 # Melleafy: Known Mellea Behaviours & Workarounds
 
-**Version**: 4.4.0 | tested against mellea 0.7.x
+**Version**: 4.5.0 | tested against mellea 0.7.x
 
-Generated pipelines MUST include these workarounds. Re-test after upgrading mellea — some may be resolved in future releases. Step 7's `known-behaviours` lint mechanically checks for KB1, KB2, KB3, KB4, KB6, KB7, KB11. Step 7's `session-boundary` lint covers KB5. KB9 is advisory only — no lint sub-check.
+Generated pipelines MUST include these workarounds. Re-test after upgrading mellea — some may be resolved in future releases. Step 7's `known-behaviours` lint mechanically checks for KB1, KB2, KB3, KB4, KB6, KB7, KB11. Step 7's `raw-llm-json-parse` lint enforces KB12's parsing boundary. Step 7's `session-boundary` lint covers KB5. KB9 is advisory only — no lint sub-check.
 
 Version-conditional guidance (0.7 vs pre-0.7 imports, telemetry env vars, OTel attributes) lives in `.claude/data/compatibility.yaml` and is filtered by installed mellea version at grounding time — not inline here.
 
@@ -329,3 +329,16 @@ This applies to any `Optional` field in a P2 `m.instruct` schema where the value
 **Lint check**: `known-behaviours` sub-check 3m. Detection: parse `schemas.py` with `ast`; find `BaseModel` subclasses named `*Schema`, `*Intent`, or referenced as `format=` in a `m.instruct` call; for each `Optional`-annotated field, assert `Field(description=...)` is present and contains at least one of `"extract"`, `"do not ask"`, `"if the"`.
 **Ref**: https://docs.mellea.ai/how-to/enforce-structured-output
 **Added**: 2026-04-28 | **Last-validated**: 2026-04-28 | **Fixture**: tests/promptfoo/kb_11.yaml
+
+---
+
+## KB12: Free-text JSON replies may be fenced or surrounded by prose
+
+Free-text model replies are not guaranteed to contain only raw JSON. They may wrap a valid object or list in a Markdown code fence, or include short explanatory text around it. A direct `json.loads(reply)` raises `JSONDecodeError`; helpers that quietly return `[]`, `{}`, or another default then make a skill appear successful while discarding model output.
+
+Generated code that parses free-text model replies MUST use one shared `_parse_llm_json(reply: str) -> dict[str, object] | list[object] | None` helper. It must remove an outer Markdown fence (including an optional language tag), try the entire remaining text and accept it only when the JSON root is an object or array, then scan for the first valid balanced JSON object or array while respecting nested brackets, quoted strings, and escapes. It must not use `eval` or silently replace malformed output with an empty result. If no object or array can be recovered, log one warning without logging the full model reply and return `None`; callers must handle that result explicitly and use any fallback only after the warning.
+
+Do not call `json.loads` directly on a raw `m.instruct()` result or a `simple_validate()` output parameter. Structured `m.instruct(format=Model)` results continue to use the typed parsing helpers from KB1/KB2.
+
+**Lint check**: `raw-llm-json-parse` parses each Python file independently and traces values inside function bodies. It recognizes assigned `m.instruct()` results and the first parameter of a named function passed to `simple_validate()`, then propagates those values through same-file calls to statically named functions using positional or keyword arguments. It flags `json.loads` calls that receive a traced value and allows `_parse_llm_json()` as the parsing boundary. Module-level expressions, cross-file calls, and dynamic/unresolved callees are outside this analysis. The lint does not verify the helper's implementation; the validator must check fence handling, balanced extraction, warning, and explicit fallback behavior against this contract.
+**Added**: 2026-11-18 | **Last-validated**: 2026-11-18 | **Fixture**: `tests/mellea_skills_compiler/compile/test_lints.py::TestRawLlmJsonParse`
