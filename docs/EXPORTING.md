@@ -78,10 +78,10 @@ The compiled pipeline runs to completion as a single LangGraph node. Mellea-spec
 
 ```python
 # Conceptual.
-from mcp.server import FastMCP
+from mcp.server.mcpserver import MCPServer
 from weather_mellea.pipeline import run_pipeline
 
-mcp = FastMCP("weather")
+mcp = MCPServer("weather")
 
 @mcp.tool()
 def weather(query: str) -> dict:
@@ -168,7 +168,7 @@ Generated artifacts:
 
 | File             | Purpose                                                                                                      |
 | ---------------- | ------------------------------------------------------------------------------------------------------------ |
-| `server.py`      | `FastMCP` server with one `@mcp.tool()` per pipeline entry. Sync for most modalities; async for `streaming`. |
+| `server.py`      | `MCPServer` server with one `@mcp.tool()` per pipeline entry. Sync for most modalities; async for `streaming`. |
 | `mcp.json`       | MCP manifest with tool name, description, env-var declarations.                                              |
 | `pyproject.toml` | Installable adapter package.                                                                                 |
 | `README.md`      | Server invocation, env-var setup, transport notes.                                                           |
