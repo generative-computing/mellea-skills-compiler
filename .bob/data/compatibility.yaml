@@ -19,8 +19,8 @@
 # no two entries match the same version on both sides of a mirror pair.
 
 format_version: "1.0"
-snapshot_date: "2026-08-14"
-seeded_against_mellea: "0.7.0"
+snapshot_date: "2026-11-18"
+seeded_against_mellea: "0.9.0"
 
 entries:
   # ── genslot → genstub rename (0.7) ──────────────────────────────────
@@ -127,8 +127,9 @@ entries:
           ``GENERATION_PRE_CALL / POST_CALL`` do NOT fire on this path.
         - ``GENERATION_ERROR`` — fired when generation raises (public
           ``ModelOutputThunk.error`` / ``.generate_log`` in #1307).
-        - ``STREAMING_START / EVENT / END / ORCHESTRATION_START / END`` —
-          for streaming interaction modality.
+        - ``STREAMING_START / EVENT / END`` — for streaming interaction
+          modality. (``STREAMING_ORCHESTRATION_START / END`` existed on 0.7
+          only and are REMOVED on 0.8+.)
     mellea-version-cited: "PRs #1175, #1307"
 
   # ── new capabilities present in 0.7 (informational) ─────────────────
@@ -176,3 +177,49 @@ entries:
       ``recent[-N:]`` correlation between hook events is race-prone and
       MUST use ``generation_id`` for correlation.
     mellea-version-cited: "PR #1175"
+
+  # ── 0.8 / 0.9 deltas ────────────────────────────────────────────────
+  - id: async-requirement-validation-awaited
+    applies_when: ">=0.9"
+    topic: "Requirement validation"
+    guidance: |
+      ``Requirement.validate`` now awaits async validation functions, so
+      LLM-as-judge requirements actually execute (they were silently
+      skipped before). Expect extra generations per ``req()`` using a
+      judge; plugins must not treat these as user-facing output (correlate
+      via ``generation_id``).
+    mellea-version-cited: "PR #1729"
+
+  - id: empty-user-content-rejected
+    applies_when: ">=0.9"
+    topic: "empty input handling"
+    guidance: |
+      Empty user content is rejected before a chat request is sent. Guard
+      empty/whitespace inputs in the pipeline (return early or raise a
+      domain error) rather than passing them to ``m.instruct``.
+    mellea-version-cited: "PR #1632"
+
+  - id: act-aact-no-strategy
+    applies_when: ">=0.8"
+    topic: "act/aact signature"
+    guidance: |
+      Callers of ``act`` / ``aact`` must not pass a sampling strategy; use
+      ``instruct`` / ``ainstruct`` with ``strategy=`` instead. Input and
+      output context types are enforced to match.
+    mellea-version-cited: "PRs #1468 / #1582"
+
+  - id: removed-apis-0-8
+    applies_when: ">=0.8"
+    topic: "removed or privatised APIs"
+    guidance: |
+      REMOVED/changed in 0.8: ``stream_with_chunking`` (use ``stream()``),
+      ``render_controls``, ``set_request_adapter``, the ``m async fix``
+      command; ``json_util`` is private. ``call_tools`` is now public.
+    mellea-version-cited: "PRs #1399 / #1537 / #1543 / #1544 / #1559"
+
+  - id: default-model-granite-4-2
+    applies_when: ">=0.9"
+    topic: "default model"
+    guidance: |
+      ``start_session`` defaults to ``granite4.2:3b`` (Ollama). Always pass
+      ``MODEL_ID`` explicitly from ``config.py``; do not rely on the default.
