@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from mellea_skills_compiler.enums import CoverageLevel, GuardianScore
+from mellea_skills_compiler.enums import CoverageLevel, GuardianScore, HookStage
 from mellea_skills_compiler.models import (
     ComplianceSummary,
     PolicyManifest,
@@ -33,6 +33,18 @@ def load_audit_trail(path: str | Path) -> list[dict]:
     return entries
 
 
+def _post_verdicts(entries: list[dict]) -> list[dict]:
+    """Post-generation Guardian verdicts from ``generation_post_call`` entries.
+    """
+    return [
+        v
+        for e in entries
+        if e["hook"] == "generation_post_call"
+        for v in e.get("guardian_verdicts", [])
+        if v.get("stage", HookStage.POST) == HookStage.POST
+    ]
+
+
 # ── Evidence extractors ─────────────────────────────────────────────
 
 
@@ -47,16 +59,15 @@ def _extract_guardian_evidence(entries: list[dict]) -> list[str]:
     flagged = 0
     passed = 0
     failed = 0
-    for e in gen_posts:
-        for v in e.get("guardian_verdicts", []):
-            total_verdicts += 1
-            risks_checked.add(v["risk"])
-            if v["label"] == GuardianScore.YES:
-                flagged += 1
-            elif v["label"] == GuardianScore.NO:
-                passed += 1
-            else:
-                failed += 1
+    for v in _post_verdicts(entries):
+        total_verdicts += 1
+        risks_checked.add(v["risk"])
+        if v["label"] == GuardianScore.YES:
+            flagged += 1
+        elif v["label"] == GuardianScore.NO:
+            passed += 1
+        else:
+            failed += 1
 
     evidence = [
         f"{len(gen_posts)} generation events monitored.",
@@ -126,9 +137,7 @@ def _extract_incident_evidence(entries: list[dict]) -> list[str]:
         return [
             f"{len(flagged)} of {len(gen_posts)} generations flagged for risk incidents."
         ]
-    labels = [
-        v["label"] for e in gen_posts for v in e.get("guardian_verdicts", [])
-    ]
+    labels = [v["label"] for v in _post_verdicts(entries)]
     usable = [l for l in labels if l in (GuardianScore.YES, GuardianScore.NO)]
     if not labels:
         return [
@@ -252,13 +261,12 @@ def generate_certification_report(
     risk_stats: dict[str, dict] = defaultdict(
         lambda: {"checks": 0, "flagged": 0, "failed": 0}
     )
-    for e in gen_posts:
-        for v in e.get("guardian_verdicts", []):
-            risk_stats[v["risk"]]["checks"] += 1
-            if v["label"] == GuardianScore.YES:
-                risk_stats[v["risk"]]["flagged"] += 1
-            elif v["label"] != GuardianScore.NO:
-                risk_stats[v["risk"]]["failed"] += 1
+    for v in _post_verdicts(audit_trail):
+        risk_stats[v["risk"]]["checks"] += 1
+        if v["label"] == GuardianScore.YES:
+            risk_stats[v["risk"]]["flagged"] += 1
+        elif v["label"] != GuardianScore.NO:
+            risk_stats[v["risk"]]["failed"] += 1
 
     if risk_stats:
         lines.extend(
