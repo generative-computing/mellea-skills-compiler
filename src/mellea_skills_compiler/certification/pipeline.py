@@ -42,6 +42,8 @@ from mellea_skills_compiler.certification.report import (
 )
 from mellea_skills_compiler.enums import (
     GuardianMode,
+    GuardianScore,
+    HookStage,
     InferenceEngineType,
     NexusRiskSource,
     SpecFileFormat,
@@ -96,6 +98,18 @@ def _run_single_fixture(pipeline_fn: Callable, fixture: Fixture):
         return FixtureResult.failed(fixture=fixture, e=e)
 
     return FixtureResult.success(fixture=fixture, output=output)
+
+
+def _guardian_inconclusive(verdicts: List[GuardianVerdict]) -> bool:
+    """True when post-generation verdicts exist but none produced a Yes/No label.
+
+    Mirrors the rule in ``report._extract_guardian_evidence`` so the exit status
+    and CERTIFICATION.md agree. Pre/tool-stage verdicts are deliberately ignored.
+    """
+    post = [v for v in verdicts if v.hook_stage == HookStage.POST]
+    return bool(post) and not any(
+        v.label in (GuardianScore.YES, GuardianScore.NO) for v in post
+    )
 
 
 def _run_fixtures(
@@ -609,8 +623,26 @@ def full_pipeline(
             LOGGER.warning("STATUS: RISK ASSESSMENT FAILURE — review audit trail")
         if has_flagged:
             LOGGER.warning("STATUS: RISKS DETECTED — review audit trail")
-        if not (has_flagged or has_failed):
+        if not verdict_summary["all_verdicts"]:
+            LOGGER.warning(
+                "STATUS: NO GUARDIAN CHECKS RAN — no verdicts were recorded "
+                "(the skill may have made no LLM generations); risk status is unknown"
+            )
+        elif not (has_flagged or has_failed):
             LOGGER.info("ALL STATUS CHECKS PASSED")
+
+        if _guardian_inconclusive(verdict_summary["all_verdicts"]):
+            message = (
+                "🔴 All Guardian checks failed to produce a usable verdict. "
+                "Certification is inconclusive — see CERTIFICATION.md and logs."
+            )
+            LOGGER.error(message)
+            return RunResult.failed(
+                run_dir=audit_dir,
+                input_parameters=input_parameters,
+                guardian_verdicts=verdict_summary,
+                error_details={"type": "Guardian", "message": message},
+            )
 
         # Return RunResult with the summary of the run
         return RunResult.success(

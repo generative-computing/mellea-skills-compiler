@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from mellea_skills_compiler.enums import CoverageLevel, GuardianScore
+from mellea_skills_compiler.enums import CoverageLevel, GuardianScore, HookStage
 from mellea_skills_compiler.models import (
     ComplianceSummary,
     PolicyManifest,
@@ -33,6 +33,18 @@ def load_audit_trail(path: str | Path) -> list[dict]:
     return entries
 
 
+def _post_verdicts(entries: list[dict]) -> list[dict]:
+    """Post-generation Guardian verdicts from ``generation_post_call`` entries.
+    """
+    return [
+        v
+        for e in entries
+        if e["hook"] == "generation_post_call"
+        for v in e.get("guardian_verdicts", [])
+        if v.get("stage", HookStage.POST) == HookStage.POST
+    ]
+
+
 # ── Evidence extractors ─────────────────────────────────────────────
 
 
@@ -45,19 +57,39 @@ def _extract_guardian_evidence(entries: list[dict]) -> list[str]:
     total_verdicts = 0
     risks_checked = set()
     flagged = 0
-    for e in gen_posts:
-        for v in e.get("guardian_verdicts", []):
-            total_verdicts += 1
-            risks_checked.add(v["risk"])
-            if v["label"] == GuardianScore.YES:
-                flagged += 1
+    passed = 0
+    failed = 0
+    for v in _post_verdicts(entries):
+        total_verdicts += 1
+        risks_checked.add(v["risk"])
+        if v["label"] == GuardianScore.YES:
+            flagged += 1
+        elif v["label"] == GuardianScore.NO:
+            passed += 1
+        else:
+            failed += 1
 
     evidence = [
         f"{len(gen_posts)} generation events monitored.",
         f"{total_verdicts} Guardian risk checks performed across {len(risks_checked)} risk categories: {', '.join(sorted(risks_checked))}.",
     ]
+    if failed:
+        evidence.append(
+            f"{failed} of {total_verdicts} checks could not be evaluated "
+            "(Guardian output unparseable or call errored); they are neither passed nor flagged."
+        )
     if flagged:
         evidence.append(f"{flagged} risk incidents flagged.")
+    elif total_verdicts == 0:
+        evidence.append("No Guardian verdicts recorded; risk status is unknown.")
+    elif passed == 0:
+        evidence.append(
+            "INCONCLUSIVE: no check completed successfully, so no conclusion about risk can be drawn."
+        )
+    elif failed:
+        evidence.append(
+            f"No risk incidents detected in the {passed} checks that completed."
+        )
     else:
         evidence.append("No risk incidents detected.")
     return evidence
@@ -104,6 +136,23 @@ def _extract_incident_evidence(entries: list[dict]) -> list[str]:
     if flagged:
         return [
             f"{len(flagged)} of {len(gen_posts)} generations flagged for risk incidents."
+        ]
+    labels = [v["label"] for v in _post_verdicts(entries)]
+    usable = [l for l in labels if l in (GuardianScore.YES, GuardianScore.NO)]
+    if not labels:
+        return [
+            f"{len(gen_posts)} generations monitored — no Guardian verdicts recorded; "
+            "incident status is unknown."
+        ]
+    if not usable:
+        return [
+            f"{len(gen_posts)} generations monitored — INCONCLUSIVE: no Guardian check "
+            "completed, so incident status is unknown."
+        ]
+    if len(usable) < len(labels):
+        return [
+            f"{len(gen_posts)} generations monitored — no incidents detected in the "
+            f"{len(usable)} of {len(labels)} checks that completed."
         ]
     return [f"{len(gen_posts)} generations monitored — no incidents detected."]
 
@@ -209,26 +258,32 @@ def generate_certification_report(
 
     # Per-risk table
     gen_posts = [e for e in audit_trail if e["hook"] == "generation_post_call"]
-    risk_stats: dict[str, dict] = defaultdict(lambda: {"checks": 0, "flagged": 0})
-    for e in gen_posts:
-        for v in e.get("guardian_verdicts", []):
-            risk_stats[v["risk"]]["checks"] += 1
-            if v["label"] == GuardianScore.YES:
-                risk_stats[v["risk"]]["flagged"] += 1
+    risk_stats: dict[str, dict] = defaultdict(
+        lambda: {"checks": 0, "flagged": 0, "failed": 0}
+    )
+    for v in _post_verdicts(audit_trail):
+        risk_stats[v["risk"]]["checks"] += 1
+        if v["label"] == GuardianScore.YES:
+            risk_stats[v["risk"]]["flagged"] += 1
+        elif v["label"] != GuardianScore.NO:
+            risk_stats[v["risk"]]["failed"] += 1
 
     if risk_stats:
         lines.extend(
             [
-                "| Risk | Checks | Flagged | Pass Rate |",
-                "|------|--------|---------|-----------|",
+                "| Risk | Checks | Flagged | Failed | Pass Rate |",
+                "|------|--------|---------|--------|-----------|",
             ]
         )
         for risk, stats in risk_stats.items():
             total_checks = stats["checks"]
             flagged = stats["flagged"]
-            passed = total_checks - flagged
+            failed = stats["failed"]
+            passed = total_checks - flagged - failed
             rate = (passed / total_checks * 100) if total_checks else 0
-            lines.append(f"| {risk} | {total_checks} | {flagged} | {rate:.0f}% |")
+            lines.append(
+                f"| {risk} | {total_checks} | {flagged} | {failed} | {rate:.0f}% |"
+            )
         lines.append("")
 
     # ── Requirements per taxonomy ────────────────────────────────

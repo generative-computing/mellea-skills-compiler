@@ -131,6 +131,7 @@ class AuditTrailPlugin(
                 "label": v.label,
                 "raw": v.raw_output,
                 "ts": v.timestamp,
+                "stage": str(v.hook_stage),
             }
             for v in recent
         ]
@@ -174,6 +175,7 @@ class AuditTrailPlugin(
                 "label": v.label,
                 "raw": v.raw_output,
                 "ts": v.timestamp,
+                "stage": str(v.hook_stage),
             }
             for v in recent
         ]
@@ -281,6 +283,7 @@ class AuditTrailPlugin(
                             "label": v.label,
                             "raw": v.raw_output,
                             "ts": v.timestamp,
+                            "stage": str(v.hook_stage),
                         }
                     )
             if not verdicts:
@@ -297,6 +300,7 @@ class AuditTrailPlugin(
                             "label": v.label,
                             "raw": v.raw_output,
                             "ts": v.timestamp,
+                            "stage": str(v.hook_stage),
                         }
                         for v in recent[
                             -len(getattr(self.guardian_plugin, "risks", [])) :
@@ -375,6 +379,7 @@ class AuditTrailPlugin(
                     "label": v.label,
                     "raw": v.raw_output,
                     "ts": v.timestamp,
+                    "stage": str(v.hook_stage),
                 }
                 for v in recent
             ]

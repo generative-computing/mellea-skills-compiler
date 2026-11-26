@@ -399,3 +399,148 @@ class TestGenerateCertificationReport:
 
         assert "Audit Trail Summary" in report
         assert "1 total audit events recorded" in report
+
+
+class TestGuardianEvidenceFailures:
+    """Failed/errored Guardian checks must not be reported as 'no incidents'."""
+
+    @staticmethod
+    def _trail(labels):
+        return [
+            {
+                "hook": "generation_post_call",
+                "guardian_verdicts": [
+                    {"risk": f"r{i}", "label": label} for i, label in enumerate(labels)
+                ],
+            }
+        ]
+
+    def test_all_failed_is_inconclusive(self):
+        from mellea_skills_compiler.certification.report import (
+            _extract_guardian_evidence,
+        )
+
+        text = " ".join(_extract_guardian_evidence(self._trail(["Failed", "Error"])))
+        assert "No risk incidents detected" not in text
+        assert "INCONCLUSIVE" in text
+        assert "2 of 2 checks could not be evaluated" in text
+
+    def test_mixed_reports_failures(self):
+        from mellea_skills_compiler.certification.report import (
+            _extract_guardian_evidence,
+        )
+
+        text = " ".join(_extract_guardian_evidence(self._trail(["No", "Failed"])))
+        assert "1 of 2 checks could not be evaluated" in text
+        assert "1 checks that completed" in text
+
+    def test_all_no_is_clean(self):
+        from mellea_skills_compiler.certification.report import (
+            _extract_guardian_evidence,
+        )
+
+        evidence = _extract_guardian_evidence(self._trail(["No", "No"]))
+        assert "No risk incidents detected." in evidence
+
+
+class TestIncidentEvidenceFailures:
+    """The incident section must not claim 'no incidents' when checks didn't run."""
+
+    @staticmethod
+    def _trail(labels):
+        return [
+            {
+                "hook": "generation_post_call",
+                "risk_detected": False,
+                "guardian_verdicts": [
+                    {"risk": f"r{i}", "label": label} for i, label in enumerate(labels)
+                ],
+            }
+        ]
+
+    def test_all_failed_is_inconclusive(self):
+        from mellea_skills_compiler.certification.report import (
+            _extract_incident_evidence,
+        )
+
+        text = " ".join(_extract_incident_evidence(self._trail(["Failed", "Error"])))
+        assert "INCONCLUSIVE" in text
+        assert "no incidents detected" not in text
+
+    def test_partial_failure_is_qualified(self):
+        from mellea_skills_compiler.certification.report import (
+            _extract_incident_evidence,
+        )
+
+        text = " ".join(_extract_incident_evidence(self._trail(["No", "Failed"])))
+        assert "1 of 2 checks that completed" in text
+
+    def test_all_no_is_clean(self):
+        from mellea_skills_compiler.certification.report import (
+            _extract_incident_evidence,
+        )
+
+        assert _extract_incident_evidence(self._trail(["No", "No"])) == [
+            "1 generations monitored — no incidents detected."
+        ]
+
+
+class TestGuardianInconclusive:
+    @staticmethod
+    def _v(label, stage):
+        from mellea_skills_compiler.models import GuardianVerdict
+
+        return GuardianVerdict(risk="r", label=label, raw_output="", hook_stage=stage)
+
+    def test_pre_passes_do_not_mask_failed_post(self):
+        from mellea_skills_compiler.certification.pipeline import _guardian_inconclusive
+        from mellea_skills_compiler.enums import HookStage
+
+        verdicts = [self._v("No", HookStage.PRE), self._v("Failed", HookStage.POST)]
+        assert _guardian_inconclusive(verdicts)
+
+    def test_one_usable_post_verdict_is_not_inconclusive(self):
+        from mellea_skills_compiler.certification.pipeline import _guardian_inconclusive
+        from mellea_skills_compiler.enums import HookStage
+
+        verdicts = [self._v("Failed", HookStage.POST), self._v("No", HookStage.POST)]
+        assert not _guardian_inconclusive(verdicts)
+
+    def test_no_post_verdicts_is_not_inconclusive(self):
+        from mellea_skills_compiler.certification.pipeline import _guardian_inconclusive
+
+        assert not _guardian_inconclusive([])
+
+
+class TestReportCountsPostStageOnly:
+    @staticmethod
+    def _trail(pre, post):
+        verdicts = [{"risk": "r", "label": l, "stage": "pre"} for l in pre] + [
+            {"risk": "r", "label": l, "stage": "post"} for l in post
+        ]
+        return [{"hook": "generation_post_call", "guardian_verdicts": verdicts}]
+
+    def test_pre_passes_do_not_hide_failed_post(self):
+        from mellea_skills_compiler.certification.report import (
+            _extract_guardian_evidence,
+            _extract_incident_evidence,
+        )
+
+        trail = self._trail(pre=["No", "No"], post=["Failed", "Error"])
+        text = " ".join(_extract_guardian_evidence(trail))
+        assert "INCONCLUSIVE" in text
+        assert "2 Guardian risk checks" in text
+        assert "INCONCLUSIVE" in " ".join(_extract_incident_evidence(trail))
+
+    def test_legacy_entries_without_stage_are_counted(self):
+        from mellea_skills_compiler.certification.report import (
+            _extract_guardian_evidence,
+        )
+
+        trail = [
+            {
+                "hook": "generation_post_call",
+                "guardian_verdicts": [{"risk": "r", "label": "No"}],
+            }
+        ]
+        assert "No risk incidents detected." in _extract_guardian_evidence(trail)

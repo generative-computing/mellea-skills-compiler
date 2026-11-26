@@ -50,6 +50,8 @@ LOGGER = configure_logger()
 console = Console()
 GUARDIAN_RETRY_ATTEMPTS = 2
 GUARDIAN_CACHE_MAXSIZE = 512
+_RETRYABLE_LABELS = (GuardianScore.FAILED, GuardianScore.ERROR)
+_RAW_OUTPUT_LOG_LIMIT = 500
 
 _VERDICT_CACHE = LRUCache(maxsize=GUARDIAN_CACHE_MAXSIZE)
 
@@ -98,15 +100,27 @@ async def _query_batch(
             for risk in risks
         }
 
-    return {
-        risk.name: GuardianVerdict(
-            risk=risk.name,
-            label=_parse_guardian_score(raw_prediction),
-            raw_output=raw_prediction,
-            hook_stage=hook_stage,
+    if len(raw_predictions) != len(risks):
+        LOGGER.warning(
+            "Guardian returned %d predictions for %d risks; unmatched risks are marked ERROR",
+            len(raw_predictions),
+            len(risks),
         )
-        for risk, raw_prediction in zip(risks, raw_predictions)
-    }
+
+    verdicts: Dict[str, GuardianVerdict] = {}
+    for idx, risk in enumerate(risks):
+        if idx < len(raw_predictions):
+            verdicts[risk.name] = GuardianVerdict(
+                risk=risk.name,
+                label=_parse_guardian_score(raw_predictions[idx]),
+                raw_output=raw_predictions[idx],
+                hook_stage=hook_stage,
+            )
+        else:
+            verdicts[risk.name] = GuardianVerdict(
+                risk=risk.name, label=GuardianScore.ERROR, raw_output="", hook_stage=hook_stage
+            )
+    return verdicts
 
 
 async def _call_guardian(
@@ -175,7 +189,7 @@ async def _call_guardian(
         failed_by_idx = {
             idx: risk
             for idx, risk in enumerate(risks_to_query)
-            if verdicts[risk.name].label == GuardianScore.FAILED
+            if verdicts[risk.name].label in _RETRYABLE_LABELS
         }
 
         for attempt in range(GUARDIAN_RETRY_ATTEMPTS - 1):
@@ -194,8 +208,21 @@ async def _call_guardian(
             verdicts_by_name.update(retry_verdicts)
 
             failed_by_idx = {
-                idx: risk for idx, risk in failed_by_idx.items() if retry_verdicts[risk.name].label == GuardianScore.FAILED
+                idx: risk for idx, risk in failed_by_idx.items() if retry_verdicts[risk.name].label in _RETRYABLE_LABELS
             }
+
+        # Log verdicts that are still unusable once retries are exhausted
+        for risk in failed_by_idx.values():
+            final = verdicts_by_name[risk.name]
+            if final.label == GuardianScore.FAILED:
+                LOGGER.warning(
+                    "Could not parse Guardian output for risk=%s (stage=%s) after %d attempt(s): %.*r",
+                    risk.name,
+                    hook_stage,
+                    GUARDIAN_RETRY_ATTEMPTS,
+                    _RAW_OUTPUT_LOG_LIMIT,
+                    final.raw_output,
+                )
 
         # Cache all terminal verdicts (YES/NO after retries)
         for risk_name, verdict in verdicts_by_name.items():

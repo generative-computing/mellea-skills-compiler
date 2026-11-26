@@ -399,7 +399,7 @@ def certify(
 
         from mellea_skills_compiler.certification.pipeline import full_pipeline
 
-        full_pipeline(
+        result = full_pipeline(
             pipeline_dir=Path(pipeline_dir),
             guardian_mode=GuardianMode("enforce" if enforce else "audit"),
             n_fixtures=n_fixtures,
@@ -407,6 +407,10 @@ def certify(
             guardian_model=guardian_model,
             inference_engine_type=InferenceEngineType[inference_engine],
         )
+        if result is not None and result.status == "failed":
+            raise typer.Exit(code=1)
+    except typer.Exit:
+        raise
     except CertificationInterrupted as e:
         for signal_number in (signal.SIGINT, signal.SIGTERM):
             signal.signal(signal_number, signal.SIG_IGN)
