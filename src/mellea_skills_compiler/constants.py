@@ -1,7 +1,7 @@
 """Single-source constants used across the compiler and its export targets.
 
 Keeping the mellea dependency pin here (instead of hardcoded strings in
-`pyproject.toml`, three export-target templates, and the mellea-fy generate-step
+`pyproject.toml`, four export-target templates, and the mellea-fy generate-step
 doc) lets every rendered artefact reference the same value and lets a single
 regression test enforce consistency (see
 `tests/mellea_skills_compiler/test_pin_consistency.py`).
