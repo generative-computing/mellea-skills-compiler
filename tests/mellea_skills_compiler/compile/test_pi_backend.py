@@ -18,6 +18,7 @@ from mellea_skills_compiler.compile.backends.pi import (
     _lock_protected_paths,
     _render_prompt_templates,
     _resolve_provider_and_model,
+    resolve_provider,
     _unlock_protected_paths,
 )
 from mellea_skills_compiler.enums import PiMessageType
@@ -140,9 +141,10 @@ class TestValidateEnvironment:
         assert is_valid is False
         assert error is not None
 
+    @patch("mellea_skills_compiler.compile.backends.pi._get_default_settings", return_value={})
     @patch("mellea_skills_compiler.compile.backends.pi.shutil.which")
     @patch("mellea_skills_compiler.compile.backends.pi.subprocess.run")
-    def test_validate_environment_uses_default_provider(self, mock_run, mock_which, backend):
+    def test_validate_environment_uses_default_provider(self, mock_run, mock_which, _settings, backend):
         mock_which.return_value = "/usr/local/bin/pi"
         mock_run.return_value = Mock(
             returncode=0,
@@ -156,6 +158,23 @@ class TestValidateEnvironment:
 
         args = mock_run.call_args[0][0]
         assert args == ["/usr/local/bin/pi", "auth", "check", "--provider", "anthropic", "--json"]
+
+    @patch(
+        "mellea_skills_compiler.compile.backends.pi._get_default_settings",
+        return_value={"defaultProvider": "ollama"},
+    )
+    @patch("mellea_skills_compiler.compile.backends.pi.shutil.which")
+    @patch("mellea_skills_compiler.compile.backends.pi.subprocess.run")
+    def test_validate_environment_uses_pi_default_provider(self, mock_run, mock_which, _settings, backend):
+        mock_which.return_value = "/usr/local/bin/pi"
+        mock_run.return_value = Mock(
+            returncode=0, stdout=json.dumps({"status": "ready"}), stderr=""
+        )
+
+        backend.validate_environment()
+
+        args = mock_run.call_args[0][0]
+        assert args[args.index("--provider") + 1] == "ollama"
 
     @patch("mellea_skills_compiler.compile.backends.pi.shutil.which")
     @patch("mellea_skills_compiler.compile.backends.pi.subprocess.run")
@@ -954,3 +973,14 @@ def test_compile_passes_absolute_paths_to_pi(mock_popen, _record, backend, tmp_p
     system_prompt = argv[argv.index("--append-system-prompt") + 1]
     assert f"`{package_dir.resolve()}/intermediate/`" in system_prompt
     assert f"{(tmp_path / '.claude/schemas').resolve()}/" in system_prompt
+
+
+class TestResolveProvider:
+    def test_explicit_provider_wins(self):
+        assert resolve_provider("ollama", {"defaultProvider": "google"}) == "ollama"
+
+    def test_falls_back_to_pi_default_provider(self):
+        assert resolve_provider(None, {"defaultProvider": "google"}) == "google"
+
+    def test_falls_back_to_anthropic(self):
+        assert resolve_provider(None, {}) == "anthropic"

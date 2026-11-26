@@ -181,7 +181,7 @@ class PiBackend:
             provider, model = _resolve_provider_and_model(
                 context.provider, context.model, pi_default_settings
             )
-            provider_label = provider or pi_default_settings.get("defaultProvider", "anthropic")
+            provider_label = resolve_provider(provider, pi_default_settings)
             model_label = model or pi_default_settings.get("defaultModel", "default")
             console.print(
                 f"\n[green]{'Repairing' if effective_repair_mode else 'Compiling'} using {self.name()}, "
@@ -381,14 +381,13 @@ class PiBackend:
 
         Args:
             provider: Provider to check credentials for (e.g. "anthropic",
-                "ollama"). Defaults to "anthropic" when not supplied, matching
-                the other two backends' effective default — this is
-                intentionally NOT pi's own CLI-level default of "google".
+                "ollama"). When not supplied, resolved by `resolve_provider`:
+                pi's ``defaultProvider`` setting, else "anthropic".
 
         Returns:
             A tuple of (is_valid, error_message).
         """
-        effective_provider = provider or "anthropic"
+        effective_provider = resolve_provider(provider)
 
         pi_executable = shutil.which("pi")
         if pi_executable is None:
@@ -611,6 +610,23 @@ def _unlock_protected_paths(locked: Dict[Path, Optional[int]]) -> None:
             path.chmod(0o644)
             if path.stat().st_size == 0:
                 path.unlink()
+
+
+def resolve_provider(provider: Optional[str], settings: Optional[dict] = None) -> str:
+    """Resolve the provider once, for the credentials check, banner and compile.
+
+    Args:
+        provider: The ``--provider`` the user passed, if any.
+        settings: pi's settings; read via `_get_default_settings` if omitted.
+
+    Returns:
+        ``provider``, else pi's ``defaultProvider``, else "anthropic".
+    """
+    if provider:
+        return provider
+    if settings is None:
+        settings = _get_default_settings()
+    return settings.get("defaultProvider") or "anthropic"
 
 
 def _resolve_provider_and_model(
