@@ -17,6 +17,7 @@ This backend requires:
 """
 
 import json
+import os
 import re
 import shutil
 import stat
@@ -74,7 +75,7 @@ _PIPELINE_WRITTEN_PATHS: tuple[str, ...] = (
 # What `pi auth check --json` reasons usually mean (pi 1.2.0).
 _AUTH_REASON_CAUSES: Dict[str, str] = {
     "invalid_state": (
-        "pi couldn't load ~/.pi/agent/models.json: it isn't valid JSON, or a "
+        "pi couldn't load {agent_dir}/models.json: it isn't valid JSON, or a "
         "`headers` value refers to an environment variable that isn't set"
     ),
     "credentials_not_configured": (
@@ -83,7 +84,7 @@ _AUTH_REASON_CAUSES: Dict[str, str] = {
     ),
     "provider_not_found": (
         "pi doesn't know this provider: check the name, or add the provider "
-        "to ~/.pi/agent/models.json"
+        "to {agent_dir}/models.json"
     ),
     "credential_not_available": (
         "a credential is stored for the provider but couldn't be retrieved "
@@ -426,7 +427,7 @@ class PiBackend:
             cause = _AUTH_REASON_CAUSES.get(reason)
             return False, (
                 f"pi auth check failed for provider '{effective_provider}' ({reason})"
-                + (f": {cause}" if cause else "")
+                + (f": {cause.format(agent_dir=_agent_dir())}" if cause else "")
                 + f". Fix it, then check with 'pi auth check --provider {effective_provider}'. "
                 f"See {_VERIFYING_CREDENTIALS_URL}"
             )
@@ -666,7 +667,7 @@ def _early_stop_message(
     if session_id:
         message += (
             f" The full transcript is pi session {session_id}, under "
-            "~/.pi/agent/sessions/."
+            f"{_agent_dir()}/sessions/."
         )
     message += (
         " Re-run with --repair-mode to resume, or use a stronger model."
@@ -674,14 +675,22 @@ def _early_stop_message(
     return message
 
 
+def _agent_dir() -> Path:
+    """Return pi's agent folder: ``$PI_CODING_AGENT_DIR`` if set, else ``~/.pi/agent``."""
+    agent_dir = os.environ.get("PI_CODING_AGENT_DIR")
+    if agent_dir:
+        return Path(agent_dir).expanduser()
+    return Path.home() / ".pi" / "agent"
+
+
 def _get_default_settings() -> dict:
-    """Read pi's settings from ~/.pi/agent/settings.json.
+    """Read pi's settings from ``settings.json`` in pi's agent folder.
 
     Returns:
         The parsed settings (e.g. ``defaultProvider``, ``defaultModel``), or an
         empty dict if the file does not exist.
     """
-    settings_path = Path.home() / ".pi" / "agent" / "settings.json"
+    settings_path = _agent_dir() / "settings.json"
     if not settings_path.is_file():
         return {}
     with open(settings_path) as f:
