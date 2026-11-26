@@ -17,6 +17,7 @@ from mellea_skills_compiler.compile.lints import (
     lint_bundled_asset_path_resolution,
     lint_fixture_pydantic_coercion,
     lint_fixtures_loader_contract,
+    lint_pyproject_package_discovery,
     lint_format_annotation,
     lint_grounding_context_types,
     lint_import_side_effects,
@@ -2403,3 +2404,90 @@ class TestImportSideEffects:
             pkg = _make_package(Path(tmp), {"pipeline.py": "def x(:\n    pass\n"})
             result = lint_import_side_effects(pkg)
             assert result.verdict in ("pass", "skipped")
+
+
+# ─── TestPyprojectPackageDiscovery ───
+
+
+class TestPyprojectPackageDiscovery:
+    """Test cases for lint_pyproject_package_discovery."""
+
+    def _pkg(self, tmp, pyproject):
+        root = Path(tmp)
+        pkg = root / "demo_mellea"
+        pkg.mkdir()
+        if pyproject is not None:
+            (root / "pyproject.toml").write_text(pyproject)
+        return pkg
+
+    def test_passes_with_packages_find_include(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                '[tool.setuptools.packages.find]\nwhere = ["."]\ninclude = ["demo_mellea*"]\n',
+            )
+            assert lint_pyproject_package_discovery(pkg).verdict == "pass"
+
+    def test_passes_with_explicit_packages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, '[tool.setuptools]\npackages = ["demo_mellea"]\n')
+            assert lint_pyproject_package_discovery(pkg).verdict == "pass"
+
+    def test_fails_without_discovery_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp, '[tool.setuptools.package-data]\n"demo_mellea" = ["scripts/**/*"]\n'
+            )
+            result = lint_pyproject_package_discovery(pkg)
+            assert result.verdict == "fail"
+            assert len(result.failures) == 1
+            assert "demo_mellea*" in result.failures[0].message
+
+    def test_fails_with_empty_include(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, "[tool.setuptools.packages.find]\ninclude = []\n")
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_fails_when_include_misses_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp, '[tool.setuptools.packages.find]\ninclude = ["wrong*"]\n'
+            )
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_fails_when_include_is_wildcard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, '[tool.setuptools.packages.find]\ninclude = ["*"]\n')
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_fails_when_any_include_entry_misses_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                '[tool.setuptools.packages.find]\ninclude = ["demo_mellea*", "scripts*"]\n',
+            )
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_fails_when_include_matches_sibling_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp, '[tool.setuptools.packages.find]\ninclude = ["demo_mellea_other*"]\n'
+            )
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_passes_with_subpackage_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp, '[tool.setuptools]\npackages = ["demo_mellea", "demo_mellea.sub"]\n'
+            )
+            assert lint_pyproject_package_discovery(pkg).verdict == "pass"
+
+    def test_fails_when_explicit_packages_miss_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, '[tool.setuptools]\npackages = ["scripts"]\n')
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_skipped_when_pyproject_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, None)
+            assert lint_pyproject_package_discovery(pkg).verdict == "skipped"

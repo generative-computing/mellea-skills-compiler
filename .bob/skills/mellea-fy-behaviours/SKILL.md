@@ -8,7 +8,7 @@ metadata:
 
 # Melleafy: Known Mellea Behaviours & Workarounds
 
-**Version**: 4.5.0 | tested against mellea 0.7.x
+**Version**: 4.5.0 | tested against mellea 0.9.x
 
 Generated pipelines MUST include these workarounds. Re-test after upgrading mellea — some may be resolved in future releases. Step 7's `known-behaviours` lint mechanically checks for KB1, KB2, KB3, KB4, KB6, KB7, KB11. Step 7's `raw-llm-json-parse` lint enforces KB12's parsing boundary. Step 7's `session-boundary` lint covers KB5. KB9 is advisory only — no lint sub-check.
 

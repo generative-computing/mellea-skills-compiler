@@ -68,7 +68,10 @@ _FORBIDDEN_PARAM_NAMES_FALLBACK = [
 # Static fallback for the doc_index when docs.mellea.ai is unreachable and no
 # cached copy exists.
 #
-# Snapshot: 2026-08-14 | target mellea version: 0.7.x
+# Snapshot: 2026-08-14 | page layout first captured on mellea 0.7.x; the
+# supported range is now 0.9.x (see MELLEA_PIN in constants.py). The doc
+# structure is unchanged since that snapshot, so the list is kept as-is — the
+# live doc_index fetch takes precedence whenever docs.mellea.ai is reachable.
 # Migration: Mintlify -> Docusaurus 3 (mellea PR #1174). The old ``/guide/``
 # section was reorganised into ``/how-to/…`` and new sections were added
 # for observability, troubleshooting, reference, tutorials 02/03/05/06,

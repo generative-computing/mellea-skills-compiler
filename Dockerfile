@@ -56,7 +56,7 @@ RUN find $HOME/.bob/skills -type f -name "*.md" | while read f; do \
 # Install the mellea-skills-compiler package system-wide
 RUN pip install --no-cache-dir /mellea-skills-compiler
 
-# Set Compatibility YAML path for Mellea 0.7
+# Set Compatibility YAML path for Mellea 0.9
 ENV MELLEA_SKILLS_COMPILER_COMPATIBILITY_YAML=/home/user/.claude/data/compatibility.yaml
 
 # Copy welcome script and make it executable
