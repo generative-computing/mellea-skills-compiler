@@ -281,3 +281,48 @@ class TestNewHookCoverage:
         assert audit_plugin.verdicts_by_generation_id.get("gen-e"), (
             "generation_error should be indexed by generation_id"
         )
+
+
+class TestGuardianRetryAndShortPredictions:
+    @staticmethod
+    def _risks(n):
+        return [
+            NexusRisk(name=f"r{i}", description="d", guardian_prompt=f"p{i}", source="x") for i in range(n)
+        ]
+
+    @staticmethod
+    def _engine(*batches):
+        """Engine whose chat() returns successive batches; Exception items raise."""
+        calls = iter(batches)
+
+        def chat(messages, verbose=False):
+            batch = next(calls)
+            if isinstance(batch, Exception):
+                raise batch
+            return [SimpleNamespace(prediction=p) for p in batch]
+
+        return SimpleNamespace(chat=chat)
+
+    def _run(self, engine, n):
+        from mellea_skills_compiler.plugins import guardian as g
+
+        g._VERDICT_CACHE = type(g._VERDICT_CACHE)(maxsize=8)
+        return asyncio.run(
+            g._call_guardian(HookStage.POST, self._risks(n), f"in{n}{id(engine)}", engine, "out")
+        )
+
+    def test_error_verdict_is_retried(self):
+        engine = self._engine(RuntimeError("boom"), ["<score>no</score>"])
+        verdicts = self._run(engine, 1)
+        assert [v.label for v in verdicts] == [GuardianScore.NO]
+
+    def test_short_prediction_list_marks_missing_error(self):
+        engine = self._engine(["<score>no</score>"], ["<score>yes</score>"])
+        verdicts = self._run(engine, 2)
+        assert [v.label for v in verdicts] == [GuardianScore.NO, GuardianScore.YES]
+
+    def test_short_prediction_list_exhausted_retries_is_error(self):
+        engine = self._engine(["<score>no</score>"], [])
+        verdicts = self._run(engine, 2)
+        assert verdicts[0].label == GuardianScore.NO
+        assert verdicts[1].label == GuardianScore.ERROR

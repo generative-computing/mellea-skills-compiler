@@ -126,6 +126,25 @@ def _extract_incident_evidence(entries: list[dict]) -> list[str]:
         return [
             f"{len(flagged)} of {len(gen_posts)} generations flagged for risk incidents."
         ]
+    labels = [
+        v["label"] for e in gen_posts for v in e.get("guardian_verdicts", [])
+    ]
+    usable = [l for l in labels if l in (GuardianScore.YES, GuardianScore.NO)]
+    if not labels:
+        return [
+            f"{len(gen_posts)} generations monitored — no Guardian verdicts recorded; "
+            "incident status is unknown."
+        ]
+    if not usable:
+        return [
+            f"{len(gen_posts)} generations monitored — INCONCLUSIVE: no Guardian check "
+            "completed, so incident status is unknown."
+        ]
+    if len(usable) < len(labels):
+        return [
+            f"{len(gen_posts)} generations monitored — no incidents detected in the "
+            f"{len(usable)} of {len(labels)} checks that completed."
+        ]
     return [f"{len(gen_posts)} generations monitored — no incidents detected."]
 
 
