@@ -69,7 +69,7 @@ class TestMcpGuardianInjection:
         assert "GuardianPluginFactory" not in result
         assert "PolicyManifest" not in result
 
-    def test_guardian_block_before_fastmcp_instantiation(self):
+    def test_guardian_block_before_mcpserver_instantiation(self):
         result = _render_server_py(
             package_name="my_skill",
             entry_module="pipeline",
@@ -81,7 +81,7 @@ class TestMcpGuardianInjection:
             declared_env_vars=[],
             has_policy_manifest=True,
         )
-        assert result.index("GuardianPluginFactory") < result.index("mcp = FastMCP(")
+        assert result.index("GuardianPluginFactory") < result.index("mcp = MCPServer(")
 
 
 class TestLangGraphGuardianInjection:

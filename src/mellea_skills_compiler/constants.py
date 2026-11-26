@@ -16,14 +16,15 @@ from __future__ import annotations
 
 # Supported upstream mellea range.
 #
-# Lower bound: 0.7.0 — first release in which the compiler's Guardian
-# post-check path is repairable (before 0.7 the ``ModelOutputThunk._action``
-# private attribute was the only way to reach the originating action; from
-# 0.7 that moved into a ``_CallInfo`` sub-object at ``_call.action``, and
-# ``payload.generation_id`` became public on both pre- and post-call
-# payloads, enabling id-based correlation instead).
+# Lower bound: 0.9.0 — the version the compiler is validated against (test
+# suite and import/hook-payload probes run on 0.9.0). 0.7.x passed an earlier
+# version of the suite, but 0.9.0 is the first release validated after 0.8
+# removed/renamed several APIs (streaming ``stream()``, ``render_controls``,
+# ``set_request_adapter``, ``json_util`` made private); 0.9 changed behaviour
+# (async ``Requirement.validate`` now awaited, empty user content rejected),
+# so compiled skills are only supported on 0.9+.
 #
-# Upper bound: <0.8 — upstream ``main`` is already ``0.8.0.dev0`` at the time
-# of writing (2026-08-14); without an upper bound a fresh install a week
-# from now would silently jump a major and re-break.
-MELLEA_PIN = "mellea[hooks]>=0.7.0,<0.8"
+# Upper bound: <0.10 — mellea is pre-1.0 and ships breaking changes in minor
+# releases (0.7 -> 0.8 did); cap at the next minor so a fresh install does not
+# silently jump.
+MELLEA_PIN = "mellea[hooks]>=0.9.0,<0.10"

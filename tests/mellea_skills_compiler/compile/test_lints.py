@@ -17,6 +17,7 @@ from mellea_skills_compiler.compile.lints import (
     lint_bundled_asset_path_resolution,
     lint_fixture_pydantic_coercion,
     lint_fixtures_loader_contract,
+    lint_pyproject_package_discovery,
     lint_format_annotation,
     lint_grounding_context_types,
     lint_import_side_effects,
@@ -24,6 +25,7 @@ from mellea_skills_compiler.compile.lints import (
     lint_instruct_result_parse_before_access,
     lint_parseable,
     lint_prefix_persona,
+    lint_raw_llm_json_parse,
     lint_runtime_defaults_bound,
     lint_session_boundary,
     lint_session_method_arity,
@@ -586,6 +588,31 @@ class TestRunLints:
                 f"with lints={[(r.lint_id, r.verdict) for r in result.lints]}"
             )
             assert result.failed is False
+
+    def test_raw_llm_json_parse_is_part_of_runner(self):
+        pipeline = (
+            "import json\n"
+            "def run_pipeline(m):\n"
+            "    response = m.instruct('return a list')\n"
+            "    return json.loads(response.value)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(
+                Path(tmp) / "synthetic_mellea",
+                {
+                    "__init__.py": "",
+                    "pipeline.py": pipeline,
+                    "fixtures/__init__.py": "ALL_FIXTURES = []\n",
+                    "config.py": 'BACKEND = "ollama"\nMODEL_ID = "granite4.1:3b"\n',
+                },
+            )
+            _write_directive(pkg, "ollama", "granite4.1:3b")
+            result = run_lints(pkg)
+            failed_lints = {
+                lint.lint_id for lint in result.lints if lint.verdict == "fail"
+            }
+            assert result.overall_verdict == "fail"
+            assert "raw-llm-json-parse" in failed_lints
 
     def test_overall_fail_on_any_lint_fail(self):
         """A package with one failing lint should yield overall 'fail'."""
@@ -1165,6 +1192,137 @@ class TestFormatAnnotation:
             result = lint_format_annotation(pkg)
             assert result.verdict == "pass"
             assert result.files_checked == 0
+
+
+# ─── TestRawLlmJsonParse ───
+
+
+class TestRawLlmJsonParse:
+    """Raw LLM replies must pass through the JSON response helper."""
+
+    def test_fails_direct_load_in_simple_validate_callback(self):
+        requirements = (
+            "import json as _json\n"
+            "from mellea.stdlib.requirements import req, simple_validate\n"
+            "def _validate(output: str) -> bool:\n"
+            "    return bool(_json.loads(output))\n"
+            "result = req('valid output', validation_fn=simple_validate(_validate))\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(Path(tmp), {"requirements.py": requirements})
+            result = lint_raw_llm_json_parse(pkg)
+            assert result.verdict == "fail"
+            assert result.files_checked == 1
+            assert "_parse_llm_json" in result.failures[0].message
+
+    def test_fails_direct_load_through_generated_helper(self):
+        pipeline = (
+            "import json\n"
+            "def _parse_json_list(raw: str):\n"
+            "    return json.loads(raw)\n"
+            "def run_pipeline(m):\n"
+            "    response = m.instruct('return a list')\n"
+            "    return _parse_json_list(response.value)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
+            result = lint_raw_llm_json_parse(pkg)
+            assert result.verdict == "fail"
+            assert "raw LLM output" in result.failures[0].message
+
+    def test_fails_direct_load_from_instruct_expression(self):
+        pipeline = (
+            "import json\n"
+            "def run_pipeline(m):\n"
+            "    return json.loads(m.instruct('return a list').value)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
+            result = lint_raw_llm_json_parse(pkg)
+            assert result.verdict == "fail"
+
+    def test_fails_for_any_instruct_receiver_name(self):
+        pipeline = (
+            "import json\n"
+            "def run_pipeline(m_fix, m_eval):\n"
+            "    fixed = m_fix.instruct('return an object')\n"
+            "    evaluated = m_eval.instruct('return a list')\n"
+            "    first = json.loads(fixed.value)\n"
+            "    second = json.loads(evaluated.value)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
+            result = lint_raw_llm_json_parse(pkg)
+            assert result.verdict == "fail"
+            assert len(result.failures) == 2
+
+    def test_fails_when_for_loop_target_comes_from_instruct(self):
+        pipeline = (
+            "import json\n"
+            "def run_pipeline(m):\n"
+            "    for response in [m.instruct('return an object')]:\n"
+            "        json.loads(response.value)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
+            result = lint_raw_llm_json_parse(pkg)
+            assert result.verdict == "fail"
+            assert len(result.failures) == 1
+
+    def test_fails_when_walrus_target_comes_from_instruct(self):
+        pipeline = (
+            "import json\n"
+            "def run_pipeline(m):\n"
+            "    if (response := m.instruct('return an object')):\n"
+            "        json.loads(response.value)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
+            result = lint_raw_llm_json_parse(pkg)
+            assert result.verdict == "fail"
+            assert len(result.failures) == 1
+
+    def test_fails_load_keyword_with_raw_reply(self):
+        pipeline = (
+            "import json\n"
+            "def run_pipeline(m):\n"
+            "    reply = m.instruct('return a list')\n"
+            "    return json.loads(s=reply.value)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
+            assert lint_raw_llm_json_parse(pkg).verdict == "fail"
+
+    def test_passes_through_parse_llm_json_helper(self):
+        pipeline = (
+            "import json\n"
+            "def _parse_llm_json(raw: str):\n"
+            "    candidate = raw.strip()\n"
+            "    try:\n"
+            "        return json.loads(candidate)\n"
+            "    except json.JSONDecodeError:\n"
+            "        return None\n"
+            "def _parse_json_list(raw: str):\n"
+            "    parsed = _parse_llm_json(raw)\n"
+            "    return parsed if isinstance(parsed, list) else []\n"
+            "def run_pipeline(m):\n"
+            "    response = m.instruct('return a list')\n"
+            "    return _parse_json_list(response.value)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
+            assert lint_raw_llm_json_parse(pkg).verdict == "pass"
+
+    def test_passes_json_loaded_from_local_file(self):
+        pipeline = (
+            "import json\n"
+            "from pathlib import Path\n"
+            "def load_config(path: str):\n"
+            "    return json.loads(Path(path).read_text())\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(Path(tmp), {"pipeline.py": pipeline})
+            assert lint_raw_llm_json_parse(pkg).verdict == "pass"
 
 
 # ─── TestSessionBoundary ───
@@ -2246,3 +2404,90 @@ class TestImportSideEffects:
             pkg = _make_package(Path(tmp), {"pipeline.py": "def x(:\n    pass\n"})
             result = lint_import_side_effects(pkg)
             assert result.verdict in ("pass", "skipped")
+
+
+# ─── TestPyprojectPackageDiscovery ───
+
+
+class TestPyprojectPackageDiscovery:
+    """Test cases for lint_pyproject_package_discovery."""
+
+    def _pkg(self, tmp, pyproject):
+        root = Path(tmp)
+        pkg = root / "demo_mellea"
+        pkg.mkdir()
+        if pyproject is not None:
+            (root / "pyproject.toml").write_text(pyproject)
+        return pkg
+
+    def test_passes_with_packages_find_include(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                '[tool.setuptools.packages.find]\nwhere = ["."]\ninclude = ["demo_mellea*"]\n',
+            )
+            assert lint_pyproject_package_discovery(pkg).verdict == "pass"
+
+    def test_passes_with_explicit_packages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, '[tool.setuptools]\npackages = ["demo_mellea"]\n')
+            assert lint_pyproject_package_discovery(pkg).verdict == "pass"
+
+    def test_fails_without_discovery_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp, '[tool.setuptools.package-data]\n"demo_mellea" = ["scripts/**/*"]\n'
+            )
+            result = lint_pyproject_package_discovery(pkg)
+            assert result.verdict == "fail"
+            assert len(result.failures) == 1
+            assert "demo_mellea*" in result.failures[0].message
+
+    def test_fails_with_empty_include(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, "[tool.setuptools.packages.find]\ninclude = []\n")
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_fails_when_include_misses_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp, '[tool.setuptools.packages.find]\ninclude = ["wrong*"]\n'
+            )
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_fails_when_include_is_wildcard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, '[tool.setuptools.packages.find]\ninclude = ["*"]\n')
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_fails_when_any_include_entry_misses_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                '[tool.setuptools.packages.find]\ninclude = ["demo_mellea*", "scripts*"]\n',
+            )
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_fails_when_include_matches_sibling_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp, '[tool.setuptools.packages.find]\ninclude = ["demo_mellea_other*"]\n'
+            )
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_passes_with_subpackage_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp, '[tool.setuptools]\npackages = ["demo_mellea", "demo_mellea.sub"]\n'
+            )
+            assert lint_pyproject_package_discovery(pkg).verdict == "pass"
+
+    def test_fails_when_explicit_packages_miss_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, '[tool.setuptools]\npackages = ["scripts"]\n')
+            assert lint_pyproject_package_discovery(pkg).verdict == "fail"
+
+    def test_skipped_when_pyproject_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, None)
+            assert lint_pyproject_package_discovery(pkg).verdict == "skipped"
