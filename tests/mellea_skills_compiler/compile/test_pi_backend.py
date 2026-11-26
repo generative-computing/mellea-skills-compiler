@@ -14,6 +14,7 @@ import pytest
 
 from mellea_skills_compiler.compile.backend import CompilationContext, CompilationResult
 from mellea_skills_compiler.compile.backends.pi import (
+    _early_stop_message,
     _get_default_settings,
     PiBackend,
     _lock_protected_paths,
@@ -980,3 +981,30 @@ class TestGetDefaultSettings:
         monkeypatch.setenv("HOME", str(home))
         monkeypatch.delenv("PI_CODING_AGENT_DIR", raising=False)
         assert _get_default_settings() == {"defaultProvider": "home"}
+
+
+class TestAgentDirHints:
+    @patch("mellea_skills_compiler.compile.backends.pi.shutil.which")
+    @patch("mellea_skills_compiler.compile.backends.pi.subprocess.run")
+    def test_auth_hint_uses_pi_coding_agent_dir(
+        self, mock_run, mock_which, backend, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path))
+        mock_which.return_value = "/usr/local/bin/pi"
+        mock_run.return_value = Mock(
+            returncode=1,
+            stdout=json.dumps({"status": "not_ready", "reason": "invalid_state"}),
+            stderr="",
+        )
+
+        _, error = backend.validate_environment(provider="rits")
+
+        assert f"{tmp_path}/models.json" in error
+        assert "~/.pi/agent" not in error
+
+    def test_early_stop_hint_uses_pi_coding_agent_dir(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path))
+
+        message = _early_stop_message(["main.py"], "", "abc123")
+
+        assert f"{tmp_path}/sessions/" in message
