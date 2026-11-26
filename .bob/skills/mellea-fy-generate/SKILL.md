@@ -258,12 +258,21 @@ name = "<package-name>"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "mellea[hooks]>=0.7.0,<0.8",
+    "mellea[hooks]>=0.9.0,<0.10",
     "pydantic>=2.0",
 ]
 
 [project.scripts]
 <package-name> = "<package_module>.main:main"
+
+# REQUIRED — restrict package discovery to the generated package. pyproject.toml
+# sits at the skill root next to scripts/, references/, assets/ and other
+# companion dirs; without this block setuptools' flat-layout auto-discovery
+# aborts with "Multiple top-level packages discovered". Step 7's
+# `pyproject-package-discovery` lint enforces it.
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["<package_module>*"]
 
 # Rule OUT-6 — declare mirrored companion directories as package data so
 # bundled scripts/references/assets ship with the installed wheel. Include
