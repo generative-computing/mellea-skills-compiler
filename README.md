@@ -207,7 +207,7 @@ pip install -e .
 
   **Note:** Set only one of these variables. `OLLAMA_HOST` takes precedence: if it is set, `OLLAMA_API_URL` is ignored.
 
-  **Note:** `mellea-skills` copies `OLLAMA_API_URL` into `OLLAMA_HOST` at startup, so either variable works for `compile`, `validate`, `run` and `certify`. A compiled skill run directly (e.g. `python -m <pkg>`) does not go through `mellea-skills` and reads only `OLLAMA_HOST`, so set `OLLAMA_HOST` in that case.
+  **Note:** Importing `mellea_skills_compiler` copies `OLLAMA_API_URL` into `OLLAMA_HOST`, so either variable works for the `mellea-skills` CLI and exported adapters. A compiled skill run directly (e.g. `python -m <pkg>`) reads only `OLLAMA_HOST`.
 
   ```bash
   export OLLAMA_HOST=http://localhost:11434 # Ollama api URL

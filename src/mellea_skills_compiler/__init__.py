@@ -8,6 +8,6 @@ __version__ = "0.3.1"
 
 import os as _os
 
-# Propagate OLLAMA_API_URL for every entry point 
+# The ollama client reads only OLLAMA_HOST; treat OLLAMA_API_URL as an alias.
 if not _os.environ.get("OLLAMA_HOST") and _os.environ.get("OLLAMA_API_URL"):
     _os.environ["OLLAMA_HOST"] = _os.environ["OLLAMA_API_URL"]
