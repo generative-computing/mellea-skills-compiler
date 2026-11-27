@@ -12,10 +12,12 @@ The model emits JSON conforming to the schema; a deterministic Python writer rea
 JSON and renders the final artifact (Python source, multiple files, etc.). The schema
 prevents shape drift in the LLM's output before any rendering happens.
 
-| Schema                          | Writer                                        | Renders                                  |
-| ------------------------------- | --------------------------------------------- | ---------------------------------------- |
-| `config_emission.schema.json`   | `.claude/melleafy/writers/config_writer.py`   | `config.py`                              |
-| `fixtures_emission.schema.json` | `.claude/melleafy/writers/fixtures_writer.py` | `fixtures/*.py` + `fixtures/__init__.py` |
+The compiler runs the writers after the backend exits; never write the rendered artifacts yourself.
+
+| Schema                          | Renders                                  |
+| ------------------------------- | ---------------------------------------- |
+| `config_emission.schema.json`   | `config.py`                              |
+| `fixtures_emission.schema.json` | `fixtures/*.py` + `fixtures/__init__.py` |
 
 ### Intermediate contracts
 

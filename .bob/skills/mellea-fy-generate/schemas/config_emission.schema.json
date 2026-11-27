@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "config_emission",
-  "description": "Output contract for config.py generation. The model emits JSON conforming to this schema; the deterministic writer at config_writer.py renders the Python source.",
+  "description": "Output contract for config.py generation. The model emits JSON conforming to this schema; the compiler renders config.py from it after the model finishes.",
   "type": "object",
   "required": [
     "constants"

@@ -6,7 +6,7 @@
 
 Step 4 generates 5–8 test fixtures covering ≥3 C-categories. Fixtures are the primary means by which the generated package can be validated at runtime (Step 7's lints are static-only).
 
-> **Rule 4-1 — Batched fixture generation as JSON**: Generate all fixture specifications in a single LLM invocation. The invocation receives the `run_pipeline` signature, the element mapping summary, and the C-category coverage requirement, and returns **one JSON object conforming to `.claude/schemas/fixtures_emission.schema.json`**, written to `intermediate/fixtures_emission.json` — not Python source. The deterministic writer at `.claude/melleafy/writers/fixtures_writer.py` renders the per-fixture `.py` files plus `fixtures/__init__.py` from that JSON. **The model never writes Python source for fixtures directly.** This makes shape drift (pytest-style tests, `INPUT`-only modules, hand-rolled `__init__.py` exports) structurally unreachable — every legal JSON instance produces a contract-correct fixture package.
+> **Rule 4-1 — Batched fixture generation as JSON**: Generate all fixture specifications in a single LLM invocation. The invocation receives the `run_pipeline` signature, the element mapping summary, and the C-category coverage requirement, and returns **one JSON object conforming to `.claude/schemas/fixtures_emission.schema.json`**, written to `intermediate/fixtures_emission.json` — not Python source. The compiler renders the per-fixture `.py` files plus `fixtures/__init__.py` from that JSON after you finish. **Never write `fixtures/` yourself.** This makes shape drift (pytest-style tests, `INPUT`-only modules, hand-rolled `__init__.py` exports) structurally unreachable — every legal JSON instance produces a contract-correct fixture package.
 
 ---
 
@@ -160,7 +160,7 @@ def mock_doi_lookup(doi: str) -> dict:
 
 ## Cross-checks before Step 4 declares done
 
-The schema (`fixtures_emission.schema.json`) and writer (`fixtures_writer.py`) together enforce most of the contract structurally. The model is responsible only for content correctness:
+The schema (`fixtures_emission.schema.json`) and the compiler's renderer together enforce most of the contract structurally. The model is responsible only for content correctness:
 
 - Fixture count: 5 ≤ N ≤ 8 (enforced by `minItems`/`maxItems` in the schema)
 - At least 3 distinct C-categories exercised across all fixtures (model self-check; documented in `coverage_doc`)

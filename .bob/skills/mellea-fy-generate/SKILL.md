@@ -67,7 +67,7 @@ Step 7's `bundled-asset-path-resolution` lint catches violations at validation t
 
 **config.py**: C1 and C2 bundle entries become `Final[str]` constants under `# === C1: Identity ===` and `# === C2: Operating Rules ===` section headers. C8 bundle entries (model ID, backend) also here. Every constant gets a `# PROVENANCE: <source_file>:<source_lines>` comment.
 
-**In Step 5, the model emits ONLY JSON `intermediate/config_emission.json` conforming to `schemas/config_emission.schema.json` — not Python source. The writer `config_writer.py` reads this JSON and renders the final `config.py` file.**
+**In Step 5, the model emits ONLY JSON `intermediate/config_emission.json` conforming to `schemas/config_emission.schema.json` — not Python source. The compiler renders `config.py` from it after you finish; never write `config.py` yourself.**
 
 > **C8 backend rule (CRITICAL)**: `BACKEND` and `MODEL_ID` values MUST be read from `intermediate/runtime_directive.json` (fields `.backend` and `.model_id` respectively). Read the file, extract the two values, and include them in the `config_emission.json` output exactly as they appear in `runtime_directive.json`. Do not invent alternatives or use values from any other source. The Step 7 `runtime-defaults-bound` lint enforces this — divergence from the `runtime_directive.json` values is a hard failure.
 
@@ -287,7 +287,7 @@ Note: the `openai-agents` package is NOT added to dependencies for Agents SDK so
 
 ## Step 5: Code body generation
 
-Step 5 fills every skeleton placeholder with real code. For `config.py`, the model emits JSON and the writer `config_writer.py` renders Python source (invariant 1).
+Step 5 fills every skeleton placeholder with real code. For `config.py`, the model emits JSON and the compiler renders Python source (invariant 1).
 
 **Parallelization strategy**: Step 5 is structured in **three phases** to maximize throughput:
 - **Phase A (parallel)**: Emit all 7 independent files in a single turn using parallel tool calls: schemas.py, config.py, requirements.py, slots.py, tools.py/constrained_slots.py, mobjects.py, loader.py. These files have no inter-file dependencies at generation time.
@@ -300,7 +300,7 @@ In repair mode, only re-generate the files listed in `intermediate/step_7_report
 
 Read once; apply throughout all file generation.
 
-**1. `config.py` output is JSON, not Python source.** Emit a JSON object conforming to `schemas/config_emission.schema.json`. The deterministic writer `config_writer.py` renders the file — do not write Python source for `config.py` directly.
+**1. `config.py` output is JSON, not Python source.** Emit a JSON object conforming to `schemas/config_emission.schema.json`. The compiler renders `config.py` from it after you finish — never write `config.py` yourself.
 
 **2. All other files output Python source.** Generate one file per LLM invocation (Rule 5-3). Wait for each file's body before starting the next.
 

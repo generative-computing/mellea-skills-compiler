@@ -58,7 +58,7 @@ Step 7's `bundled-asset-path-resolution` lint catches violations at validation t
 
 ### Skeleton contents per file
 
-**config.py**: C1 and C2 bundle entries become `Final[str]` constants under `# === C1: Identity ===` and `# === C2: Operating Rules ===` section headers. C8 bundle entries (model ID, backend) also here. Every constant gets a `# PROVENANCE: <source_file>:<source_lines>` comment. **In Step 5, the model writes JSON to `intermediate/config_emission.json`, conforming to `.claude/schemas/config_emission.schema.json` — not Python source. The writer at `.claude/melleafy/writers/config_writer.py` renders `config.py` from it; never write `config.py` directly.**
+**config.py**: C1 and C2 bundle entries become `Final[str]` constants under `# === C1: Identity ===` and `# === C2: Operating Rules ===` section headers. C8 bundle entries (model ID, backend) also here. Every constant gets a `# PROVENANCE: <source_file>:<source_lines>` comment. **In Step 5, the model writes JSON to `intermediate/config_emission.json`, conforming to `.claude/schemas/config_emission.schema.json` — not Python source. The compiler renders `config.py` from it after you finish; never write `config.py` yourself.**
 
 > **C8 backend rule**: `BACKEND` and `MODEL_ID` values are injected via the system prompt by the compile pipeline (sourced from `.claude/data/runtime_defaults.json`, with optional `--backend` / `--model-id` CLI overrides). Emit them in `intermediate/config_emission.json` exactly as instructed in the system prompt; the writer renders them into `config.py`. Do not invent alternatives. The Step 7 `runtime-defaults-bound` lint enforces this — divergence from the injected values is a hard failure.
 
@@ -307,7 +307,7 @@ In repair mode, only re-generate the files listed in `intermediate/step_7_report
 
 Read once; apply throughout all file generation.
 
-**1. `config.py` output is JSON, not Python source.** Emit a JSON object conforming to `.claude/schemas/config_emission.schema.json`. The deterministic writer at `.claude/melleafy/writers/config_writer.py` renders the file — do not write Python source for `config.py` directly.
+**1. `config.py` output is JSON, not Python source.** Emit a JSON object conforming to `.claude/schemas/config_emission.schema.json`. The compiler renders `config.py` from it after you finish — never write `config.py` yourself.
 
 **2. All other files output Python source.** Generate one file per LLM invocation (Rule 5-3). Wait for each file's body before starting the next.
 
@@ -345,7 +345,7 @@ Before generating any body, include in the context:
 Generate all of these simultaneously in one turn. They are mutually independent at generation time:
 
 1. `schemas.py` — Pydantic models (referenced by Phase B)
-2. `intermediate/config_emission.json` — JSON conforming to `.claude/schemas/config_emission.schema.json`; the writer at `.claude/melleafy/writers/config_writer.py` renders `config.py` from it. Do not write `config.py` itself
+2. `intermediate/config_emission.json` — JSON conforming to `.claude/schemas/config_emission.schema.json`; the compiler renders `config.py` from it after you finish. Never write `config.py` yourself
 3. `requirements.py` — requirement functions (referenced by Phase B)
 4. `slots.py` — `@generative` slot bodies (referenced by Phase B)
 5. `tools.py` / `constrained_slots.py` — tool implementations (referenced by Phase B)

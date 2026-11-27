@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "fixtures_emission",
-  "description": "Output contract for the fixtures/ subpackage. The model emits JSON conforming to this schema; the deterministic writer at .claude/melleafy/writers/fixtures_writer.py renders the per-fixture .py files plus fixtures/__init__.py. The model never writes Python source for fixtures directly — this prevents drift shapes (pytest-style tests, INPUT-only modules, etc.) that would violate the loader contract enforced by file_utils.load_fixtures.",
+  "description": "Output contract for the fixtures/ subpackage. The model emits JSON conforming to this schema; the compiler renders the per-fixture .py files plus fixtures/__init__.py from it after the model finishes. The model never writes Python source for fixtures directly — this prevents drift shapes (pytest-style tests, INPUT-only modules, etc.) that would violate the loader contract enforced by file_utils.load_fixtures.",
   "type": "object",
   "required": ["fixtures"],
   "additionalProperties": false,
