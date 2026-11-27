@@ -48,7 +48,7 @@ These values are baked into `config.py`:
 - `BACKEND = 'ollama'`
 - `MODEL_ID = 'granite4.1:3B'`
 
-To use a different backend or model, edit `config.py` or re-run melleafy with `--backend` and `--model-id` overrides.
+To use a different backend or model, edit `config.py` or re-run melleafy with `--skill-backend` and `--skill-model` overrides.
 
 ---
 

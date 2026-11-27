@@ -456,7 +456,7 @@ def lint_runtime_defaults_bound(package_dir: Path) -> LintResult:
                         f"config.py:{name} = {actual!r} but the compile pipeline "
                         f"instructed {name} = {expected!r}. To change the default, "
                         f"edit .claude/data/runtime_defaults.json or recompile with "
-                        f"--backend / --model-id; do not edit config.py by hand."
+                        f"--skill-backend / --skill-model; do not edit config.py by hand."
                     ),
                     rule_ref="C8 runtime defaults",
                 )
