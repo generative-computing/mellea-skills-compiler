@@ -122,10 +122,10 @@ def render(emission: dict[str, Any] | str) -> str:
 
             lines.append(f"{name}: Final[{py_type}] = {_value_repr(value, py_type)}")
 
-            if provenance:
-                src = provenance["source_file"]
-                src_lines = provenance["source_lines"]
-                lines.append(f"# PROVENANCE: {src}:{src_lines}")
+            # Only file-based provenance is rendered.
+            src = (provenance or {}).get("source_file")
+            if src:
+                lines.append(f"# PROVENANCE: {src}:{provenance.get('source_lines', '')}")
                 # Blank line after a provenance-annotated entry if more follow in this section.
                 if i < len(section_constants) - 1:
                     lines.append("")

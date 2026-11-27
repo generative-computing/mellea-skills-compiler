@@ -113,6 +113,23 @@ class TestConfigWriterRender:
         source = writer.render(emission)
         assert "# PROVENANCE: SKILL.md:10-12" in source
 
+    def test_tolerates_non_file_provenance(self):
+        writer = _load_writer()
+        emission = {
+            "constants": [
+                {
+                    "name": "BACKEND",
+                    "value": "ollama",
+                    "type": "str",
+                    "category": "C8",
+                    "provenance": {"source": "runtime_defaults"},
+                },
+            ]
+        }
+        source = writer.render(emission)
+        assert "BACKEND: Final[str] = 'ollama'" in source
+        assert "PROVENANCE" not in source
+
     def test_multiline_string_uses_triple_quotes(self):
         writer = _load_writer()
         emission = {
