@@ -2090,45 +2090,6 @@ def lint_prefix_persona(package_dir: Path) -> LintResult:
     return result
 
 
-# ─── Shared helpers: m.instruct / start_session pattern detection ───
-#
-# Used by instruct-result-parse-before-access, format-annotation, and
-# session-boundary. The three lints share the same surface (pipeline.py,
-# slots.py, constrained_slots.py) and the same notion of an "m.instruct(...)"
-# call assigned to a Name target.
-
-
-_INSTRUCT_LINT_FILES: Tuple[str, ...] = (
-    "pipeline.py",
-    "slots.py",
-    "constrained_slots.py",
-)
-
-
-def _is_m_instruct_call(node: ast.AST) -> bool:
-    """True iff node is a `Call` whose func is `m.instruct` (Attribute on Name 'm')."""
-    if not isinstance(node, ast.Call):
-        return False
-    func = node.func
-    if not isinstance(func, ast.Attribute) or func.attr != "instruct":
-        return False
-    return isinstance(func.value, ast.Name) and func.value.id == "m"
-
-
-def _instruct_call_has_format_kwarg(node: ast.Call) -> bool:
-    """True iff an `m.instruct(...)` Call has a `format=` keyword."""
-    return any(kw.arg == "format" for kw in node.keywords)
-
-
-def _iter_function_scopes(tree: ast.AST):
-    """Yield every FunctionDef/AsyncFunctionDef + the module-level scope."""
-    yield tree
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            yield node
-
-
-
 # ─── Lint: import-soundness ───
 #
 # Every `mellea.*` import path in the compiled package must exist in the
