@@ -17,6 +17,7 @@ from mellea_skills_compiler.compile.lints import (
     lint_bundled_asset_path_resolution,
     lint_fixture_pydantic_coercion,
     lint_fixtures_loader_contract,
+    lint_melleafy_manifest,
     lint_pyproject_package_discovery,
     lint_format_annotation,
     lint_grounding_context_types,
@@ -566,11 +567,19 @@ class TestRunLints:
             "p = Path(__file__).parent / 'scripts' / 'bash' / 'x.sh'\n"
         )
         pipeline = "def run_pipeline(x: str) -> str:\n    return x\n"
+        melleafy = json.dumps(
+            {
+                "manifest_version": "1.1.0",
+                "package_name": "synthetic_mellea",
+                "entry_signature": "run_pipeline(x: str) -> str",
+            }
+        )
         with tempfile.TemporaryDirectory() as tmp:
             # The Tier 1 `parseable` lint requires <pkg>/pipeline.py to
-            # exist and import cleanly; a "compliant package" must include
-            # it. We materialise the package under an `_mellea`-suffixed
-            # parent so the subprocess `import <pkg>.pipeline` resolves.
+            # exist and import cleanly, and `melleafy-manifest` requires
+            # an export-valid <pkg>/melleafy.json; a "compliant package"
+            # must include both. We materialise the package under an
+            # `_mellea`-suffixed parent so `import <pkg>.pipeline` resolves.
             pkg = _make_package(
                 Path(tmp) / "synthetic_mellea",
                 {
@@ -579,6 +588,7 @@ class TestRunLints:
                     "fixtures/__init__.py": "ALL_FIXTURES = []\n",
                     "config.py": config,
                     "tools.py": tools,
+                    "melleafy.json": melleafy,
                 },
             )
             _write_directive(pkg, "ollama", "granite4.1:3b")
@@ -2491,3 +2501,269 @@ class TestPyprojectPackageDiscovery:
         with tempfile.TemporaryDirectory() as tmp:
             pkg = self._pkg(tmp, None)
             assert lint_pyproject_package_discovery(pkg).verdict == "skipped"
+
+
+# ─── TestMelleafyManifest ───
+
+
+class TestMelleafyManifest:
+    """Reproduce and verify Step 7 validation of melleafy.json for export."""
+
+    def _pkg(
+        self,
+        tmp: str,
+        manifest: object,
+        *,
+        pkg_name: str = "demo_mellea",
+        pipeline: str | None = "def run_pipeline(query: str) -> str:\n    return query\n",
+    ) -> Path:
+        files: Dict[str, str] = {}
+        if pipeline is not None:
+            files["pipeline.py"] = pipeline
+        if isinstance(manifest, str):
+            files["melleafy.json"] = manifest
+        elif manifest is not None:
+            files["melleafy.json"] = json.dumps(manifest)
+        pkg = Path(tmp) / pkg_name
+        pkg.mkdir(parents=True, exist_ok=True)
+        return _make_package(pkg, files)
+
+    def test_run_lints_fails_when_melleafy_json_invalid_for_export(self):
+        """A package whose melleafy.json has invalid export fields must fail run_lints."""
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(
+                Path(tmp) / "synthetic_mellea",
+                {
+                    "__init__.py": "",
+                    "pipeline.py": "def run_pipeline(x: str) -> str:\n    return x\n",
+                    "fixtures/__init__.py": "ALL_FIXTURES = []\n",
+                    "config.py": 'BACKEND = "ollama"\nMODEL_ID = "granite4.1:3b"\n',
+                    "melleafy.json": json.dumps(
+                        {
+                            "manifest_version": "0.1.0",
+                            "package_name": "wrong_pkg_mellea",
+                            "entry_signature": "<populated in Step 6>",
+                        }
+                    ),
+                },
+            )
+            result = run_lints(pkg)
+            assert result.overall_verdict == "fail"
+            failed_ids = {r.lint_id for r in result.lints if r.verdict == "fail"}
+            assert "melleafy-manifest" in failed_ids
+
+    def test_passes_with_valid_manifest_and_matching_pipeline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                {
+                    "manifest_version": "1.1.0",
+                    "package_name": "demo_mellea",
+                    "entry_signature": "run_pipeline(query: str) -> str",
+                },
+            )
+            res = lint_melleafy_manifest(pkg)
+            assert res.verdict == "pass", [f.message for f in res.failures]
+
+    def test_passes_with_two_part_manifest_version_and_complex_types(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                {
+                    "manifest_version": "1.0",
+                    "package_name": "demo_mellea",
+                    "entry_signature": (
+                        "run_pipeline(items: list[str], "
+                        "opts: dict[str, int] = {}) -> str"
+                    ),
+                },
+                pipeline=(
+                    "def run_pipeline(items: list[str], opts: dict[str, int] = {}, "
+                    "session: list = []) -> str:\n    return ''\n"
+                ),
+            )
+            res = lint_melleafy_manifest(pkg)
+            assert res.verdict == "pass", [f.message for f in res.failures]
+
+    def test_fails_when_melleafy_json_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, None)
+            res = lint_melleafy_manifest(pkg)
+            assert res.verdict == "fail"
+            assert "melleafy.json" in res.failures[0].message
+
+    def test_fails_when_melleafy_json_invalid_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, "{not valid json")
+            res = lint_melleafy_manifest(pkg)
+            assert res.verdict == "fail"
+            assert "JSON" in res.failures[0].message
+
+    def test_fails_when_melleafy_json_not_object(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(tmp, '["not", "an", "object"]')
+            res = lint_melleafy_manifest(pkg)
+            assert res.verdict == "fail"
+            assert "JSON object" in res.failures[0].message
+
+    def test_fails_when_manifest_version_missing_even_with_format_version(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                {
+                    "format_version": "1.0",
+                    "package_name": "demo_mellea",
+                    "entry_signature": "run_pipeline(query: str) -> str",
+                },
+            )
+            res = lint_melleafy_manifest(pkg)
+            assert res.verdict == "fail"
+            assert any("manifest_version" in f.message for f in res.failures)
+
+    def test_fails_when_manifest_version_non_string_or_invalid_or_low(self):
+        for bad_mv in (1.1, True, "abc", "0.9.0"):
+            with tempfile.TemporaryDirectory() as tmp:
+                pkg = self._pkg(
+                    tmp,
+                    {
+                        "manifest_version": bad_mv,
+                        "package_name": "demo_mellea",
+                        "entry_signature": "run_pipeline(query: str) -> str",
+                    },
+                )
+                res = lint_melleafy_manifest(pkg)
+                assert res.verdict == "fail", f"Expected fail for {bad_mv!r}"
+                assert any("manifest_version" in f.message for f in res.failures)
+
+    def test_fails_when_package_name_missing_invalid_or_mismatched(self):
+        for bad_pkg in (None, "", "bad-name", "123_mellea", "other_mellea"):
+            with tempfile.TemporaryDirectory() as tmp:
+                manifest = {
+                    "manifest_version": "1.1.0",
+                    "entry_signature": "run_pipeline(query: str) -> str",
+                }
+                if bad_pkg is not None:
+                    manifest["package_name"] = bad_pkg
+                pkg = self._pkg(tmp, manifest, pkg_name="demo_mellea")
+                res = lint_melleafy_manifest(pkg)
+                assert res.verdict == "fail", f"Expected fail for {bad_pkg!r}"
+                assert any("package_name" in f.message for f in res.failures)
+
+    def test_fails_when_entry_signature_missing_or_malformed(self):
+        for bad_sig in (
+            None,
+            "",
+            "<populated in Step 6>",
+            "def run_pipeline(query: str)",
+            "123bad(query: str) -> str",
+            "run_pipeline(a b: str) -> str",
+            "run_pipeline(query: str, query: int) -> str",
+        ):
+            with tempfile.TemporaryDirectory() as tmp:
+                manifest = {
+                    "manifest_version": "1.1.0",
+                    "package_name": "demo_mellea",
+                }
+                if bad_sig is not None:
+                    manifest["entry_signature"] = bad_sig
+                pkg = self._pkg(tmp, manifest)
+                res = lint_melleafy_manifest(pkg)
+                assert res.verdict == "fail", f"Expected fail for {bad_sig!r}"
+                assert any("entry_signature" in f.message for f in res.failures)
+
+    def test_fails_when_entry_signature_function_missing_from_pipeline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                {
+                    "manifest_version": "1.1.0",
+                    "package_name": "demo_mellea",
+                    "entry_signature": "missing_fn(query: str) -> str",
+                },
+            )
+            res = lint_melleafy_manifest(pkg)
+            assert res.verdict == "fail"
+            assert "missing_fn" in res.failures[0].message
+
+    def test_passes_when_entry_signature_function_is_imported_in_pipeline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                {
+                    "manifest_version": "1.1.0",
+                    "package_name": "demo_mellea",
+                    "entry_signature": "run_pipeline(query: str) -> str",
+                },
+                pipeline="from .core import run_pipeline\n",
+            )
+            assert lint_melleafy_manifest(pkg).verdict == "pass"
+
+    def test_fails_when_entry_signature_params_mismatch_pipeline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                {
+                    "manifest_version": "1.1.0",
+                    "package_name": "demo_mellea",
+                    "entry_signature": "run_pipeline(wrong: str) -> str",
+                },
+                pipeline="def run_pipeline(query: str) -> str:\n    return query\n",
+            )
+            res = lint_melleafy_manifest(pkg)
+            assert res.verdict == "fail"
+            msgs = " ".join(f.message for f in res.failures)
+            assert "wrong" in msgs
+            assert "query" in msgs
+
+    def test_fails_when_required_param_marked_optional_in_entry_signature(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                {
+                    "manifest_version": "1.1.0",
+                    "package_name": "demo_mellea",
+                    "entry_signature": "run_pipeline(query: str = 'hi') -> str",
+                },
+                pipeline="def run_pipeline(query: str) -> str:\n    return query\n",
+            )
+            res = lint_melleafy_manifest(pkg)
+            assert res.verdict == "fail"
+            assert "optional" in res.failures[0].message
+
+    def test_collects_all_field_failures_in_single_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                {
+                    "manifest_version": "0.5.0",
+                    "package_name": "wrong_mellea",
+                    "entry_signature": "<populated in Step 6>",
+                },
+            )
+            res = lint_melleafy_manifest(pkg)
+            assert res.verdict == "fail"
+            assert len(res.failures) == 3
+
+    def test_compiler_validate_fails_on_invalid_melleafy_json(self):
+        from mellea_skills_compiler.compile.compiler import validate
+        import pytest
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(
+                Path(tmp) / "synthetic_mellea",
+                {
+                    "__init__.py": "",
+                    "pipeline.py": "def run_pipeline(x: str) -> str:\n    return x\n",
+                    "fixtures/__init__.py": "ALL_FIXTURES = []\n",
+                    "config.py": 'BACKEND = "ollama"\nMODEL_ID = "granite4.1:3b"\n',
+                    "melleafy.json": json.dumps(
+                        {
+                            "manifest_version": "1.1.0",
+                            "package_name": "synthetic_mellea",
+                            "entry_signature": "not_a_valid_signature",
+                        }
+                    ),
+                },
+            )
+            with pytest.raises(Exception, match="Step 7 lints failed"):
+                validate(pkg, no_run=True, all_fixtures=False)

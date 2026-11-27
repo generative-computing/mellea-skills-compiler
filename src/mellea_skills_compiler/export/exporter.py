@@ -21,6 +21,61 @@ MIN_MANIFEST_VERSION = Version("1.0.0")
 
 SUPPORTED_TARGETS = {"langgraph", "claude-code", "mcp", "pi"}
 
+_ENTRY_SIG_RE = re.compile(r"^(\w+)\(([^)]*)\)\s*(?:->\s*(.+))?$")
+
+
+def _validate_manifest_version(raw_mv: Any) -> Optional[str]:
+    """Validate raw manifest_version string against MIN_MANIFEST_VERSION.
+
+    Returns an error message string if invalid, or None when valid.
+    """
+    if not isinstance(raw_mv, str) or isinstance(raw_mv, bool) or not raw_mv.strip():
+        return f"manifest_version {raw_mv!r} is not a valid semver string"
+    stripped = raw_mv.strip()
+    mv = stripped if stripped.count(".") >= 2 else stripped + ".0"
+    try:
+        parsed = Version(mv)
+    except Exception:
+        return f"manifest_version '{raw_mv}' is not a valid semver string"
+    if parsed < MIN_MANIFEST_VERSION:
+        return f"manifest_version {raw_mv} < required {MIN_MANIFEST_VERSION}"
+    return None
+
+
+def _validate_entry_signature_str(sig_str: Any) -> Optional[str]:
+    """Validate that an entry_signature string is well-formed for export.
+
+    Returns an error message string if invalid, or None when valid.
+    """
+    if not isinstance(sig_str, str) or not sig_str.strip():
+        return "manifest missing 'entry_signature'"
+    m = _ENTRY_SIG_RE.match(sig_str.strip())
+    if not m or not m.group(1).isidentifier():
+        return (
+            f"manifest 'entry_signature' {sig_str!r} is malformed "
+            "(expected '<func>(<params>) -> <ReturnType>')"
+        )
+    if m.group(3) is not None and not m.group(3).strip():
+        return (
+            f"manifest 'entry_signature' {sig_str!r} has an empty return type after '->'"
+        )
+    sig = _parse_entry_signature(sig_str)
+    seen: set[str] = set()
+    for p in sig.params:
+        pname = p["name"]
+        if not pname.isidentifier():
+            return (
+                f"manifest 'entry_signature' contains invalid parameter name "
+                f"{pname!r} in {sig_str!r}"
+            )
+        if pname in seen:
+            return (
+                f"manifest 'entry_signature' contains duplicate parameter "
+                f"{pname!r} in {sig_str!r}"
+            )
+        seen.add(pname)
+    return None
+
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -114,15 +169,15 @@ def stage1_validate(inv: Invocation) -> dict:
     except json.JSONDecodeError as e:
         _halt(2, f"melleafy.json is not valid JSON: {e}")
 
+    if not isinstance(manifest, dict):
+        _halt(2, f"melleafy.json must be a JSON object, got {type(manifest).__name__}")
+
     # Accept manifest_version (preferred) or format_version (emitted by melleafy v4.3.x).
     # Normalize 2-part versions like "1.0" → "1.0.0" before parsing.
     raw_mv = manifest.get("manifest_version") or manifest.get("format_version", "0.0.0")
-    mv = raw_mv if raw_mv.count(".") >= 2 else raw_mv + ".0"
-    try:
-        if Version(mv) < MIN_MANIFEST_VERSION:
-            _halt(2, f"manifest_version {raw_mv} < required {MIN_MANIFEST_VERSION}")
-    except Exception:
-        _halt(2, f"manifest_version '{raw_mv}' is not a valid semver string")
+    mv_err = _validate_manifest_version(raw_mv)
+    if mv_err:
+        _halt(2, mv_err)
 
     if inv.target not in SUPPORTED_TARGETS:
         _halt(
@@ -154,16 +209,19 @@ def stage2_load(inv: Invocation, manifest: dict) -> LoadedContext:
     sig_str = manifest.get("entry_signature") or manifest.get(
         "run_pipeline_signature", ""
     )
-    if not sig_str:
-        _halt(2, "manifest missing 'entry_signature'")
+    sig_err = _validate_entry_signature_str(sig_str)
+    if sig_err:
+        _halt(2, sig_err)
 
     sig = _parse_entry_signature(sig_str)
 
     entry_module = "pipeline"
 
     package_name = manifest.get("package_name")
-    if not package_name:
+    if not isinstance(package_name, str) or not package_name.strip():
         _halt(2, "manifest missing 'package_name'")
+    if not package_name.isidentifier():
+        _halt(2, f"manifest 'package_name' {package_name!r} is not a valid Python identifier")
 
     # Locate the importable Python package.
     # If <skill_root>/<package_name>/ exists with __init__.py, use it.
@@ -247,7 +305,7 @@ def _split_params(params_str: str) -> list[str]:
 
 def _parse_entry_signature(sig_str: str) -> ParsedSignature:
     """Parse 'run_pipeline(a: str, b: int = 0) -> ReturnType' into ParsedSignature."""
-    m = re.match(r"^(\w+)\(([^)]*)\)\s*(?:->\s*(.+))?$", sig_str.strip())
+    m = _ENTRY_SIG_RE.match(sig_str.strip())
     if not m:
         return ParsedSignature(
             function_name="run_pipeline",
@@ -696,12 +754,16 @@ def run_export(inv: Invocation) -> EmitResult:
                 f"Cannot derive output path: melleafy.json not found under {inv.package_path}",
             )
         try:
-            pkg_name = json.loads((manifest_dir / "melleafy.json").read_text()).get(
-                "package_name", ""
+            raw_manifest = json.loads((manifest_dir / "melleafy.json").read_text())
+        except json.JSONDecodeError as e:
+            _halt(2, f"melleafy.json is not valid JSON: {e}")
+        if not isinstance(raw_manifest, dict):
+            _halt(
+                2,
+                f"melleafy.json must be a JSON object, got {type(raw_manifest).__name__}",
             )
-        except Exception:
-            pkg_name = ""
-        if not pkg_name:
+        pkg_name = raw_manifest.get("package_name", "")
+        if not isinstance(pkg_name, str) or not pkg_name.strip():
             _halt(
                 2,
                 "Cannot derive output path: manifest missing 'package_name'. Pass out_path explicitly.",
