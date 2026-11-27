@@ -89,7 +89,7 @@
             "source_lines"
           ],
           "additionalProperties": false,
-          "description": "Optional. Source location of the element this constant was derived from. Written as '# PROVENANCE: <source_file>:<source_lines>' immediately after the constant declaration.",
+          "description": "Optional. Source location of the element this constant was derived from. Omit for constants not derived from a source file (e.g. BACKEND, MODEL_ID, LOOP_BUDGET). Written as '# PROVENANCE: <source_file>:<source_lines>' immediately after the constant declaration.",
           "properties": {
             "source_file": {
               "type": "string",
