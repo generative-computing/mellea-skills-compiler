@@ -213,7 +213,7 @@ def run_pipeline(input_text: str, check_mode: str = "validate") -> SecurityScanR
             intent = _safe_parse_with_fallback(
                 intent_thunk,
                 ScanIntent,
-                query_type="validate",
+                query_type="out_of_scope",
                 target=input_text,
                 confidence=0.5,
             )

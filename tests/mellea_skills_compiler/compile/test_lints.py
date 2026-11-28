@@ -2908,3 +2908,14 @@ class TestScopeGateFailClosed:
         ):
             text = (repo_root / rel).read_text()
             assert "`scope-gate-fail-closed`" in text
+
+    def test_bundled_examples_pass_scope_gate_lint(self):
+        examples_root = Path(__file__).resolve().parents[3] / "examples"
+        examples = sorted(examples_root.glob("*/*_mellea"))
+        assert examples
+        for ex in examples:
+            res = lint_scope_gate_fail_closed(ex)
+            assert res.verdict == "pass", (
+                f"{ex.name} failed scope-gate-fail-closed: "
+                f"{[(f.file, f.line, f.message) for f in res.failures]}"
+            )
