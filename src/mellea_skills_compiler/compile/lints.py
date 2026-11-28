@@ -2790,20 +2790,34 @@ def _check_entry_signature_against_pipeline(
         return []
 
     func_defs: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
-    imported_names: set[str] = set()
+    bound_names: set[str] = set()
+    has_star_import = False
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             func_defs[node.name] = node
+            bound_names.add(node.name)
         elif isinstance(node, ast.ImportFrom):
             for alias in node.names:
-                imported_names.add(alias.asname or alias.name)
+                if alias.name == "*":
+                    has_star_import = True
+                else:
+                    bound_names.add(alias.asname or alias.name)
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                imported_names.add(alias.asname or alias.name.split(".")[0])
+                bound_names.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                for tname in _target_names(target):
+                    bound_names.add(tname)
+                    func_defs.pop(tname, None)
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            for tname in _target_names(node.target):
+                bound_names.add(tname)
+                func_defs.pop(tname, None)
 
     fn_name = sig.function_name
     rule_ref = "melleafy.schema.json (exporter.py:stage2_load)"
-    if fn_name not in func_defs and fn_name not in imported_names:
+    if not has_star_import and fn_name not in bound_names:
         return [
             LintFailure(
                 file="melleafy.json",

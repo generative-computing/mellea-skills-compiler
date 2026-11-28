@@ -2698,6 +2698,54 @@ class TestMelleafyManifest:
             )
             assert lint_melleafy_manifest(pkg).verdict == "pass"
 
+    def test_passes_when_entry_signature_function_is_module_assigned(self):
+        for pipeline in (
+            "def _impl(query: str) -> str:\n    return query\nrun_pipeline = wrap(_impl)\n",
+            "from typing import Callable\nrun_pipeline: Callable[..., str] = wrap(_impl)\n",
+            "def run_pipeline(query: str) -> str:\n    return query\nrun_pipeline = wrap(run_pipeline)\n",
+        ):
+            with tempfile.TemporaryDirectory() as tmp:
+                pkg = self._pkg(
+                    tmp,
+                    {
+                        "manifest_version": "1.1.0",
+                        "package_name": "demo_mellea",
+                        "entry_signature": "run_pipeline(query: str) -> str",
+                    },
+                    pipeline=pipeline,
+                )
+                res = lint_melleafy_manifest(pkg)
+                assert res.verdict == "pass", [f.message for f in res.failures]
+
+    def test_fails_when_entry_signature_function_only_annotated_without_value(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                {
+                    "manifest_version": "1.1.0",
+                    "package_name": "demo_mellea",
+                    "entry_signature": "run_pipeline(query: str) -> str",
+                },
+                pipeline="from typing import Callable\nrun_pipeline: Callable[..., str]\n",
+            )
+            res = lint_melleafy_manifest(pkg)
+            assert res.verdict == "fail"
+            assert "run_pipeline" in res.failures[0].message
+
+    def test_passes_with_parenthesised_default_in_signature_and_pipeline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = self._pkg(
+                tmp,
+                {
+                    "manifest_version": "1.1.0",
+                    "package_name": "demo_mellea",
+                    "entry_signature": "run_pipeline(q: str, opts: tuple = ()) -> str",
+                },
+                pipeline="def run_pipeline(q: str, opts: tuple = ()) -> str:\n    return q\n",
+            )
+            res = lint_melleafy_manifest(pkg)
+            assert res.verdict == "pass", [f.message for f in res.failures]
+
     def test_fails_when_entry_signature_params_mismatch_pipeline(self):
         with tempfile.TemporaryDirectory() as tmp:
             pkg = self._pkg(

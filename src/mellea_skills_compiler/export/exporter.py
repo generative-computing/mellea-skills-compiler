@@ -5,7 +5,6 @@ from __future__ import annotations
 import ast
 import json
 import os
-import re
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -21,7 +20,106 @@ MIN_MANIFEST_VERSION = Version("1.0.0")
 
 SUPPORTED_TARGETS = {"langgraph", "claude-code", "mcp", "pi"}
 
-_ENTRY_SIG_RE = re.compile(r"^(\w+)\(([^)]*)\)\s*(?:->\s*(.+))?$")
+_BRACKET_PAIRS = {"(": ")", "[": "]", "{": "}"}
+_CLOSING_BRACKETS = {")", "]", "}"}
+
+
+def _advance_expr_state(
+    ch: str, quote: Optional[str], escaped: bool, stack: list[str]
+) -> Optional[tuple[Optional[str], bool]]:
+    """Advance quote/escape/bracket state by one char; return None on mismatch."""
+    if quote is not None:
+        if escaped:
+            return quote, False
+        if ch == "\\":
+            return quote, True
+        if ch == quote:
+            return None, False
+        return quote, False
+    if ch in ("'", '"'):
+        return ch, False
+    if ch in _BRACKET_PAIRS:
+        stack.append(_BRACKET_PAIRS[ch])
+        return None, False
+    if ch in _CLOSING_BRACKETS:
+        if not stack or ch != stack[-1]:
+            return None
+        stack.pop()
+        return None, False
+    return None, False
+
+
+def _is_balanced_expr(text: str) -> bool:
+    """Return True iff all quotes and brackets in ``text`` are balanced."""
+    quote: Optional[str] = None
+    escaped = False
+    stack: list[str] = []
+    for ch in text:
+        nxt = _advance_expr_state(ch, quote, escaped, stack)
+        if nxt is None:
+            return False
+        quote, escaped = nxt
+    return quote is None and not stack
+
+
+def _split_signature_header(
+    sig_str: str,
+) -> Optional[tuple[str, str, Optional[str], bool]]:
+    """Split ``name(params) -> ret`` with quote- and bracket-aware matching.
+
+    Returns ``(func_name, params_str, return_type_or_empty, has_arrow)`` or
+    ``None`` when the overall header shape is malformed or unbalanced.
+    """
+    s = sig_str.strip()
+    open_idx = s.find("(")
+    if open_idx <= 0:
+        return None
+    func_name = s[:open_idx].strip()
+    if not func_name.isidentifier():
+        return None
+
+    quote: Optional[str] = None
+    escaped = False
+    stack: list[str] = []
+    close_idx: Optional[int] = None
+    for idx in range(open_idx, len(s)):
+        nxt = _advance_expr_state(s[idx], quote, escaped, stack)
+        if nxt is None:
+            return None
+        quote, escaped = nxt
+        if quote is None and not stack:
+            close_idx = idx
+            break
+
+    if close_idx is None or quote is not None or stack:
+        return None
+
+    params_str = s[open_idx + 1 : close_idx]
+    rest = s[close_idx + 1 :].strip()
+    if not rest:
+        return func_name, params_str, None, False
+    if rest.startswith("->"):
+        return func_name, params_str, rest[2:].strip(), True
+    return None
+
+
+def _split_top_level(text: str, sep: str) -> tuple[str, Optional[str]]:
+    """Split ``text`` on the first top-level ``sep`` outside brackets and quotes."""
+    quote: Optional[str] = None
+    escaped = False
+    stack: list[str] = []
+    for idx, ch in enumerate(text):
+        if quote is None and not stack and ch == sep:
+            if sep == "=":
+                prev_ch = text[idx - 1] if idx > 0 else ""
+                next_ch = text[idx + 1] if idx + 1 < len(text) else ""
+                if prev_ch in ("=", "!", "<", ">") or next_ch == "=":
+                    continue
+            return text[:idx], text[idx + 1 :]
+        nxt = _advance_expr_state(ch, quote, escaped, stack)
+        if nxt is not None:
+            quote, escaped = nxt
+    return text, None
 
 
 def _validate_manifest_version(raw_mv: Any) -> Optional[str]:
@@ -49,16 +147,46 @@ def _validate_entry_signature_str(sig_str: Any) -> Optional[str]:
     """
     if not isinstance(sig_str, str) or not sig_str.strip():
         return "manifest missing 'entry_signature'"
-    m = _ENTRY_SIG_RE.match(sig_str.strip())
-    if not m or not m.group(1).isidentifier():
+    header = _split_signature_header(sig_str)
+    if header is None:
         return (
             f"manifest 'entry_signature' {sig_str!r} is malformed "
             "(expected '<func>(<params>) -> <ReturnType>')"
         )
-    if m.group(3) is not None and not m.group(3).strip():
-        return (
-            f"manifest 'entry_signature' {sig_str!r} has an empty return type after '->'"
-        )
+    _, params_str, ret_str, has_arrow = header
+    if has_arrow:
+        if not ret_str:
+            return (
+                f"manifest 'entry_signature' {sig_str!r} has an empty return type after '->'"
+            )
+        if not _is_balanced_expr(ret_str):
+            return (
+                f"manifest 'entry_signature' {sig_str!r} has a malformed return type"
+            )
+
+    if params_str.strip():
+        raw_parts = _split_params(params_str)
+        for idx, raw_part in enumerate(raw_parts):
+            part = raw_part.strip()
+            if not part:
+                # Allow a single trailing comma (e.g. `f(a: str,)`), reject leading/double commas.
+                if idx == len(raw_parts) - 1 and idx > 0:
+                    continue
+                return (
+                    f"manifest 'entry_signature' {sig_str!r} contains an empty parameter"
+                )
+            if not _is_balanced_expr(part):
+                return (
+                    f"manifest 'entry_signature' {sig_str!r} has unbalanced parameter "
+                    f"syntax in {part!r}"
+                )
+            _, default_part = _split_top_level(part, "=")
+            if default_part is not None and not default_part.strip():
+                return (
+                    f"manifest 'entry_signature' {sig_str!r} has an empty default value "
+                    f"in {part!r}"
+                )
+
     sig = _parse_entry_signature(sig_str)
     seen: set[str] = set()
     for p in sig.params:
@@ -278,35 +406,34 @@ def stage2_load(inv: Invocation, manifest: dict) -> LoadedContext:
 
 
 def _split_params(params_str: str) -> list[str]:
-    """Split a parameter string on commas, respecting brackets.
+    """Split a parameter string on commas, respecting brackets and quotes.
 
-    'a: str, b: Dict[str, int], c: int = 0' → ['a: str', 'b: Dict[str, int]', 'c: int = 0']
-    A plain split(",") breaks on commas inside brackets (e.g. Dict[str, int]).
+    'a: str, b: Dict[str, int], c: tuple = ()' → ['a: str', 'b: Dict[str, int]', 'c: tuple = ()']
+    A plain split(",") breaks on commas inside brackets or quoted defaults.
     """
     parts: list[str] = []
-    depth = 0
+    quote: Optional[str] = None
+    escaped = False
+    stack: list[str] = []
     current: list[str] = []
     for ch in params_str:
-        if ch in ("[", "(", "{"):
-            depth += 1
-            current.append(ch)
-        elif ch in ("]", ")", "}"):
-            depth -= 1
-            current.append(ch)
-        elif ch == "," and depth == 0:
+        if quote is None and not stack and ch == ",":
             parts.append("".join(current))
             current = []
-        else:
-            current.append(ch)
-    if current:
+            continue
+        nxt = _advance_expr_state(ch, quote, escaped, stack)
+        if nxt is not None:
+            quote, escaped = nxt
+        current.append(ch)
+    if current or parts:
         parts.append("".join(current))
     return parts
 
 
 def _parse_entry_signature(sig_str: str) -> ParsedSignature:
     """Parse 'run_pipeline(a: str, b: int = 0) -> ReturnType' into ParsedSignature."""
-    m = _ENTRY_SIG_RE.match(sig_str.strip())
-    if not m:
+    header = _split_signature_header(sig_str)
+    if header is None:
         return ParsedSignature(
             function_name="run_pipeline",
             params=[],
@@ -314,9 +441,9 @@ def _parse_entry_signature(sig_str: str) -> ParsedSignature:
             pattern="no_args",
         )
 
-    func_name = m.group(1)
-    params_str = m.group(2).strip()
-    return_type = (m.group(3) or "Any").strip()
+    func_name, params_raw, ret_str, _ = header
+    params_str = params_raw.strip()
+    return_type = ret_str or "Any"
 
     params = []
     if params_str:
@@ -324,12 +451,13 @@ def _parse_entry_signature(sig_str: str) -> ParsedSignature:
             part = part.strip()
             if not part:
                 continue
-            has_default = "=" in part
-            name_type = part.split("=")[0].strip()
-            if ":" in name_type:
-                name, ptype = name_type.split(":", 1)
-                name = name.strip()
-                ptype = ptype.strip()
+            name_type_raw, default_raw = _split_top_level(part, "=")
+            has_default = default_raw is not None
+            name_type = name_type_raw.strip()
+            pname_raw, ptype_raw = _split_top_level(name_type, ":")
+            if ptype_raw is not None:
+                name = pname_raw.strip()
+                ptype = ptype_raw.strip() or "Any"
             else:
                 name = name_type
                 ptype = "Any"
@@ -338,7 +466,7 @@ def _parse_entry_signature(sig_str: str) -> ParsedSignature:
                     "name": name,
                     "type": ptype,
                     "required": not has_default,
-                    "default": part.split("=", 1)[1].strip() if has_default else None,
+                    "default": default_raw.strip() if default_raw is not None else None,
                 }
             )
 
