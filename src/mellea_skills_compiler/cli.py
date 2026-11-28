@@ -97,7 +97,7 @@ def compile(
         typer.Option(
             "--skill-backend",
             help="Override the LLM backend used by the compiled skill at runtime "
-            "(default from mellea_skills_compiler/compile/claude/data/runtime_defaults.json).",
+            "(default from .claude/data/runtime_defaults.json).",
         ),
     ] = None,
     skill_model: Annotated[
@@ -105,7 +105,7 @@ def compile(
         typer.Option(
             "--skill-model",
             help="Override the model id used by the compiled skill at runtime "
-            "(default from mellea_skills_compiler/compile/claude/data/runtime_defaults.json).",
+            "(default from .claude/data/runtime_defaults.json).",
         ),
     ] = None,
     backend: Annotated[
