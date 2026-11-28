@@ -12,7 +12,7 @@ In most cases you don't invoke `/mellea-fy` directly — `mellea-skills compile`
 mellea-skills compile skills/checklist/spec.md
 ```
 
-This invokes `/mellea-fy` automatically inside Claude Code or IBM Bob, then chains into the post-compile pipeline (writer-rendered `config.py` and `fixtures/`, Step 7 lints, smoke check).
+This invokes `/mellea-fy` automatically inside Claude Code, IBM Bob or pi (whichever `--backend` you compile with), then chains into the post-compile pipeline (writer-rendered `config.py` and `fixtures/`, Step 7 lints, smoke check).
 
 ### Alternative: directly inside Claude Code / IBM Bob
 
