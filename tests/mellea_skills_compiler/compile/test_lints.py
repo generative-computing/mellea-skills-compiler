@@ -27,6 +27,7 @@ from mellea_skills_compiler.compile.lints import (
     lint_prefix_persona,
     lint_raw_llm_json_parse,
     lint_runtime_defaults_bound,
+    lint_scope_gate_fail_closed,
     lint_session_boundary,
     lint_session_method_arity,
     lint_stdlib_arg_types,
@@ -613,6 +614,46 @@ class TestRunLints:
             }
             assert result.overall_verdict == "fail"
             assert "raw-llm-json-parse" in failed_lints
+
+    def test_scope_gate_fail_open_caught_by_runner(self):
+        schemas = (
+            "from typing import Literal\n"
+            "from pydantic import BaseModel\n"
+            "class ScanIntent(BaseModel):\n"
+            "    query_type: Literal['validate', 'out_of_scope']\n"
+        )
+        pipeline = (
+            "from .schemas import ScanIntent\n"
+            "def _safe_parse_with_fallback(thunk, model_class, **fallback_kwargs):\n"
+            "    try:\n"
+            "        return model_class.model_validate_json(thunk.value)\n"
+            "    except Exception:\n"
+            "        return model_class(**fallback_kwargs)\n"
+            "def run_pipeline(query: str, m=None):\n"
+            "    intent_thunk = m.instruct('classify', format=ScanIntent)\n"
+            "    intent = _safe_parse_with_fallback(intent_thunk, ScanIntent, query_type='validate')\n"
+            "    if intent.query_type == 'out_of_scope':\n"
+            "        return 'refused'\n"
+            "    return 'allowed'\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(
+                Path(tmp) / "synthetic_mellea",
+                {
+                    "__init__.py": "",
+                    "schemas.py": schemas,
+                    "pipeline.py": pipeline,
+                    "fixtures/__init__.py": "ALL_FIXTURES = []\n",
+                    "config.py": 'BACKEND = "ollama"\nMODEL_ID = "granite4.1:3b"\n',
+                },
+            )
+            _write_directive(pkg, "ollama", "granite4.1:3b")
+            result = run_lints(pkg)
+            failed_lints = {
+                lint.lint_id for lint in result.lints if lint.verdict == "fail"
+            }
+            assert result.overall_verdict == "fail"
+            assert "scope-gate-fail-closed" in failed_lints
 
     def test_overall_fail_on_any_lint_fail(self):
         """A package with one failing lint should yield overall 'fail'."""
@@ -2491,3 +2532,390 @@ class TestPyprojectPackageDiscovery:
         with tempfile.TemporaryDirectory() as tmp:
             pkg = self._pkg(tmp, None)
             assert lint_pyproject_package_discovery(pkg).verdict == "skipped"
+
+
+# ─── TestScopeGateFailClosed ───
+
+
+class TestScopeGateFailClosed:
+    """Test cases for lint_scope_gate_fail_closed."""
+
+    def test_literal_out_of_scope_with_in_scope_fallback_fails(self):
+        schemas = (
+            "from typing import Literal\n"
+            "from pydantic import BaseModel\n"
+            "class ScanIntent(BaseModel):\n"
+            "    query_type: Literal['validate', 'check_url', 'out_of_scope']\n"
+        )
+        pipeline = (
+            "from .schemas import ScanIntent\n"
+            "def run(thunk):\n"
+            "    return _safe_parse_with_fallback(thunk, ScanIntent, query_type='validate')\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(
+                Path(tmp), {"schemas.py": schemas, "pipeline.py": pipeline}
+            )
+            result = lint_scope_gate_fail_closed(pkg)
+            assert result.verdict == "fail"
+            assert len(result.failures) == 1
+            assert "query_type='validate'" in result.failures[0].message
+            assert "out_of_scope" in result.failures[0].message
+
+    def test_literal_out_of_scope_with_out_of_scope_fallback_passes(self):
+        schemas = (
+            "from typing import Literal\n"
+            "from pydantic import BaseModel\n"
+            "class ScanIntent(BaseModel):\n"
+            "    query_type: Literal['validate', 'check_url', 'out_of_scope']\n"
+        )
+        pipeline = (
+            "from .schemas import ScanIntent\n"
+            "def run(thunk):\n"
+            "    return _safe_parse_with_fallback(thunk, ScanIntent, query_type='out_of_scope')\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = _make_package(
+                Path(tmp), {"schemas.py": schemas, "pipeline.py": pipeline}
+            )
+            result = lint_scope_gate_fail_closed(pkg)
+            assert result.verdict == "pass"
+
+    def test_enum_scope_gate_pass_and_fail(self):
+        schemas = (
+            "from enum import Enum\n"
+            "from pydantic import BaseModel\n"
+            "class QueryKind(str, Enum):\n"
+            "    CURRENT = 'current'\n"
+            "    OUT_OF_SCOPE = 'out_of_scope'\n"
+            "class QueryIntent(BaseModel):\n"
+            "    query_type: QueryKind\n"
+        )
+        good_pipeline = (
+            "from .schemas import QueryIntent, QueryKind\n"
+            "def run(thunk):\n"
+            "    return _safe_parse_with_fallback(thunk, QueryIntent, query_type=QueryKind.OUT_OF_SCOPE)\n"
+        )
+        bad_pipeline = (
+            "from .schemas import QueryIntent, QueryKind\n"
+            "def run(thunk):\n"
+            "    return _safe_parse_with_fallback(thunk, QueryIntent, query_type=QueryKind.CURRENT)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            good_pkg = _make_package(
+                Path(tmp) / "good",
+                {"schemas.py": schemas, "pipeline.py": good_pipeline},
+            )
+            assert lint_scope_gate_fail_closed(good_pkg).verdict == "pass"
+
+            bad_pkg = _make_package(
+                Path(tmp) / "bad",
+                {"schemas.py": schemas, "pipeline.py": bad_pipeline},
+            )
+            bad_result = lint_scope_gate_fail_closed(bad_pkg)
+            assert bad_result.verdict == "fail"
+            assert "QueryKind.CURRENT" in bad_result.failures[0].message
+
+    def test_in_scope_and_refuse_literal_enforced(self):
+        schemas = (
+            "from typing import Literal\n"
+            "from pydantic import BaseModel\n"
+            "class Gate(BaseModel):\n"
+            "    decision: Literal['in_scope', 'refuse']\n"
+        )
+        bad_pipeline = (
+            "from .schemas import Gate\n"
+            "def run(thunk):\n"
+            "    return _safe_parse_with_fallback(thunk, Gate, decision='in_scope')\n"
+        )
+        good_pipeline = (
+            "from .schemas import Gate\n"
+            "def run(thunk):\n"
+            "    return _safe_parse_with_fallback(thunk, Gate, decision='refuse')\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            assert (
+                lint_scope_gate_fail_closed(
+                    _make_package(
+                        Path(tmp) / "bad",
+                        {"schemas.py": schemas, "pipeline.py": bad_pipeline},
+                    )
+                ).verdict
+                == "fail"
+            )
+            assert (
+                lint_scope_gate_fail_closed(
+                    _make_package(
+                        Path(tmp) / "good",
+                        {"schemas.py": schemas, "pipeline.py": good_pipeline},
+                    )
+                ).verdict
+                == "pass"
+            )
+
+    def test_boolean_in_scope_and_out_of_scope_fields(self):
+        schemas = (
+            "from pydantic import BaseModel\n"
+            "class InScopeGate(BaseModel):\n"
+            "    in_scope: bool\n"
+            "class OutScopeGate(BaseModel):\n"
+            "    out_of_scope: bool\n"
+        )
+        bad_pipeline = (
+            "from .schemas import InScopeGate, OutScopeGate\n"
+            "def run(t1, t2):\n"
+            "    a = _safe_parse_with_fallback(t1, InScopeGate, in_scope=True)\n"
+            "    b = _safe_parse_with_fallback(t2, OutScopeGate, out_of_scope=False)\n"
+            "    return a, b\n"
+        )
+        good_pipeline = (
+            "from .schemas import InScopeGate, OutScopeGate\n"
+            "def run(t1, t2):\n"
+            "    a = _safe_parse_with_fallback(t1, InScopeGate, in_scope=False)\n"
+            "    b = _safe_parse_with_fallback(t2, OutScopeGate, out_of_scope=True)\n"
+            "    return a, b\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            bad_res = lint_scope_gate_fail_closed(
+                _make_package(
+                    Path(tmp) / "bad",
+                    {"schemas.py": schemas, "pipeline.py": bad_pipeline},
+                )
+            )
+            assert bad_res.verdict == "fail"
+            assert len(bad_res.failures) == 2
+
+            good_res = lint_scope_gate_fail_closed(
+                _make_package(
+                    Path(tmp) / "good",
+                    {"schemas.py": schemas, "pipeline.py": good_pipeline},
+                )
+            )
+            assert good_res.verdict == "pass"
+
+    def test_schema_defaults_fail_open_caught_and_fail_closed_allowed(self):
+        bad_schemas = (
+            "from typing import Literal\n"
+            "from pydantic import BaseModel, Field\n"
+            "class GateA(BaseModel):\n"
+            "    in_scope: bool = True\n"
+            "class GateB(BaseModel):\n"
+            "    query_type: Literal['search', 'out_of_scope'] = Field(default='search')\n"
+        )
+        good_schemas = (
+            "from typing import Literal\n"
+            "from pydantic import BaseModel, Field\n"
+            "class GateA(BaseModel):\n"
+            "    in_scope: bool = False\n"
+            "class GateB(BaseModel):\n"
+            "    query_type: Literal['search', 'out_of_scope'] = Field(default='out_of_scope')\n"
+        )
+        pipeline = (
+            "from .schemas import GateA, GateB\n"
+            "def run(t1, t2):\n"
+            "    return _safe_parse_with_fallback(t1, GateA), _safe_parse_with_fallback(t2, GateB)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            bad_res = lint_scope_gate_fail_closed(
+                _make_package(
+                    Path(tmp) / "bad",
+                    {"schemas.py": bad_schemas, "pipeline.py": pipeline},
+                )
+            )
+            assert bad_res.verdict == "fail"
+            assert any(f.file == "schemas.py" for f in bad_res.failures)
+
+            good_res = lint_scope_gate_fail_closed(
+                _make_package(
+                    Path(tmp) / "good",
+                    {"schemas.py": good_schemas, "pipeline.py": pipeline},
+                )
+            )
+            assert good_res.verdict == "pass"
+
+    def test_omitted_required_scope_field_in_fallback_fails(self):
+        schemas = (
+            "from typing import Literal\n"
+            "from pydantic import BaseModel, Field\n"
+            "class Gate(BaseModel):\n"
+            "    query_type: Literal['ok', 'out_of_scope'] = Field(description='scope')\n"
+        )
+        pipeline = (
+            "from .schemas import Gate\n"
+            "def run(t):\n"
+            "    return _safe_parse_with_fallback(t, Gate)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            res = lint_scope_gate_fail_closed(
+                _make_package(
+                    Path(tmp), {"schemas.py": schemas, "pipeline.py": pipeline}
+                )
+            )
+            assert res.verdict == "fail"
+            assert "omits `query_type`" in res.failures[0].message
+
+    def test_string_typed_scope_field_inferred_from_comparison(self):
+        schemas = (
+            "from pydantic import BaseModel\n"
+            "class Intent(BaseModel):\n"
+            "    query_type: str\n"
+        )
+        bad_pipeline = (
+            "from .schemas import Intent\n"
+            "def run(t):\n"
+            "    intent = _safe_parse_with_fallback(t, Intent, query_type='general')\n"
+            "    if intent.query_type == 'out_of_scope':\n"
+            "        return 'refuse'\n"
+            "    return 'allow'\n"
+        )
+        good_pipeline = (
+            "from .schemas import Intent\n"
+            "def run(t):\n"
+            "    intent = _safe_parse_with_fallback(t, Intent, query_type='out_of_scope')\n"
+            "    if intent.query_type == 'out_of_scope':\n"
+            "        return 'refuse'\n"
+            "    return 'allow'\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            assert (
+                lint_scope_gate_fail_closed(
+                    _make_package(
+                        Path(tmp) / "bad",
+                        {"schemas.py": schemas, "pipeline.py": bad_pipeline},
+                    )
+                ).verdict
+                == "fail"
+            )
+            assert (
+                lint_scope_gate_fail_closed(
+                    _make_package(
+                        Path(tmp) / "good",
+                        {"schemas.py": schemas, "pipeline.py": good_pipeline},
+                    )
+                ).verdict
+                == "pass"
+            )
+
+    def test_except_block_instantiation_and_dict_fallbacks(self):
+        schemas = (
+            "from typing import Literal\n"
+            "from pydantic import BaseModel\n"
+            "class ScanIntent(BaseModel):\n"
+            "    query_type: Literal['validate', 'out_of_scope']\n"
+        )
+        bad_except_pipeline = (
+            "from .schemas import ScanIntent\n"
+            "def run(t):\n"
+            "    try:\n"
+            "        intent = ScanIntent.model_validate_json(t.value)\n"
+            "    except Exception:\n"
+            "        intent = ScanIntent(query_type='validate')\n"
+            "    return intent\n"
+        )
+        bad_dict_pipeline = (
+            "def run(raw):\n"
+            "    parsed = _parse_llm_json(raw)\n"
+            "    if parsed is None:\n"
+            "        mode = 'validate'\n"
+            "    else:\n"
+            "        mode = parsed.get('query_type', 'validate')\n"
+            "    if mode == 'out_of_scope':\n"
+            "        return 'refused'\n"
+            "    return mode\n"
+        )
+        good_dict_pipeline = (
+            "def run(raw):\n"
+            "    parsed = _parse_llm_json(raw)\n"
+            "    if parsed is None:\n"
+            "        mode = 'out_of_scope'\n"
+            "    else:\n"
+            "        mode = parsed.get('query_type', 'out_of_scope')\n"
+            "    if mode == 'out_of_scope':\n"
+            "        return 'refused'\n"
+            "    return mode\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            res_except = lint_scope_gate_fail_closed(
+                _make_package(
+                    Path(tmp) / "exc",
+                    {"schemas.py": schemas, "pipeline.py": bad_except_pipeline},
+                )
+            )
+            assert res_except.verdict == "fail"
+
+            res_dict_bad = lint_scope_gate_fail_closed(
+                _make_package(
+                    Path(tmp) / "dict_bad", {"pipeline.py": bad_dict_pipeline}
+                )
+            )
+            assert res_dict_bad.verdict == "fail"
+            assert len(res_dict_bad.failures) == 2
+
+            res_dict_good = lint_scope_gate_fail_closed(
+                _make_package(
+                    Path(tmp) / "dict_good", {"pipeline.py": good_dict_pipeline}
+                )
+            )
+            assert res_dict_good.verdict == "pass"
+
+    def test_non_scope_models_not_flagged(self):
+        schemas = (
+            "from pydantic import BaseModel\n"
+            "class IssueVerdict(BaseModel):\n"
+            "    confirmed: bool = False\n"
+            "class AttackList(BaseModel):\n"
+            "    paths: list[str] = []\n"
+        )
+        pipeline = (
+            "from .schemas import IssueVerdict, AttackList\n"
+            "def run(t1, t2):\n"
+            "    v = _safe_parse_with_fallback(t1, IssueVerdict, confirmed=False)\n"
+            "    a = _safe_parse_with_fallback(t2, AttackList, paths=[])\n"
+            "    return v, a\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            res = lint_scope_gate_fail_closed(
+                _make_package(
+                    Path(tmp), {"schemas.py": schemas, "pipeline.py": pipeline}
+                )
+            )
+            assert res.verdict == "pass"
+
+    def test_prompt_templates_require_fail_closed_scope_gate(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        for rel in (
+            ".claude/commands/mellea-fy-generate.md",
+            ".pi/prompts/mellea-fy-generate.md",
+            ".bob/skills/mellea-fy-generate/SKILL.md",
+        ):
+            text = (repo_root / rel).read_text()
+            assert "Scope gate fail-closed rule (REQUIRED)" in text
+            assert "scope-gate-fail-closed" in text
+
+        for rel in (
+            ".claude/commands/mellea-fy-behaviours.md",
+            ".pi/prompts/mellea-fy-behaviours.md",
+            ".bob/skills/mellea-fy-behaviours/SKILL.md",
+        ):
+            text = (repo_root / rel).read_text()
+            assert "KB13:" in text
+            assert "scope-gate-fail-closed" in text
+
+        for rel in (
+            ".claude/commands/mellea-fy-validate.md",
+            ".pi/prompts/mellea-fy-validate.md",
+            ".bob/skills/mellea-fy-validate/SKILL.md",
+        ):
+            text = (repo_root / rel).read_text()
+            assert "`scope-gate-fail-closed`" in text
+
+    def test_bundled_examples_pass_scope_gate_lint(self):
+        examples_root = Path(__file__).resolve().parents[3] / "examples"
+        examples = sorted(examples_root.glob("*/*_mellea"))
+        assert examples
+        for ex in examples:
+            res = lint_scope_gate_fail_closed(ex)
+            assert res.verdict == "pass", (
+                f"{ex.name} failed scope-gate-fail-closed: "
+                f"{[(f.file, f.line, f.message) for f in res.failures]}"
+            )

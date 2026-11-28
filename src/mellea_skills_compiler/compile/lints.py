@@ -2735,6 +2735,964 @@ def lint_pyproject_package_discovery(package_dir: Path) -> LintResult:
     return result
 
 
+# ─── Lint: scope-gate-fail-closed ───
+#
+# Generated pipelines often open with a scope gate (e.g. classifying intent
+# with `m.instruct(format=IntentSchema)` and returning early when
+# `query_type == "out_of_scope"` or `not in_scope`). When the model's reply
+# cannot be parsed (or omits the field), a fallback or schema default that
+# resolves to an in-scope value fails open, allowing unvalidated or forbidden
+# requests to proceed. Scope gates must always fail closed.
+
+
+_SCOPE_REFUSAL_SENTINELS: frozenset = frozenset(
+    {
+        "out_of_scope",
+        "refuse",
+        "refused",
+        "reject",
+        "rejected",
+        "unsupported",
+        "blocked",
+        "disallowed",
+        "denied",
+    }
+)
+
+_BOOL_IN_SCOPE_FIELDS: frozenset = frozenset(
+    {"in_scope", "is_in_scope", "within_scope", "is_within_scope"}
+)
+_BOOL_OUT_OF_SCOPE_FIELDS: frozenset = frozenset(
+    {"out_of_scope", "is_out_of_scope"}
+)
+_SCOPE_CLASS_BOOL_ALLOW_FIELDS: frozenset = frozenset(
+    {"allowed", "is_allowed", "accepted", "valid", "ok", "passed"}
+)
+_SCOPE_CLASS_BOOL_DENY_FIELDS: frozenset = frozenset(
+    {"refuse", "refused", "reject", "rejected", "blocked"}
+)
+_ENUM_BASE_NAMES: frozenset = frozenset({"Enum", "StrEnum", "IntEnum"})
+
+
+@dataclass
+class _ScopeFieldSpec:
+    model_name: str
+    field_name: str
+    kind: str  # "sentinel" | "bool"
+    expected_bool: Optional[bool] = None
+    fail_closed_tokens: frozenset = field(default_factory=frozenset)
+    has_fail_closed_default: bool = False
+
+
+def _normalize_scope_token(value: str) -> str:
+    return value.strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _unwrap_annotation_expr(node: ast.expr) -> ast.expr:
+    """Unwrap Optional[T], Annotated[T, ...], T | None, and Union[T, None]."""
+    current = node
+    while True:
+        if isinstance(current, ast.Subscript) and isinstance(current.value, ast.Name):
+            outer = current.value.id
+            if outer == "Annotated":
+                if isinstance(current.slice, ast.Tuple) and current.slice.elts:
+                    current = current.slice.elts[0]
+                    continue
+            elif outer == "Optional":
+                current = current.slice
+                continue
+            elif outer == "Union" and isinstance(current.slice, ast.Tuple):
+                non_none = [
+                    elt
+                    for elt in current.slice.elts
+                    if not (isinstance(elt, ast.Constant) and elt.value is None)
+                ]
+                if len(non_none) == 1:
+                    current = non_none[0]
+                    continue
+        elif isinstance(current, ast.BinOp) and isinstance(current.op, ast.BitOr):
+            left_none = isinstance(current.left, ast.Constant) and current.left.value is None
+            right_none = isinstance(current.right, ast.Constant) and current.right.value is None
+            if left_none and not right_none:
+                current = current.right
+                continue
+            if right_none and not left_none:
+                current = current.left
+                continue
+        return current
+
+
+def _extract_literal_strings(node: ast.expr) -> Optional[List[str]]:
+    """Return string constants if ``node`` is ``Literal[...]``; else None."""
+    if not isinstance(node, ast.Subscript):
+        return None
+    is_literal = (
+        isinstance(node.value, ast.Name) and node.value.id == "Literal"
+    ) or (
+        isinstance(node.value, ast.Attribute) and node.value.attr == "Literal"
+    )
+    if not is_literal:
+        return None
+    elts = (
+        list(node.slice.elts)
+        if isinstance(node.slice, ast.Tuple)
+        else [node.slice]
+    )
+    strings: List[str] = []
+    for elt in elts:
+        if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+            strings.append(elt.value)
+    return strings if strings else None
+
+
+def _annotation_name(node: ast.expr) -> Optional[str]:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _collect_scope_enums(
+    trees: List[Tuple[str, ast.AST]],
+) -> Dict[str, frozenset]:
+    """Return ``{EnumName: frozenset(fail_closed_member_or_value_tokens)}``."""
+    raw_enums: Dict[str, Dict[str, Optional[str]]] = {}
+    for _, tree in trees:
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            is_enum = any(
+                _annotation_name(base) in _ENUM_BASE_NAMES for base in node.bases
+            )
+            if not is_enum:
+                continue
+            members: Dict[str, Optional[str]] = {}
+            for stmt in node.body:
+                if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                    tgt = stmt.targets[0]
+                    if isinstance(tgt, ast.Name):
+                        val = (
+                            stmt.value.value
+                            if isinstance(stmt.value, ast.Constant)
+                            and isinstance(stmt.value.value, str)
+                            else None
+                        )
+                        members[tgt.id] = val
+                elif (
+                    isinstance(stmt, ast.AnnAssign)
+                    and isinstance(stmt.target, ast.Name)
+                    and stmt.value is not None
+                ):
+                    val = (
+                        stmt.value.value
+                        if isinstance(stmt.value, ast.Constant)
+                        and isinstance(stmt.value.value, str)
+                        else None
+                    )
+                    members[stmt.target.id] = val
+            if members:
+                raw_enums[node.name] = members
+
+    scope_enums: Dict[str, frozenset] = {}
+    for enum_name, members in raw_enums.items():
+        all_tokens: Set[str] = set()
+        out_of_scope_tokens: Set[str] = set()
+        refusal_tokens: Set[str] = set()
+        for member_name, member_val in members.items():
+            name_tok = _normalize_scope_token(member_name)
+            val_tok = (
+                _normalize_scope_token(member_val)
+                if member_val is not None
+                else None
+            )
+            tokens_for_member = {name_tok} | ({val_tok} if val_tok else set())
+            all_tokens.update(tokens_for_member)
+            if "out_of_scope" in tokens_for_member:
+                out_of_scope_tokens.update(tokens_for_member)
+            if tokens_for_member & _SCOPE_REFUSAL_SENTINELS:
+                refusal_tokens.update(tokens_for_member)
+
+        if out_of_scope_tokens:
+            scope_enums[enum_name] = frozenset(out_of_scope_tokens)
+        elif "in_scope" in all_tokens and refusal_tokens:
+            scope_enums[enum_name] = frozenset(refusal_tokens)
+    return scope_enums
+
+
+def _collect_pydantic_models(
+    trees: List[Tuple[str, ast.AST]],
+) -> Dict[str, Tuple[str, ast.ClassDef]]:
+    """Return ``{ClassName: (rel_path, ClassDef)}`` for all BaseModel classes."""
+    classes: Dict[str, Tuple[str, ast.ClassDef]] = {}
+    all_defs: List[Tuple[str, ast.ClassDef]] = []
+    for rel, tree in trees:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                all_defs.append((rel, node))
+
+    def _is_base_model(base: ast.expr) -> bool:
+        bname = _annotation_name(base)
+        return bname == "BaseModel" or bname in classes
+
+    changed = True
+    while changed:
+        changed = False
+        for rel, cls_node in all_defs:
+            if cls_node.name in classes:
+                continue
+            if any(_is_base_model(b) for b in cls_node.bases):
+                classes[cls_node.name] = (rel, cls_node)
+                changed = True
+    return classes
+
+
+def _extract_pydantic_default(stmt: ast.AnnAssign) -> Optional[ast.expr]:
+    """Return the default expression for a Pydantic field, or None if required."""
+    val = stmt.value
+    if val is None:
+        return None
+    if isinstance(val, ast.Call) and _annotation_name(val.func) == "Field":
+        for kw in val.keywords:
+            if kw.arg == "default":
+                if isinstance(kw.value, ast.Constant) and kw.value.value is Ellipsis:
+                    return None
+                return kw.value
+        if val.args:
+            first = val.args[0]
+            if isinstance(first, ast.Constant) and first.value is Ellipsis:
+                return None
+            return first
+        return None
+    if isinstance(val, ast.Constant) and val.value is Ellipsis:
+        return None
+    return val
+
+
+def _resolve_expr(
+    node: ast.expr, bindings: Dict[str, ast.expr], depth: int = 0
+) -> ast.expr:
+    """Resolve simple local/module Name aliases up to bounded depth."""
+    if depth >= 4:
+        return node
+    if isinstance(node, ast.Name) and node.id in bindings:
+        return _resolve_expr(bindings[node.id], bindings, depth + 1)
+    return node
+
+
+def _expr_is_fail_closed(
+    expr: ast.expr, spec: _ScopeFieldSpec, bindings: Dict[str, ast.expr]
+) -> bool:
+    """Return True iff ``expr`` statically resolves to a fail-closed value."""
+    resolved = _resolve_expr(expr, bindings)
+    if spec.kind == "bool":
+        return (
+            isinstance(resolved, ast.Constant)
+            and isinstance(resolved.value, bool)
+            and resolved.value is spec.expected_bool
+        )
+
+    # Sentinel or Enum member
+    if isinstance(resolved, ast.Constant) and isinstance(resolved.value, str):
+        return _normalize_scope_token(resolved.value) in spec.fail_closed_tokens
+    if isinstance(resolved, ast.Attribute):
+        return _normalize_scope_token(resolved.attr) in spec.fail_closed_tokens
+    if (
+        isinstance(resolved, ast.Call)
+        and len(resolved.args) == 1
+        and isinstance(resolved.args[0], ast.Constant)
+        and isinstance(resolved.args[0].value, str)
+    ):
+        return _normalize_scope_token(resolved.args[0].value) in spec.fail_closed_tokens
+    return False
+
+
+def _collect_scope_specs(
+    models: Dict[str, Tuple[str, ast.ClassDef]],
+    scope_enums: Dict[str, frozenset],
+) -> Tuple[Dict[str, Dict[str, _ScopeFieldSpec]], Dict[str, List[str]]]:
+    """Identify scope-gate fields on Pydantic models.
+
+    Returns ``(specs_by_model, field_order_by_model)``.
+    """
+    specs_by_model: Dict[str, Dict[str, _ScopeFieldSpec]] = {}
+    field_order: Dict[str, List[str]] = {}
+
+    for model_name, (_, cls_node) in models.items():
+        fields: List[str] = []
+        for stmt in cls_node.body:
+            if not isinstance(stmt, ast.AnnAssign) or not isinstance(
+                stmt.target, ast.Name
+            ):
+                continue
+            fname = stmt.target.id
+            fields.append(fname)
+            ann = _unwrap_annotation_expr(stmt.annotation)
+
+            literals = _extract_literal_strings(ann)
+            if literals is not None:
+                norm_map = {_normalize_scope_token(v): v for v in literals}
+                if "out_of_scope" in norm_map:
+                    specs_by_model.setdefault(model_name, {})[fname] = (
+                        _ScopeFieldSpec(
+                            model_name=model_name,
+                            field_name=fname,
+                            kind="sentinel",
+                            fail_closed_tokens=frozenset({"out_of_scope"}),
+                        )
+                    )
+                elif "in_scope" in norm_map and (
+                    set(norm_map) & _SCOPE_REFUSAL_SENTINELS
+                ):
+                    refusals = frozenset(set(norm_map) & _SCOPE_REFUSAL_SENTINELS)
+                    specs_by_model.setdefault(model_name, {})[fname] = (
+                        _ScopeFieldSpec(
+                            model_name=model_name,
+                            field_name=fname,
+                            kind="sentinel",
+                            fail_closed_tokens=refusals,
+                        )
+                    )
+                continue
+
+            ann_name = _annotation_name(ann)
+            if ann_name in scope_enums:
+                specs_by_model.setdefault(model_name, {})[fname] = _ScopeFieldSpec(
+                    model_name=model_name,
+                    field_name=fname,
+                    kind="sentinel",
+                    fail_closed_tokens=scope_enums[ann_name],
+                )
+                continue
+
+            if ann_name == "bool":
+                low = fname.lower()
+                cls_has_scope = "scope" in model_name.lower()
+                if low in _BOOL_IN_SCOPE_FIELDS or (
+                    cls_has_scope and low in _SCOPE_CLASS_BOOL_ALLOW_FIELDS
+                ):
+                    specs_by_model.setdefault(model_name, {})[fname] = (
+                        _ScopeFieldSpec(
+                            model_name=model_name,
+                            field_name=fname,
+                            kind="bool",
+                            expected_bool=False,
+                        )
+                    )
+                elif low in _BOOL_OUT_OF_SCOPE_FIELDS or (
+                    cls_has_scope and low in _SCOPE_CLASS_BOOL_DENY_FIELDS
+                ):
+                    specs_by_model.setdefault(model_name, {})[fname] = (
+                        _ScopeFieldSpec(
+                            model_name=model_name,
+                            field_name=fname,
+                            kind="bool",
+                            expected_bool=True,
+                        )
+                    )
+        field_order[model_name] = fields
+    return specs_by_model, field_order
+
+
+def _infer_usage_scope_specs(
+    trees: List[Tuple[str, ast.AST]],
+    models: Dict[str, Tuple[str, ast.ClassDef]],
+    specs_by_model: Dict[str, Dict[str, _ScopeFieldSpec]],
+) -> None:
+    """Infer string-typed scope-gate fields from `if var.field == 'out_of_scope'`."""
+    for _, tree in trees:
+        for scope in _iter_function_scopes(tree):
+            var_to_model: Dict[str, str] = {}
+            for node in _scope_nodes(scope):
+                if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+                    continue
+                tgt = node.targets[0]
+                if not isinstance(tgt, ast.Name) or not isinstance(
+                    node.value, ast.Call
+                ):
+                    continue
+                model_name = _parsed_model_from_call(node.value)
+                if model_name and model_name in models:
+                    var_to_model[tgt.id] = model_name
+
+            if not var_to_model:
+                continue
+
+            for node in _scope_nodes(scope):
+                if not isinstance(node, ast.Compare):
+                    continue
+                items = [node.left, *node.comparators]
+                has_oos_literal = any(
+                    (
+                        isinstance(it, ast.Constant)
+                        and isinstance(it.value, str)
+                        and _normalize_scope_token(it.value) == "out_of_scope"
+                    )
+                    or (
+                        isinstance(it, ast.Attribute)
+                        and _normalize_scope_token(it.attr) == "out_of_scope"
+                    )
+                    for it in items
+                )
+                if not has_oos_literal:
+                    continue
+                for it in items:
+                    if (
+                        isinstance(it, ast.Attribute)
+                        and isinstance(it.value, ast.Name)
+                        and it.value.id in var_to_model
+                    ):
+                        mname = var_to_model[it.value.id]
+                        existing = specs_by_model.setdefault(mname, {})
+                        if it.attr not in existing:
+                            existing[it.attr] = _ScopeFieldSpec(
+                                model_name=mname,
+                                field_name=it.attr,
+                                kind="sentinel",
+                                fail_closed_tokens=frozenset({"out_of_scope"}),
+                            )
+
+
+def _parsed_model_from_call(call: ast.Call) -> Optional[str]:
+    """Extract the target model name from parse helper or constructor calls."""
+    cname = _call_name(call)
+    if cname in ("_safe_parse_with_fallback", "_parse_instruct_result"):
+        if len(call.args) >= 2:
+            return _annotation_name(call.args[1])
+        for kw in call.keywords:
+            if kw.arg == "model_class":
+                return _annotation_name(kw.value)
+        return None
+    if (
+        isinstance(call.func, ast.Attribute)
+        and call.func.attr in ("model_validate_json", "model_validate")
+    ):
+        return _annotation_name(call.func.value)
+    return cname
+
+
+def _collect_simple_bindings(scope: ast.AST) -> Dict[str, ast.expr]:
+    """Collect unconditional simple ``name = expr`` bindings in a scope."""
+    bindings: Dict[str, ast.expr] = {}
+    body = getattr(scope, "body", [])
+    for stmt in body:
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+            if isinstance(stmt.targets[0], ast.Name):
+                bindings[stmt.targets[0].id] = stmt.value
+        elif (
+            isinstance(stmt, ast.AnnAssign)
+            and isinstance(stmt.target, ast.Name)
+            and stmt.value is not None
+        ):
+            bindings[stmt.target.id] = stmt.value
+    return bindings
+
+
+def _extract_call_kwargs(
+    call: ast.Call,
+    bindings: Dict[str, ast.expr],
+    positional_fields: Optional[List[str]] = None,
+    positional_offset: int = 0,
+) -> Tuple[Dict[str, ast.expr], bool]:
+    """Return ``(kwargs_map, has_opaque_star_kwargs)`` for a Call node."""
+    kwargs_map: Dict[str, ast.expr] = {}
+    has_opaque = False
+
+    if positional_fields is not None:
+        for idx, arg in enumerate(call.args[positional_offset:]):
+            if idx < len(positional_fields):
+                kwargs_map[positional_fields[idx]] = arg
+
+    for kw in call.keywords:
+        if kw.arg is not None:
+            kwargs_map[kw.arg] = kw.value
+        else:
+            unpacked = _resolve_expr(kw.value, bindings)
+            if isinstance(unpacked, ast.Dict):
+                for k_node, v_node in zip(unpacked.keys, unpacked.values):
+                    if isinstance(k_node, ast.Constant) and isinstance(
+                        k_node.value, str
+                    ):
+                        kwargs_map[k_node.value] = v_node
+            else:
+                has_opaque = True
+    return kwargs_map, has_opaque
+
+
+def _format_expected_fail_closed(spec: _ScopeFieldSpec) -> str:
+    if spec.kind == "bool":
+        return f"`{spec.field_name}={spec.expected_bool}`"
+    if "out_of_scope" in spec.fail_closed_tokens:
+        return f"`{spec.field_name}='out_of_scope'` (or `Enum.out_of_scope`)"
+    tokens = ", ".join(sorted(spec.fail_closed_tokens))
+    return f"`{spec.field_name}` set to a fail-closed sentinel ({tokens})"
+
+
+def _check_call_against_scope_specs(
+    call: ast.Call,
+    model_name: str,
+    specs: Dict[str, _ScopeFieldSpec],
+    bindings: Dict[str, ast.expr],
+    positional_fields: Optional[List[str]],
+    positional_offset: int,
+    rel: str,
+    context_label: str,
+    failures: List[LintFailure],
+) -> None:
+    kwargs_map, has_opaque = _extract_call_kwargs(
+        call, bindings, positional_fields, positional_offset
+    )
+    for fname, spec in specs.items():
+        if fname in kwargs_map:
+            expr = kwargs_map[fname]
+            if not _expr_is_fail_closed(expr, spec, bindings):
+                failures.append(
+                    LintFailure(
+                        file=rel,
+                        line=getattr(call, "lineno", None),
+                        column=_col_offset_to_schema(call),
+                        message=(
+                            f"{context_label} sets `{model_name}.{fname}="
+                            f"{_node_repr(expr)}` which fails open on parse "
+                            f"failure. Use {_format_expected_fail_closed(spec)} "
+                            f"so unparseable scope-gate replies fail closed."
+                        ),
+                        rule_ref="scope-gate-fail-closed (mellea-fy-generate.md)",
+                    )
+                )
+        elif not spec.has_fail_closed_default and not has_opaque:
+            failures.append(
+                LintFailure(
+                    file=rel,
+                    line=getattr(call, "lineno", None),
+                    column=_col_offset_to_schema(call),
+                    message=(
+                        f"{context_label} omits `{fname}` for scope-gate "
+                        f"model `{model_name}`, which has no fail-closed "
+                        f"default. Pass {_format_expected_fail_closed(spec)} "
+                        f"so unparseable replies fail closed."
+                    ),
+                    rule_ref="scope-gate-fail-closed (mellea-fy-generate.md)",
+                )
+            )
+
+
+def _is_none_or_falsy_guard(test: ast.expr, names: Set[str]) -> bool:
+    """Return True if ``test`` checks ``name is None`` or ``not name``."""
+    if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+        return isinstance(test.operand, ast.Name) and test.operand.id in names
+    if (
+        isinstance(test, ast.Compare)
+        and isinstance(test.left, ast.Name)
+        and test.left.id in names
+        and len(test.ops) == 1
+        and isinstance(test.ops[0], (ast.Is, ast.Eq))
+        and len(test.comparators) == 1
+        and isinstance(test.comparators[0], ast.Constant)
+        and test.comparators[0].value is None
+    ):
+        return True
+    return False
+
+
+def _scope_statements(stmts: List[ast.stmt]) -> List[ast.stmt]:
+    """Yield statements within a block without descending into nested defs/classes."""
+    out: List[ast.stmt] = []
+    pending: List[ast.stmt] = list(stmts)
+    while pending:
+        stmt = pending.pop()
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        out.append(stmt)
+        for attr in ("body", "orelse", "finalbody"):
+            inner = getattr(stmt, attr, None)
+            if isinstance(inner, list):
+                pending.extend(inner)
+        if isinstance(stmt, ast.Try):
+            for handler in stmt.handlers:
+                pending.extend(handler.body)
+    return out
+
+
+def _check_scope_fallback_assignments(
+    stmts: List[ast.stmt],
+    oos_vars: Set[str],
+    bindings: Dict[str, ast.expr],
+    rel: str,
+    context_label: str,
+    failures: List[LintFailure],
+) -> None:
+    """Check assignments inside a fallback block (`if parsed is None:` or `except`)."""
+    for sub in _scope_statements(stmts):
+        if not isinstance(sub, ast.Assign) or len(sub.targets) != 1:
+            continue
+        tgt = sub.targets[0]
+        if not isinstance(tgt, ast.Name):
+            continue
+        val = _resolve_expr(sub.value, bindings)
+        if (
+            tgt.id in oos_vars
+            and isinstance(val, ast.Constant)
+            and isinstance(val.value, str)
+            and _normalize_scope_token(val.value) != "out_of_scope"
+        ):
+            failures.append(
+                LintFailure(
+                    file=rel,
+                    line=getattr(sub, "lineno", None),
+                    column=_col_offset_to_schema(sub),
+                    message=(
+                        f"{context_label} assigns `{tgt.id} = "
+                        f"{_node_repr(sub.value)}` which fails open for "
+                        f"the scope gate. Assign `'out_of_scope'` or refuse."
+                    ),
+                    rule_ref="scope-gate-fail-closed (mellea-fy-generate.md)",
+                )
+            )
+        elif (
+            tgt.id.lower() in _BOOL_IN_SCOPE_FIELDS
+            and isinstance(val, ast.Constant)
+            and val.value is True
+        ):
+            failures.append(
+                LintFailure(
+                    file=rel,
+                    line=getattr(sub, "lineno", None),
+                    column=_col_offset_to_schema(sub),
+                    message=(
+                        f"{context_label} assigns `{tgt.id} = True` "
+                        f"which fails open for the scope gate. Assign `False`."
+                    ),
+                    rule_ref="scope-gate-fail-closed (mellea-fy-generate.md)",
+                )
+            )
+        elif (
+            tgt.id.lower() in _BOOL_OUT_OF_SCOPE_FIELDS
+            and isinstance(val, ast.Constant)
+            and val.value is False
+        ):
+            failures.append(
+                LintFailure(
+                    file=rel,
+                    line=getattr(sub, "lineno", None),
+                    column=_col_offset_to_schema(sub),
+                    message=(
+                        f"{context_label} assigns `{tgt.id} = False` "
+                        f"which fails open for the scope gate. Assign `True`."
+                    ),
+                    rule_ref="scope-gate-fail-closed (mellea-fy-generate.md)",
+                )
+            )
+
+
+def _check_scope_dict_fallbacks(
+    scope: ast.AST,
+    rel: str,
+    bindings: Dict[str, ast.expr],
+    failures: List[LintFailure],
+) -> None:
+    """Catch fail-open `except` assignments and `parsed.get(...)` defaults on scope vars."""
+    nodes = _scope_nodes(scope)
+
+    # Identify local variable names compared against "out_of_scope" (or .out_of_scope)
+    oos_vars: Set[str] = set()
+    for node in nodes:
+        if not isinstance(node, ast.Compare):
+            continue
+        items = [node.left, *node.comparators]
+        has_oos = any(
+            (
+                isinstance(it, ast.Constant)
+                and isinstance(it.value, str)
+                and _normalize_scope_token(it.value) == "out_of_scope"
+            )
+            or (
+                isinstance(it, ast.Attribute)
+                and _normalize_scope_token(it.attr) == "out_of_scope"
+            )
+            for it in items
+        )
+        if has_oos:
+            for it in items:
+                if isinstance(it, ast.Name):
+                    oos_vars.add(it.id)
+
+    # Identify variables holding _parse_llm_json(...) output
+    llm_json_vars: Set[str] = set()
+    for node in nodes:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            tgt = node.targets[0]
+            if (
+                isinstance(tgt, ast.Name)
+                and isinstance(node.value, ast.Call)
+                and _call_name(node.value) == _LLM_JSON_HELPER
+            ):
+                llm_json_vars.add(tgt.id)
+
+    # Check parsed.get(key, default) on _parse_llm_json results
+    for node in nodes:
+        if not isinstance(node, ast.Call):
+            continue
+        if not (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id in llm_json_vars
+            and len(node.args) >= 2
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            continue
+        key = node.args[0].value.lower()
+        default_expr = _resolve_expr(node.args[1], bindings)
+        if key in _BOOL_IN_SCOPE_FIELDS:
+            if not (
+                isinstance(default_expr, ast.Constant)
+                and default_expr.value is False
+            ):
+                failures.append(
+                    LintFailure(
+                        file=rel,
+                        line=getattr(node, "lineno", None),
+                        column=_col_offset_to_schema(node),
+                        message=(
+                            f"`{node.func.value.id}.get({key!r}, "
+                            f"{_node_repr(node.args[1])})` fails open on "
+                            f"missing/unparsed scope field. Default to `False`."
+                        ),
+                        rule_ref="scope-gate-fail-closed (mellea-fy-generate.md)",
+                    )
+                )
+        elif key in _BOOL_OUT_OF_SCOPE_FIELDS:
+            if not (
+                isinstance(default_expr, ast.Constant)
+                and default_expr.value is True
+            ):
+                failures.append(
+                    LintFailure(
+                        file=rel,
+                        line=getattr(node, "lineno", None),
+                        column=_col_offset_to_schema(node),
+                        message=(
+                            f"`{node.func.value.id}.get({key!r}, "
+                            f"{_node_repr(node.args[1])})` fails open on "
+                            f"missing/unparsed scope field. Default to `True`."
+                        ),
+                        rule_ref="scope-gate-fail-closed (mellea-fy-generate.md)",
+                    )
+                )
+
+    # Check `parsed.get(key, default)` assigned to a variable compared against out_of_scope
+    for node in nodes:
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        tgt = node.targets[0]
+        if not isinstance(tgt, ast.Name) or tgt.id not in oos_vars:
+            continue
+        if (
+            isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Attribute)
+            and node.value.func.attr == "get"
+            and isinstance(node.value.func.value, ast.Name)
+            and node.value.func.value.id in llm_json_vars
+            and len(node.value.args) >= 2
+        ):
+            default_expr = _resolve_expr(node.value.args[1], bindings)
+            is_oos = (
+                isinstance(default_expr, ast.Constant)
+                and isinstance(default_expr.value, str)
+                and _normalize_scope_token(default_expr.value) == "out_of_scope"
+            )
+            if not is_oos:
+                failures.append(
+                    LintFailure(
+                        file=rel,
+                        line=getattr(node, "lineno", None),
+                        column=_col_offset_to_schema(node),
+                        message=(
+                            f"Scope-gate variable `{tgt.id}` defaults to "
+                            f"`{_node_repr(node.value.args[1])}` via `.get()`, "
+                            f"failing open when the reply cannot be parsed. "
+                            f"Default to `'out_of_scope'`."
+                        ),
+                        rule_ref="scope-gate-fail-closed (mellea-fy-generate.md)",
+                    )
+                )
+
+    # Check `if parsed is None:` / `if not parsed:` fail-open assignments on scope vars
+    if llm_json_vars:
+        for node in nodes:
+            if not isinstance(node, ast.If) or not _is_none_or_falsy_guard(
+                node.test, llm_json_vars
+            ):
+                continue
+            _check_scope_fallback_assignments(
+                node.body,
+                oos_vars,
+                bindings,
+                rel,
+                "`if ... is None:` fallback",
+                failures,
+            )
+
+    # Check assignments to scope vars inside `except` blocks when the `try` parses
+    for node in nodes:
+        if not isinstance(node, ast.Try):
+            continue
+        try_parses = any(
+            isinstance(sub, ast.Call)
+            and (
+                _call_name(sub)
+                in (
+                    "_parse_instruct_result",
+                    "_safe_parse_with_fallback",
+                    _LLM_JSON_HELPER,
+                    "loads",
+                )
+                or (
+                    isinstance(sub.func, ast.Attribute)
+                    and sub.func.attr in ("model_validate_json", "model_validate")
+                )
+            )
+            for stmt in node.body
+            for sub in ast.walk(stmt)
+        )
+        if not try_parses:
+            continue
+        for handler in node.handlers:
+            _check_scope_fallback_assignments(
+                handler.body,
+                oos_vars,
+                bindings,
+                rel,
+                "`except` handler",
+                failures,
+            )
+
+
+def lint_scope_gate_fail_closed(package_dir: Path) -> LintResult:
+    """Scope-gate parse fallbacks and defaults must fail closed, never open."""
+    result = LintResult(lint_id="scope-gate-fail-closed", verdict="pass")
+
+    parsed_files: List[Tuple[str, ast.AST]] = []
+    for py_file in sorted(package_dir.rglob("*.py")):
+        rel = py_file.relative_to(package_dir).as_posix()
+        first_part = rel.replace("\\", "/").split("/")[0]
+        if _is_skipped_path(rel) or first_part in _BUNDLED_DIRS:
+            continue
+        result.files_checked += 1
+        try:
+            tree = ast.parse(py_file.read_text(), filename=str(py_file))
+        except SyntaxError:
+            continue
+        parsed_files.append((rel, tree))
+
+    if not parsed_files:
+        return result
+
+    scope_enums = _collect_scope_enums(parsed_files)
+    models = _collect_pydantic_models(parsed_files)
+    specs_by_model, field_order = _collect_scope_specs(models, scope_enums)
+    _infer_usage_scope_specs(parsed_files, models, specs_by_model)
+
+    # Check schema defaults and record whether each scope field has a fail-closed default
+    for model_name, model_specs in specs_by_model.items():
+        if model_name not in models:
+            continue
+        rel, cls_node = models[model_name]
+        for stmt in cls_node.body:
+            if not isinstance(stmt, ast.AnnAssign) or not isinstance(
+                stmt.target, ast.Name
+            ):
+                continue
+            fname = stmt.target.id
+            spec = model_specs.get(fname)
+            if spec is None:
+                continue
+            default_expr = _extract_pydantic_default(stmt)
+            if default_expr is None:
+                continue
+            if _expr_is_fail_closed(default_expr, spec, {}):
+                spec.has_fail_closed_default = True
+            else:
+                result.failures.append(
+                    LintFailure(
+                        file=rel,
+                        line=getattr(stmt, "lineno", None),
+                        column=_col_offset_to_schema(stmt),
+                        message=(
+                            f"Scope-gate field `{model_name}.{fname}` has "
+                            f"default `{_node_repr(default_expr)}` which fails "
+                            f"open when omitted in model output or fallback "
+                            f"construction. Remove the default or set "
+                            f"{_format_expected_fail_closed(spec)}."
+                        ),
+                        rule_ref="scope-gate-fail-closed (mellea-fy-generate.md)",
+                    )
+                )
+
+    # Check _safe_parse_with_fallback calls, except-handler instantiations, and dict fallbacks
+    for rel, tree in parsed_files:
+        module_bindings = _collect_simple_bindings(tree)
+        for scope in _iter_function_scopes(tree):
+            bindings = dict(module_bindings)
+            if scope is not tree:
+                bindings.update(_collect_simple_bindings(scope))
+
+            if scope is not tree:
+                _check_scope_dict_fallbacks(scope, rel, bindings, result.failures)
+
+            scope_nodes = _scope_nodes(scope) if scope is not tree else list(
+                getattr(tree, "body", [])
+            )
+            for node in scope_nodes:
+                if (
+                    isinstance(node, ast.Call)
+                    and _call_name(node) == "_safe_parse_with_fallback"
+                ):
+                    model_name = _parsed_model_from_call(node)
+                    if model_name and model_name in specs_by_model:
+                        _check_call_against_scope_specs(
+                            call=node,
+                            model_name=model_name,
+                            specs=specs_by_model[model_name],
+                            bindings=bindings,
+                            positional_fields=None,
+                            positional_offset=0,
+                            rel=rel,
+                            context_label="`_safe_parse_with_fallback`",
+                            failures=result.failures,
+                        )
+
+                if isinstance(node, ast.Try):
+                    for handler in node.handlers:
+                        for sub in _scope_nodes(handler):
+                            if not isinstance(sub, ast.Call):
+                                continue
+                            cname = _annotation_name(sub.func)
+                            if (
+                                isinstance(sub.func, ast.Attribute)
+                                and sub.func.attr == "model_construct"
+                            ):
+                                cname = _annotation_name(sub.func.value)
+                            if cname and cname in specs_by_model:
+                                _check_call_against_scope_specs(
+                                    call=sub,
+                                    model_name=cname,
+                                    specs=specs_by_model[cname],
+                                    bindings=bindings,
+                                    positional_fields=field_order.get(cname),
+                                    positional_offset=0,
+                                    rel=rel,
+                                    context_label=f"`except` fallback `{cname}(...)`",
+                                    failures=result.failures,
+                                )
+
+    if result.failures:
+        result.verdict = "fail"
+    return result
+
+
 # ─── Runner ───
 
 
@@ -2748,6 +3706,7 @@ ALL_LINTS: Tuple[Callable[[Path], LintResult], ...] = (
     lint_instruct_result_parse_before_access,
     lint_format_annotation,
     lint_raw_llm_json_parse,
+    lint_scope_gate_fail_closed,
     lint_session_boundary,
     lint_validation_fn_not_called_directly,
     lint_fixture_pydantic_coercion,
