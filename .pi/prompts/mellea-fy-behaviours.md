@@ -2,7 +2,7 @@
 
 **Version**: 4.5.0 | tested against mellea 0.9.x
 
-Generated pipelines MUST include these workarounds. Re-test after upgrading mellea — some may be resolved in future releases. Step 7's `known-behaviours` lint mechanically checks for KB1, KB2, KB3, KB4, KB6, KB7, KB11. Step 7's `raw-llm-json-parse` lint enforces KB12's parsing boundary. Step 7's `session-boundary` lint covers KB5. KB9 is advisory only — no lint sub-check.
+Generated pipelines MUST include these workarounds. Re-test after upgrading mellea — some may be resolved in future releases. Step 7's `known-behaviours` lint mechanically checks for KB1, KB2, KB3, KB4, KB6, KB7, KB11. Step 7's `raw-llm-json-parse` lint enforces KB12's parsing boundary. Step 7's `scope-gate-fail-closed` lint enforces KB13. Step 7's `session-boundary` lint covers KB5. KB9 is advisory only — no lint sub-check.
 
 Version-conditional guidance (0.7 vs pre-0.7 imports, telemetry env vars, OTel attributes) lives in `.claude/data/compatibility.yaml` and is filtered by installed mellea version at grounding time — not inline here.
 
@@ -342,3 +342,17 @@ Do not call `json.loads` directly on a raw `m.instruct()` result or a `simple_va
 
 **Lint check**: `raw-llm-json-parse` parses each Python file independently and traces values inside function bodies. It recognizes assigned `m.instruct()` results and the first parameter of a named function passed to `simple_validate()`, then propagates those values through same-file calls to statically named functions using positional or keyword arguments. It flags `json.loads` calls that receive a traced value and allows `_parse_llm_json()` as the parsing boundary. Module-level expressions, cross-file calls, and dynamic/unresolved callees are outside this analysis. The lint does not verify the helper's implementation; the validator must check fence handling, balanced extraction, warning, and explicit fallback behavior against this contract.
 **Added**: 2026-11-18 | **Last-validated**: 2026-11-18 | **Fixture**: `tests/mellea_skills_compiler/compile/test_lints.py::TestRawLlmJsonParse`
+
+---
+
+## KB13: Scope-gate fallbacks and defaults must fail closed
+
+When a pipeline classifies incoming requests with a scope gate (e.g. `query_type: Literal[..., "out_of_scope"]`, an `Enum` containing `out_of_scope`, or `in_scope: bool`), a malformed or unparseable model reply MUST fail closed — refusing or flagging the request rather than allowing execution to proceed.
+
+**Rules:**
+1. **Fallback arguments (`_safe_parse_with_fallback` / `except` handlers):** ALWAYS pass the fail-closed sentinel (`query_type="out_of_scope"`, `Enum.out_of_scope`, `in_scope=False`, or `out_of_scope=True`), NEVER an in-scope value (`query_type="validate"`, `in_scope=True`, `out_of_scope=False`).
+2. **Schema field defaults (`schemas.py`):** Scope-gate fields MUST NOT define an in-scope default (if the model omits the field in JSON, Pydantic would silently accept an in-scope value). Either leave the field required or default it to the fail-closed value.
+3. **Free-text JSON gates (`_parse_llm_json`):** Handle `None` and missing keys (`parsed.get(...)`) by defaulting to `"out_of_scope"` / `in_scope=False` / `out_of_scope=True`.
+
+**Lint check**: `scope-gate-fail-closed` inspects scope-gate Pydantic fields (`Literal`/`Enum` with `out_of_scope` or `in_scope` + refusal sentinel, `in_scope`/`out_of_scope` booleans, and string fields compared against `"out_of_scope"`), verifies schema defaults, and checks `_safe_parse_with_fallback(...)`, `except` fallbacks, and `_parse_llm_json` dict fallbacks. Hard failure.
+**Added**: 2026-11-28 | **Last-validated**: 2026-11-28 | **Fixture**: `tests/mellea_skills_compiler/compile/test_lints.py::TestScopeGateFailClosed`

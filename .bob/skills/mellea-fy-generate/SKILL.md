@@ -241,6 +241,11 @@ _P2 — Pipeline calls tools (deterministic)_:
 4. LLM formats response (optional): `response_thunk = m.instruct(format=ResponseSchema, ...)` → `response = _safe_parse_with_fallback(response_thunk, ResponseSchema, ...)` with raw tool output as grounding
    MUST use two separate `start_session()` calls for steps 1 and 4 (schema priming).
 
+> **Scope gate fail-closed rule (REQUIRED):** When a schema includes an out-of-scope / refusal sentinel (`"out_of_scope"`, `Enum.out_of_scope`, `"refuse"`, etc.) or a boolean scope flag (`in_scope`, `out_of_scope`, etc.), any parse failure or omitted field MUST fail closed:
+> - `_safe_parse_with_fallback(...)` MUST pass the fail-closed sentinel (`query_type="out_of_scope"`, `Enum.out_of_scope`, `in_scope=False`, or `out_of_scope=True`) — NEVER an in-scope value (such as `query_type="validate"` or `in_scope=True`).
+> - In `schemas.py`, scope-gate fields MUST NOT carry an in-scope default (leave the field required or default it to the fail-closed value).
+> - Any `except` handler or `if parsed is None:` branch around a scope gate MUST refuse or flag the request rather than continuing to downstream tools. Step 7's `scope-gate-fail-closed` lint enforces this mechanically.
+
 _P3 — Pipeline calls tools (LLM-directed)_:
 
 - Uses `m.react()` with a toolbox, or `m.instruct()` with `ModelOption.TOOLS`
