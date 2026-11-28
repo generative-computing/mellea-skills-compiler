@@ -2735,6 +2735,289 @@ def lint_pyproject_package_discovery(package_dir: Path) -> LintResult:
     return result
 
 
+# ─── Lint: melleafy-manifest ───
+
+
+def _check_entry_signature_against_pipeline(
+    package_dir: Path, sig: Any
+) -> List[LintFailure]:
+    """Verify parsed entry_signature matches pipeline.py when present and parseable."""
+    pipeline_path = package_dir / "pipeline.py"
+    if not pipeline_path.is_file():
+        return []
+    try:
+        tree = ast.parse(pipeline_path.read_text(), filename=str(pipeline_path))
+    except (OSError, UnicodeDecodeError, SyntaxError):
+        return []
+
+    func_defs: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+    bound_names: set[str] = set()
+    has_star_import = False
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            func_defs[node.name] = node
+            bound_names.add(node.name)
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name == "*":
+                    has_star_import = True
+                else:
+                    bound_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                bound_names.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                for tname in _target_names(target):
+                    bound_names.add(tname)
+                    func_defs.pop(tname, None)
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            for tname in _target_names(node.target):
+                bound_names.add(tname)
+                func_defs.pop(tname, None)
+
+    fn_name = sig.function_name
+    rule_ref = "melleafy.schema.json (exporter.py:stage2_load)"
+    if not has_star_import and fn_name not in bound_names:
+        return [
+            LintFailure(
+                file="melleafy.json",
+                line=None,
+                column=None,
+                message=(
+                    f"melleafy.json 'entry_signature' names function {fn_name!r}, "
+                    "which is not defined in pipeline.py; exported targets will "
+                    f"fail with ImportError on 'from {package_dir.name}.pipeline import {fn_name}'."
+                ),
+                rule_ref=rule_ref,
+            )
+        ]
+
+    if fn_name not in func_defs:
+        return []
+
+    fn_node = func_defs[fn_name]
+    pos_args = list(fn_node.args.posonlyargs) + list(fn_node.args.args)
+    n_required_pos = len(pos_args) - len(fn_node.args.defaults)
+    declared = {a.arg for a in pos_args}
+    required = [a.arg for a in pos_args[:n_required_pos]]
+    for kw_arg, kw_default in zip(fn_node.args.kwonlyargs, fn_node.args.kw_defaults):
+        declared.add(kw_arg.arg)
+        if kw_default is None:
+            required.append(kw_arg.arg)
+    has_varkw = fn_node.args.kwarg is not None
+
+    failures: List[LintFailure] = []
+    sig_params_by_name = {p["name"]: p for p in sig.params}
+    if not has_varkw:
+        unknown = [p["name"] for p in sig.params if p["name"] not in declared]
+        if unknown:
+            failures.append(
+                LintFailure(
+                    file="melleafy.json",
+                    line=None,
+                    column=None,
+                    message=(
+                        f"melleafy.json 'entry_signature' lists parameter(s) {unknown} "
+                        f"not present in pipeline.py:{fn_name}."
+                    ),
+                    rule_ref=rule_ref,
+                )
+            )
+
+    missing_req = [name for name in required if name not in sig_params_by_name]
+    if missing_req:
+        failures.append(
+            LintFailure(
+                file="melleafy.json",
+                line=None,
+                column=None,
+                message=(
+                    f"melleafy.json 'entry_signature' omits required parameter(s) "
+                    f"{missing_req} of pipeline.py:{fn_name}."
+                ),
+                rule_ref=rule_ref,
+            )
+        )
+
+    wrongly_optional = [
+        name
+        for name in required
+        if name in sig_params_by_name and not sig_params_by_name[name]["required"]
+    ]
+    if wrongly_optional:
+        failures.append(
+            LintFailure(
+                file="melleafy.json",
+                line=None,
+                column=None,
+                message=(
+                    f"melleafy.json 'entry_signature' marks parameter(s) "
+                    f"{wrongly_optional} as optional with a default, but they are "
+                    f"required in pipeline.py:{fn_name}."
+                ),
+                rule_ref=rule_ref,
+            )
+        )
+
+    return failures
+
+
+def lint_melleafy_manifest(package_dir: Path) -> LintResult:
+    """``<package>/melleafy.json`` must contain export-valid manifest fields.
+
+    Validates ``manifest_version``, ``package_name``, and ``entry_signature``
+    against the exact contract consumed by ``export/exporter.py`` (and
+    verifies ``entry_signature`` agrees with ``pipeline.py`` when present) so
+    compile fails loudly instead of passing and failing later at ``export``.
+    """
+    from mellea_skills_compiler.export.exporter import (
+        MIN_MANIFEST_VERSION,
+        _parse_entry_signature,
+        _validate_entry_signature_str,
+        _validate_manifest_version,
+    )
+
+    result = LintResult(lint_id="melleafy-manifest", verdict="pass")
+    manifest_path = package_dir / "melleafy.json"
+    if not manifest_path.is_file():
+        result.verdict = "fail"
+        result.failures.append(
+            LintFailure(
+                file="melleafy.json",
+                line=None,
+                column=None,
+                message=(
+                    "melleafy.json not found in package directory. "
+                    "'mellea-skills export' requires <package_name>/melleafy.json "
+                    "with 'manifest_version', 'package_name', and 'entry_signature'."
+                ),
+                rule_ref="melleafy.schema.json (exporter.py:stage1_validate)",
+            )
+        )
+        return result
+
+    result.files_checked = 1
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        result.verdict = "fail"
+        result.failures.append(
+            LintFailure(
+                file="melleafy.json",
+                line=None,
+                column=None,
+                message=f"melleafy.json could not be parsed as valid JSON: {exc}",
+                rule_ref="melleafy.schema.json (exporter.py:stage1_validate)",
+            )
+        )
+        return result
+
+    if not isinstance(manifest, dict):
+        result.verdict = "fail"
+        result.failures.append(
+            LintFailure(
+                file="melleafy.json",
+                line=None,
+                column=None,
+                message=f"melleafy.json must be a JSON object, got {type(manifest).__name__}.",
+                rule_ref="melleafy.schema.json (exporter.py:stage1_validate)",
+            )
+        )
+        return result
+
+    raw_mv = manifest.get("manifest_version")
+    if not isinstance(raw_mv, str) or isinstance(raw_mv, bool) or not raw_mv.strip():
+        result.failures.append(
+            LintFailure(
+                file="melleafy.json",
+                line=None,
+                column=None,
+                message=(
+                    "melleafy.json missing required 'manifest_version' string "
+                    f"(expected semver >= {MIN_MANIFEST_VERSION}, e.g. '1.1.0')."
+                ),
+                rule_ref="melleafy.schema.json (exporter.py:stage1_validate)",
+            )
+        )
+    else:
+        mv_err = _validate_manifest_version(raw_mv)
+        if mv_err:
+            result.failures.append(
+                LintFailure(
+                    file="melleafy.json",
+                    line=None,
+                    column=None,
+                    message=f"melleafy.json {mv_err}.",
+                    rule_ref="melleafy.schema.json (exporter.py:stage1_validate)",
+                )
+            )
+
+    pkg_name = manifest.get("package_name")
+    if not isinstance(pkg_name, str) or not pkg_name.strip():
+        result.failures.append(
+            LintFailure(
+                file="melleafy.json",
+                line=None,
+                column=None,
+                message=(
+                    "melleafy.json missing required 'package_name' string "
+                    f"(expected {package_dir.name!r})."
+                ),
+                rule_ref="melleafy.schema.json (exporter.py:stage2_load)",
+            )
+        )
+    elif not pkg_name.isidentifier():
+        result.failures.append(
+            LintFailure(
+                file="melleafy.json",
+                line=None,
+                column=None,
+                message=(
+                    f"melleafy.json 'package_name' {pkg_name!r} is not a valid "
+                    f"Python identifier (expected {package_dir.name!r})."
+                ),
+                rule_ref="melleafy.schema.json (exporter.py:stage2_load)",
+            )
+        )
+    elif pkg_name != package_dir.name:
+        result.failures.append(
+            LintFailure(
+                file="melleafy.json",
+                line=None,
+                column=None,
+                message=(
+                    f"melleafy.json 'package_name' {pkg_name!r} does not match "
+                    f"package directory name {package_dir.name!r}; export requires "
+                    "them to match."
+                ),
+                rule_ref="melleafy.schema.json (exporter.py:stage2_load)",
+            )
+        )
+
+    sig_str = manifest.get("entry_signature")
+    sig_err = _validate_entry_signature_str(sig_str)
+    if sig_err:
+        result.failures.append(
+            LintFailure(
+                file="melleafy.json",
+                line=None,
+                column=None,
+                message=f"melleafy.json {sig_err}.",
+                rule_ref="melleafy.schema.json (exporter.py:stage2_load)",
+            )
+        )
+    else:
+        parsed_sig = _parse_entry_signature(sig_str)
+        result.failures.extend(
+            _check_entry_signature_against_pipeline(package_dir, parsed_sig)
+        )
+
+    if result.failures:
+        result.verdict = "fail"
+    return result
+
+
 # ─── Runner ───
 
 
@@ -2742,6 +3025,7 @@ ALL_LINTS: Tuple[Callable[[Path], LintResult], ...] = (
     lint_fixtures_loader_contract,
     lint_fixture_data_files_exist,
     lint_pyproject_package_discovery,
+    lint_melleafy_manifest,
     lint_bundled_asset_path_resolution,
     lint_runtime_defaults_bound,
     lint_session_method_arity,
